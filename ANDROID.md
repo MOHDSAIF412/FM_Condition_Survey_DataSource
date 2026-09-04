@@ -12,15 +12,39 @@ Nothing was rewritten. `android/` is a thin native shell around `dist/`.
 
 | Tool | Version | Where |
 | --- | --- | --- |
-| JDK | **17** | Bundled with Android Studio, or [Temurin 17](https://adoptium.net/temurin/releases/?version=17) |
 | Android Studio | latest | <https://developer.android.com/studio> |
 | Android SDK | API 36 | Installed via Android Studio's SDK Manager |
+| JDK 17 | for running Gradle | `winget install --id EclipseAdoptium.Temurin.17.JDK` |
+| JDK 21 | for compiling some plugins | `winget install --id EclipseAdoptium.Temurin.21.JDK` |
 
 In Android Studio: **More Actions → SDK Manager → SDK Platforms**, tick
 **Android API 36**, then **SDK Tools → Android SDK Build-Tools**. Apply.
 
-Then set `JAVA_HOME` and `ANDROID_HOME`, or just build from inside Android
-Studio, which sets them for you.
+**Do not rely on Android Studio's own bundled JDK for command-line builds.**
+Recent Android Studio releases bundle JDK 25, and Gradle 8.14 (this project's
+version) cannot run on it — the build fails immediately with
+`Unsupported class file major version 69`. Separately, `@capacitor/android`
+compiles against Java release 21 without declaring its own toolchain, so
+whichever JDK actually runs Gradle must itself be 21, not merely have 21
+available for auto-detection.
+
+The combination that works: install JDK 17 and JDK 21 side by side (both
+commands above), then before building set:
+
+```bash
+# from the android/ directory
+export JAVA_HOME="C:/Program Files/Eclipse Adoptium/jdk-21.0.12.101-hotspot"
+export ANDROID_HOME="C:/Users/<you>/AppData/Local/Android/Sdk"
+```
+
+(exact folder name depends on the installed patch version — check
+`C:/Program Files/Eclipse Adoptium/`). JDK 17 is not directly invoked, but
+Gradle's toolchain auto-detection finds it automatically and uses it for
+whichever subprojects ask for it; nothing needs to be set for it explicitly.
+
+Building from inside Android Studio itself avoids all of this, since the IDE
+manages toolchains per-module automatically. The steps above are only needed
+for command-line / CI builds.
 
 ---
 

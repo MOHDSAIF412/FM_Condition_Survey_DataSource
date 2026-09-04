@@ -41,3 +41,6 @@ sample-reports/
 
 # Capacitor
 .capacitor/
+
+# Local APK build output
+android-build-output/
