@@ -3,7 +3,21 @@
  * Demonstrates multiple attached photos in single snags, Google Maps GPS coordinates, and departmental assignments.
  */
 
-function generateSamplePhotoSvg(label, defectText, color = '#dc2626', photoNum = 1, totalPhotos = 1) {
+// SVG is XML: unescaped &, < or > in the caption text produce a malformed
+// document that the browser refuses to decode, so the photo silently vanishes
+// from the PDF and Excel reports.
+function escapeXml(value) {
+  return String(value == null ? '' : value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+}
+
+function generateSamplePhotoSvg(rawLabel, rawDefectText, color = '#dc2626', photoNum = 1, totalPhotos = 1) {
+  const label = escapeXml(rawLabel);
+  const defectText = escapeXml(rawDefectText);
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="600" height="400" viewBox="0 0 600 400">
     <rect width="600" height="400" fill="#1e293b"/>
     <rect x="20" y="20" width="560" height="360" fill="#0f172a" stroke="#334155" stroke-width="2" rx="8"/>
