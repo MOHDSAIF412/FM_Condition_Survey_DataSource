@@ -71,17 +71,102 @@ function rowHeightToPx(heightPts) {
 }
 
 /**
- * Places an image inside a cell box so it is fully contained and centred on all
- * four sides: the aspect ratio is preserved, the image never overflows the box,
- * and the leftover space is split evenly around it.
+ * Centre-crops a photo to an exact target aspect ratio ("cover").
  *
- * @param {object} ws           target worksheet
- * @param {number} imageId      id returned by workbook.addImage
- * @param {object} img          { width, height } natural pixel size of the photo
- * @param {object} box          { col, row, widthPx, heightPx, padding }
- *                              col/row are 0-based anchor indices.
+ * Excel cannot crop an embedded image, so to fill a cell edge-to-edge with no
+ * empty margin the bitmap itself has to be cropped before it is embedded.
+ * Scaling to fit instead ("contain") always leaves a gap whenever the photo's
+ * ratio differs from the cell's -- which is nearly always, since the boxes are
+ * ~1.5 and phone photos are 1.333 landscape or 0.75 portrait.
+ *
+ * The trade-off is deliberate: filling the box means the overflowing edges of
+ * the photo are cut. Only ever use this on photographs; a logo or wordmark must
+ * stay contain-fit or the brand gets sliced.
+ *
+ * @returns {Promise<{base64: string, width: number, height: number}|null>}
+ */
+async function coverCropToRatio(dataUrl, targetRatio, outWidth) {
+  const blob = await (await fetch(dataUrl)).blob();
+  const url = URL.createObjectURL(blob);
+  try {
+    const img = await new Promise((resolve, reject) => {
+      const el = new Image();
+      el.onload = () => resolve(el);
+      el.onerror = () => reject(new Error('photo could not be decoded for cropping'));
+      el.src = url;
+    });
+
+    const natW = img.naturalWidth || 0;
+    const natH = img.naturalHeight || 0;
+    if (!natW || !natH) return null;
+
+    // Largest centred rectangle of the source that already has targetRatio.
+    const srcRatio = natW / natH;
+    let sw, sh;
+    if (srcRatio > targetRatio) {
+      sh = natH;                      // too wide: trim left/right
+      sw = Math.round(natH * targetRatio);
+    } else {
+      sw = natW;                      // too tall: trim top/bottom
+      sh = Math.round(natW / targetRatio);
+    }
+    const sx = Math.round((natW - sw) / 2);
+    const sy = Math.round((natH - sh) / 2);
+
+    const outW = Math.max(1, Math.round(outWidth));
+    const outH = Math.max(1, Math.round(outW / targetRatio));
+
+    const canvas = document.createElement('canvas');
+    canvas.width = outW;
+    canvas.height = outH;
+    const ctx = canvas.getContext('2d');
+    ctx.imageSmoothingQuality = 'high';
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, outW, outH);
+    ctx.drawImage(img, sx, sy, sw, sh, 0, 0, outW, outH);
+
+    return {
+      base64: canvas.toDataURL('image/jpeg', 0.86).split('base64,')[1],
+      width: outW,
+      height: outH
+    };
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
+/**
+ * Places an image inside a cell box.
+ *
+ * fit: 'cover'   fills the box exactly, edge to edge, with zero offset. The
+ *                caller must have already cropped the bitmap to the box ratio.
+ * fit: 'contain' scales to fit and centres, preserving the whole image. Used
+ *                for the logo, which must never be cropped.
+ *
+ * @param {object} ws       target worksheet
+ * @param {number} imageId  id returned by workbook.addImage
+ * @param {object} img      { width, height } natural pixel size
+ * @param {object} box      { col, row, widthPx, heightPx, padding, fit }
+ *                          col/row are 0-based anchor indices.
  */
 function placeImageInBox(ws, imageId, img, box) {
+  const fit = box.fit || 'contain';
+
+  if (fit === 'cover') {
+    // Fill the cell completely: no padding, no offset, no gap.
+    ws.addImage(imageId, {
+      tl: {
+        nativeCol: box.col,
+        nativeColOff: 0,
+        nativeRow: box.row,
+        nativeRowOff: 0
+      },
+      ext: { width: box.widthPx, height: box.heightPx },
+      editAs: 'oneCell'
+    });
+    return;
+  }
+
   const padding = box.padding === undefined ? 6 : box.padding;
   const boxW = Math.max(1, box.widthPx - padding * 2);
   const boxH = Math.max(1, box.heightPx - padding * 2);
@@ -190,12 +275,14 @@ export async function generateSurveyExcel(survey, selectedFacility = 'ALL') {
       });
       // Logo box spans columns E-F on row 4, scaled to fit without stretching.
       wsExec.getRow(LOGO_ROW).height = LOGO_ROW_HEIGHT_PTS;
+      // contain, never cover: cropping a wordmark would slice the brand.
       placeImageInBox(wsExec, logoId, logo, {
         col: 4, // column E (0-based)
         row: LOGO_ROW - 1,
         widthPx: colWidthToPx(25) + colWidthToPx(25),
         heightPx: rowHeightToPx(LOGO_ROW_HEIGHT_PTS),
-        padding: 6
+        padding: 6,
+        fit: 'contain'
       });
     }
   } catch (err) {
@@ -538,19 +625,22 @@ export async function generateSurveyExcel(survey, selectedFacility = 'ALL') {
       // Embed photo thumbnail in Col B
       if (photos.length > 0 && photos[0].dataUrl) {
         try {
-          const safeImg = await getSafeJpegImage(photos[0].dataUrl);
-          if (safeImg && safeImg.base64) {
+          const cellW = colWidthToPx(THUMB_COL_WIDTH);
+          const cellH = rowHeightToPx(THUMB_ROW_HEIGHT_PTS);
+          // Crop the bitmap to the cell's own ratio so it fills it exactly.
+          const cropped = await coverCropToRatio(photos[0].dataUrl, cellW / cellH, cellW * 2);
+          if (cropped && cropped.base64) {
             const imageId = workbook.addImage({
-              base64: safeImg.base64,
+              base64: cropped.base64,
               extension: 'jpeg'
             });
 
-            placeImageInBox(wsSnags, imageId, safeImg, {
+            placeImageInBox(wsSnags, imageId, cropped, {
               col: 1, // column B (0-based)
               row: snagRowIdx - 1,
-              widthPx: colWidthToPx(THUMB_COL_WIDTH),
-              heightPx: rowHeightToPx(THUMB_ROW_HEIGHT_PTS),
-              padding: THUMB_PADDING_PX
+              widthPx: cellW,
+              heightPx: cellH,
+              fit: 'cover'
             });
           }
         } catch (imgErr) {
@@ -668,19 +758,21 @@ export async function generateSurveyExcel(survey, selectedFacility = 'ALL') {
         // Embed full photo
         if (photo.dataUrl) {
           try {
-            const safeImg = await getSafeJpegImage(photo.dataUrl);
-            if (safeImg && safeImg.base64) {
+            const cellW = colWidthToPx(PHOTO_COL_WIDTH);
+            const cellH = PHOTO_BOX_HEIGHT_PX;
+            const cropped = await coverCropToRatio(photo.dataUrl, cellW / cellH, cellW * 2);
+            if (cropped && cropped.base64) {
               const imageId = workbook.addImage({
-                base64: safeImg.base64,
+                base64: cropped.base64,
                 extension: 'jpeg'
               });
 
-              placeImageInBox(wsPhotos, imageId, safeImg, {
+              placeImageInBox(wsPhotos, imageId, cropped, {
                 col: 1, // column B (0-based)
                 row: currentRow - 1,
-                widthPx: colWidthToPx(PHOTO_COL_WIDTH),
-                heightPx: PHOTO_BOX_HEIGHT_PX,
-                padding: PHOTO_PADDING_PX
+                widthPx: cellW,
+                heightPx: cellH,
+                fit: 'cover'
               });
             } else {
               photoBox.value = 'Photo unavailable';

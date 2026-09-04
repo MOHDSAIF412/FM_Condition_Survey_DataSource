@@ -1,7 +1,15 @@
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 import { PRIORITY_LEVELS, DEPARTMENTS, calculateSurveyStats } from '../types/survey';
-import { OCS_LOGO_BASE64 } from '../assets/logoDataUrl';
+import { OCS_LOGO_TRIMMED, OCS_LOGO_WHITE, OCS_LOGO_TRIMMED_RATIO } from '../assets/logoTrimmed';
+
+/* jsPDF's addImage stretches the bitmap to whatever box you give it -- it does
+   not preserve aspect. The cover was drawn 32x15mm (ratio 2.133) against a true
+   1.849, stretching the wordmark 15% wide, and the running header 14x11mm
+   squashed it. Always derive the height from the width and the real ratio. */
+function logoBox(widthMm) {
+  return { w: widthMm, h: widthMm / OCS_LOGO_TRIMMED_RATIO };
+}
 import { saveBlob } from './fileSaver';
 
 /**
@@ -59,14 +67,14 @@ export async function generateSurveyPDF(survey, selectedFacility = 'ALL') {
 
   // Common Header & Footer helper
   const renderHeader = (title) => {
-    doc.setFillColor(15, 23, 42); // slate-900
+    doc.setFillColor(40, 65, 124); // slate-900
     doc.rect(0, 0, pageWidth, 18, 'F');
 
     // Subtle OCS white badge in header
     try {
-      doc.setFillColor(255, 255, 255);
-      doc.roundedRect(pageWidth - 36, 2.5, 16, 13, 1, 1, 'F');
-      doc.addImage(OCS_LOGO_BASE64, 'PNG', pageWidth - 35, 3.5, 14, 11);
+      // Transparent trimmed mark sits straight on the navy band -- no white chip.
+      const L = logoBox(20);
+      doc.addImage(OCS_LOGO_WHITE, 'PNG', pageWidth - 20 - L.w, (18 - L.h) / 2, L.w, L.h);
     } catch (e) {}
 
     doc.setFont('helvetica', 'bold');
@@ -97,20 +105,19 @@ export async function generateSurveyPDF(survey, selectedFacility = 'ALL') {
   // ==========================================
   // PAGE 1: EXECUTIVE COVER PAGE
   // ==========================================
-  doc.setFillColor(15, 23, 42); // slate-900
+  doc.setFillColor(40, 65, 124); // slate-900
   doc.rect(0, 0, pageWidth, 85, 'F');
 
   // OCS Company Logo on Cover
   try {
-    doc.setFillColor(255, 255, 255);
-    doc.roundedRect(pageWidth - 58, 14, 38, 18, 2, 2, 'F');
-    doc.addImage(OCS_LOGO_BASE64, 'PNG', pageWidth - 55, 15.5, 32, 15);
+    const L = logoBox(38);
+    doc.addImage(OCS_LOGO_WHITE, 'PNG', pageWidth - 20 - L.w, 16, L.w, L.h);
   } catch (logoErr) {
     console.warn('Failed embedding OCS logo on cover:', logoErr);
   }
 
   // Badge
-  doc.setFillColor(2, 132, 199); // sky-600
+  doc.setFillColor(241, 94, 34); // sky-600
   doc.roundedRect(20, 16, 85, 7, 2, 2, 'F');
   doc.setFontSize(8);
   doc.setFont('helvetica', 'bold');
@@ -154,7 +161,7 @@ export async function generateSurveyPDF(survey, selectedFacility = 'ALL') {
   doc.setTextColor(15, 23, 42);
   doc.text('FACILITY & AUDIT SPECIFICATION', 20, curY);
 
-  doc.setDrawColor(2, 132, 199);
+  doc.setDrawColor(40, 65, 124);
   doc.setLineWidth(0.8);
   doc.line(20, curY + 2, 45, curY + 2);
 
@@ -176,7 +183,20 @@ export async function generateSurveyPDF(survey, selectedFacility = 'ALL') {
     doc.setFontSize(9);
     doc.setFont('helvetica', 'normal');
     doc.setTextColor(15, 23, 42);
-    doc.text(String(val || 'N/A'), x + 35, y);
+    // Clip to the column so long values (e.g. a consultancy name) cannot run
+    // out past the metadata box and off the page edge.
+    const maxW = (x === col1X ? col2X - x : pageWidth - 26 - x) - 36;
+    const full = String(val || 'N/A');
+    let shown = full;
+    if (doc.getTextWidth(shown) > maxW) {
+      // Trim to fit and mark it, so a clipped value reads as deliberate
+      // truncation rather than a rendering bug.
+      while (shown.length > 1 && doc.getTextWidth(shown + '...') > maxW) {
+        shown = shown.slice(0, -1);
+      }
+      shown = shown.replace(/[\s,;:.-]+$/, '') + '...';
+    }
+    doc.text(shown, x + 35, y);
   };
 
   printMeta('Building Code:', facility.buildingCode, col1X, rowY);
@@ -219,10 +239,10 @@ export async function generateSurveyPDF(survey, selectedFacility = 'ALL') {
     doc.text(sub, x + 4, y + 22);
   };
 
-  drawKpiCard(20, curY, 'AUDITED ASSETS', stats.total, 'Snag Elements', [15, 23, 42]);
+  drawKpiCard(20, curY, 'AUDITED ASSETS', stats.total, 'Snag Elements', [40, 65, 124]);
   drawKpiCard(20 + kpiWidth + 3, curY, 'ATTACHED PHOTOS', stats.totalPhotos, 'Defect Evidence', [2, 132, 199]);
   drawKpiCard(20 + (kpiWidth + 3) * 2, curY, 'URGENT HAZARDS', stats.priorityCounts[1], 'Priority 1 Life Safety', [220, 38, 38]);
-  drawKpiCard(20 + (kpiWidth + 3) * 3, curY, 'REMEDIAL CAPEX', `$${stats.totalCost.toLocaleString()}`, 'Estimated Budget', [15, 23, 42]);
+  drawKpiCard(20 + (kpiWidth + 3) * 3, curY, 'REMEDIAL CAPEX', `$${stats.totalCost.toLocaleString()}`, 'Estimated Budget', [40, 65, 124]);
 
   // Scope notes block
   curY += 34;
@@ -323,7 +343,7 @@ export async function generateSurveyPDF(survey, selectedFacility = 'ALL') {
     head: [['Maintenance Department / Trade', 'Defect Count', 'Remedial Budget ($)', 'CapEx Share (%)']],
     body: deptTableRows,
     theme: 'grid',
-    headStyles: { fillColor: [15, 23, 42], textColor: [255, 255, 255], fontSize: 8.5, fontStyle: 'bold' },
+    headStyles: { fillColor: [40, 65, 124], textColor: [255, 255, 255], fontSize: 8.5, fontStyle: 'bold' },
     bodyStyles: { fontSize: 8, textColor: [30, 41, 59] },
     columnStyles: {
       0: { fontStyle: 'bold', cellWidth: 70 },
