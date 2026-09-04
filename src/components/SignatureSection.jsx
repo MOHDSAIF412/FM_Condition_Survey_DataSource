@@ -93,7 +93,7 @@ function CanvasSignaturePad({ value, onSave, label }) {
         <button
           type="button"
           onClick={clearCanvas}
-          className="text-[11px] font-semibold text-slate-500 hover:text-rose-600 flex items-center space-x-1 py-1 px-2 rounded-lg hover:bg-slate-100 transition-colors"
+          className="text-[12px] font-semibold text-slate-500 hover:text-rose-600 flex items-center space-x-1 py-1 px-2 rounded-lg hover:bg-slate-100 transition-colors"
         >
           <RotateCcw className="w-3 h-3" />
           <span>Clear Signature</span>

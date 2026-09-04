@@ -51,7 +51,7 @@ export default function Header({
               <h1 className="text-base font-bold tracking-tight text-white flex items-center gap-1.5">
                 FM Condition Survey
               </h1>
-              <span className={`hidden sm:inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold border ${sync.cls}`}>
+              <span className={`hidden sm:inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold border ${sync.cls}`}>
                 {sync.label}
               </span>
             </div>
@@ -90,7 +90,7 @@ export default function Header({
                 />
                 <div className="absolute right-0 mt-2 w-60 bg-slate-800 border border-slate-700 rounded-xl shadow-2xl py-2 z-50 text-slate-200">
                   <div className="px-3 py-1.5 border-b border-slate-700/60 mb-1">
-                    <p className="text-[11px] font-medium text-slate-400">Offline Status</p>
+                    <p className="text-[12px] font-medium text-slate-400">Offline Status</p>
                     <p className="text-xs text-emerald-400 flex items-center gap-1 mt-0.5">
                       <CheckCircle2 className="w-3.5 h-3.5" />
                       Saved to Device {lastSaved ? `(${lastSaved})` : ''}

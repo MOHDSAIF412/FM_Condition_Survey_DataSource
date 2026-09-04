@@ -76,7 +76,7 @@ export default function AnalyticsView({ items = [], onOpenReport }) {
           <div className="my-2">
             <span className="text-3xl font-extrabold text-slate-900">{stats.total}</span>
           </div>
-          <span className="text-[11px] text-slate-500 font-medium">Elements cataloged</span>
+          <span className="text-[12px] text-slate-500 font-medium">Elements cataloged</span>
         </div>
 
         {/* Total Photos Attached */}
@@ -86,7 +86,7 @@ export default function AnalyticsView({ items = [], onOpenReport }) {
             <span className="text-3xl font-extrabold text-sky-600">{stats.totalPhotos || 0}</span>
             <Camera className="w-5 h-5 text-sky-500" />
           </div>
-          <span className="text-[11px] text-slate-500 font-medium">Attached to snags</span>
+          <span className="text-[12px] text-slate-500 font-medium">Attached to snags</span>
         </div>
 
         {/* Priority 1 Hazards */}
@@ -104,7 +104,7 @@ export default function AnalyticsView({ items = [], onOpenReport }) {
             </span>
             {(stats?.priorityCounts?.[1] || 0) > 0 && <AlertTriangle className="w-5 h-5 text-rose-500 animate-bounce" />}
           </div>
-          <span className="text-[11px] font-medium">
+          <span className="text-[12px] font-medium">
             {(stats?.priorityCounts?.[1] || 0) > 0 ? 'Statutory / Life safety' : 'No critical hazards'}
           </span>
         </div>
@@ -117,7 +117,7 @@ export default function AnalyticsView({ items = [], onOpenReport }) {
               ${(stats?.totalCost || 0).toLocaleString()}
             </span>
           </div>
-          <span className="text-[11px] text-slate-500 font-medium">Estimated budget</span>
+          <span className="text-[12px] text-slate-500 font-medium">Estimated budget</span>
         </div>
       </div>
 
@@ -139,7 +139,7 @@ export default function AnalyticsView({ items = [], onOpenReport }) {
                   <div>
                     <span className="font-bold text-slate-800">{item.assetName || 'Unnamed Asset'}</span>
                     <span className="text-slate-500 ml-2">({item.location || 'Site'})</span>
-                    <span className={`ml-2 px-1.5 py-0.2 rounded text-[10px] font-bold ${itemDept.badge || 'bg-slate-100'}`}>
+                    <span className={`ml-2 px-1.5 py-0.2 rounded text-[11px] font-bold ${itemDept.badge || 'bg-slate-100'}`}>
                       {(itemDept.name || 'FM').split('&')[0]}
                     </span>
                   </div>
@@ -169,16 +169,16 @@ export default function AnalyticsView({ items = [], onOpenReport }) {
             return (
               <div key={dept.id} className="py-3 flex items-center justify-between text-xs">
                 <div className="flex items-center space-x-2">
-                  <span className={`px-2 py-0.5 rounded-lg text-[11px] font-bold border ${dept.badge}`}>
+                  <span className={`px-2 py-0.5 rounded-lg text-[12px] font-bold border ${dept.badge}`}>
                     {dept.name}
                   </span>
-                  <span className="text-slate-500 text-[11px]">({dept.count} {dept.count === 1 ? 'item' : 'items'})</span>
+                  <span className="text-slate-500 text-[12px]">({dept.count} {dept.count === 1 ? 'item' : 'items'})</span>
                 </div>
                 <div className="text-right">
                   <span className="font-extrabold text-slate-900 text-sm">
                     ${(dept.cost || 0).toLocaleString()}
                   </span>
-                  <span className="text-slate-400 ml-2 text-[11px]">({pct}%)</span>
+                  <span className="text-slate-400 ml-2 text-[12px]">({pct}%)</span>
                 </div>
               </div>
             );
@@ -204,7 +204,7 @@ export default function AnalyticsView({ items = [], onOpenReport }) {
               return (
                 <div key={pNum} className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 border border-slate-100 text-xs">
                   <div className="flex items-center space-x-2">
-                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                    <span className={`px-2 py-0.5 rounded text-[11px] font-bold ${
                       pNum === 1 ? 'bg-red-600 text-white' :
                       pNum === 2 ? 'bg-orange-500 text-white' :
                       pNum === 3 ? 'bg-amber-500 text-white' : 'bg-blue-500 text-white'
@@ -213,7 +213,7 @@ export default function AnalyticsView({ items = [], onOpenReport }) {
                     </span>
                     <div>
                       <span className="font-bold text-slate-800">{labelPart}</span>
-                      <span className="text-slate-400 text-[10px] block">{p.timeframe}</span>
+                      <span className="text-slate-400 text-[11px] block">{p.timeframe}</span>
                     </div>
                   </div>
                   <span className="font-extrabold text-sm text-slate-800">{count}</span>
@@ -240,11 +240,11 @@ export default function AnalyticsView({ items = [], onOpenReport }) {
                   <div key={idx} className="p-2 rounded-xl bg-slate-50 flex items-center justify-between text-xs">
                     <div>
                       <span className="font-bold text-slate-800">{loc.name}</span>
-                      <span className="text-slate-400 ml-1 text-[11px]">({loc.count} items)</span>
+                      <span className="text-slate-400 ml-1 text-[12px]">({loc.count} items)</span>
                     </div>
                     <div className="text-right">
                       <span className="font-bold text-slate-800">${(loc.cost || 0).toLocaleString()}</span>
-                      <span className="text-slate-400 ml-1 text-[10px]">({pct}%)</span>
+                      <span className="text-slate-400 ml-1 text-[11px]">({pct}%)</span>
                     </div>
                   </div>
                 );

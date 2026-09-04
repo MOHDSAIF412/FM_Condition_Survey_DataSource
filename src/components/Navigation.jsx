@@ -32,13 +32,13 @@ export default function Navigation({ activeTab, setActiveTab, itemsCount = 0, ur
                 <span>{tab.label}</span>
 
                 {tab.badge !== undefined && tab.badge > 0 && (
-                  <span className="ml-1 px-1.5 py-0.2 rounded-full text-[11px] font-bold bg-slate-100 text-slate-700">
+                  <span className="ml-1 px-1.5 py-0.2 rounded-full text-[12px] font-bold bg-slate-100 text-slate-700">
                     {tab.badge}
                   </span>
                 )}
 
                 {tab.alertBadge && (
-                  <span className="ml-1 px-1.5 py-0.2 rounded-full text-[11px] font-bold bg-rose-500 text-white flex items-center gap-0.5">
+                  <span className="ml-1 px-1.5 py-0.2 rounded-full text-[12px] font-bold bg-rose-500 text-white flex items-center gap-0.5">
                     <AlertTriangle className="w-2.5 h-2.5" />
                     {tab.alertBadge}
                   </span>
@@ -69,18 +69,18 @@ export default function Navigation({ activeTab, setActiveTab, itemsCount = 0, ur
                   <Icon className={`w-5 h-5 ${isActive ? 'stroke-[2.4]' : 'stroke-[1.8]'}`} />
                   
                   {tab.badge !== undefined && tab.badge > 0 && (
-                    <span className="absolute -top-1.5 -right-2 min-w-[16px] h-4 px-1 rounded-full text-[9px] font-bold bg-slate-700 text-white flex items-center justify-center">
+                    <span className="absolute -top-1.5 -right-2 min-w-[16px] h-4 px-1 rounded-full text-[10px] font-bold bg-slate-700 text-white flex items-center justify-center">
                       {tab.badge}
                     </span>
                   )}
 
                   {tab.alertBadge && (
-                    <span className="absolute -top-1.5 -right-2.5 px-1 rounded-full text-[9px] font-bold bg-rose-500 text-white flex items-center justify-center animate-pulse">
+                    <span className="absolute -top-1.5 -right-2.5 px-1 rounded-full text-[10px] font-bold bg-rose-500 text-white flex items-center justify-center animate-pulse">
                       !
                     </span>
                   )}
                 </div>
-                <span className="text-[10px] mt-1 tracking-tight truncate max-w-full">
+                <span className="text-[11px] mt-1 tracking-tight truncate max-w-full">
                   {tab.label}
                 </span>
                 {isActive && (

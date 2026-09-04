@@ -93,7 +93,7 @@ export default function SurveyList({
 
         {/* Department / Trade Filter Dropdown */}
         <div>
-          <div className="flex items-center justify-between mb-1.5 text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+          <div className="flex items-center justify-between mb-1.5 text-[12px] font-bold text-slate-500 uppercase tracking-wider">
             <label htmlFor="dept-filter-select" className="flex items-center gap-1.5 text-slate-700">
               <Wrench className="w-3.5 h-3.5 text-sky-600" />
               <span>Filter by Department / Trade</span>
@@ -163,7 +163,7 @@ export default function SurveyList({
           <Plus className="w-4 h-4" />
           <span>+ Add Next Asset</span>
           {items.length > 0 && items[items.length - 1]?.location && (
-            <span className="text-[11px] opacity-85 hidden sm:inline">
+            <span className="text-[12px] opacity-85 hidden sm:inline">
               (in "{items[items.length - 1].location}")
             </span>
           )}

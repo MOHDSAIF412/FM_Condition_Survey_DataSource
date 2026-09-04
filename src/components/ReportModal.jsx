@@ -95,7 +95,7 @@ export default function ReportModal({ survey = {}, onClose }) {
           </div>
           <div className="min-w-0">
             <h3 className="font-bold text-sm truncate">Audit Report & CapEx Preview</h3>
-            <p className="text-[11px] text-slate-400 truncate">
+            <p className="text-[12px] text-slate-400 truncate">
               {facility.facilityName || facility.buildingName || 'Condition Survey'} • Excel & PDF Ready
             </p>
           </div>
@@ -196,7 +196,7 @@ export default function ReportModal({ survey = {}, onClose }) {
         <div className="bg-gradient-to-r from-slate-900 via-sky-950 to-slate-900 text-white p-6 sm:p-10 border-b border-slate-800">
           <div className="flex items-start justify-between gap-4 mb-4">
             <div className="space-y-1">
-              <span className="text-[11px] font-mono tracking-widest uppercase px-3 py-1 rounded-full bg-sky-500/20 text-sky-300 border border-sky-500/30 inline-block">
+              <span className="text-[12px] font-mono tracking-widest uppercase px-3 py-1 rounded-full bg-sky-500/20 text-sky-300 border border-sky-500/30 inline-block">
                 FM Condition Survey & Snag Report
               </span>
               <span className="text-xs text-slate-400 block pt-1">
@@ -231,7 +231,7 @@ export default function ReportModal({ survey = {}, onClose }) {
                 {googleLoc.address || facility.address || 'Site Address unassigned'}
               </span>
               {googleLoc.latitude && (
-                <span className="text-emerald-400 font-mono text-[11px] hidden sm:inline">
+                <span className="text-emerald-400 font-mono text-[12px] hidden sm:inline">
                   (GPS: {googleLoc.latitude}, {googleLoc.longitude})
                 </span>
               )}
@@ -252,19 +252,19 @@ export default function ReportModal({ survey = {}, onClose }) {
 
           <div className="mt-6 pt-6 border-t border-slate-800 grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs">
             <div>
-              <span className="text-slate-400 text-[10px] uppercase font-semibold block">Asset Code</span>
+              <span className="text-slate-400 text-[11px] uppercase font-semibold block">Asset Code</span>
               <span className="font-semibold text-white">{facility.buildingCode || 'N/A'}</span>
             </div>
             <div>
-              <span className="text-slate-400 text-[10px] uppercase font-semibold block">Inspection Date</span>
+              <span className="text-slate-400 text-[11px] uppercase font-semibold block">Inspection Date</span>
               <span className="font-semibold text-white">{facility.surveyDate || new Date().toLocaleDateString()}</span>
             </div>
             <div>
-              <span className="text-slate-400 text-[10px] uppercase font-semibold block">Lead Inspector</span>
+              <span className="text-slate-400 text-[11px] uppercase font-semibold block">Lead Inspector</span>
               <span className="font-semibold text-white truncate block">{facility.surveyorName || 'N/A'}</span>
             </div>
             <div>
-              <span className="text-slate-400 text-[10px] uppercase font-semibold block">Client / Manager</span>
+              <span className="text-slate-400 text-[11px] uppercase font-semibold block">Client / Manager</span>
               <span className="font-semibold text-white truncate block">{facility.clientName || 'N/A'}</span>
             </div>
           </div>
@@ -278,35 +278,35 @@ export default function ReportModal({ survey = {}, onClose }) {
 
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm text-center">
-              <span className="text-[10px] font-bold text-slate-400 uppercase">Assets Audited</span>
+              <span className="text-[11px] font-bold text-slate-400 uppercase">Assets Audited</span>
               <div className="text-3xl font-extrabold text-slate-900 my-1">{stats.total}</div>
-              <span className="text-[11px] text-slate-500 font-medium">Cataloged Snags</span>
+              <span className="text-[12px] text-slate-500 font-medium">Cataloged Snags</span>
             </div>
 
             <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm text-center">
-              <span className="text-[10px] font-bold text-slate-400 uppercase">Photos Attached</span>
+              <span className="text-[11px] font-bold text-slate-400 uppercase">Photos Attached</span>
               <div className="text-3xl font-extrabold text-sky-600 my-1">{stats.totalPhotos || 0}</div>
-              <span className="text-[11px] text-slate-500 font-medium">Defect Evidence</span>
+              <span className="text-[12px] text-slate-500 font-medium">Defect Evidence</span>
             </div>
 
             <div className={`p-4 rounded-xl border shadow-sm text-center ${
               (stats?.priorityCounts?.[1] || 0) > 0 ? 'bg-rose-50 border-rose-200' : 'bg-white border-slate-200'
             }`}>
-              <span className={`text-[10px] font-bold uppercase ${(stats?.priorityCounts?.[1] || 0) > 0 ? 'text-rose-700' : 'text-slate-400'}`}>
+              <span className={`text-[11px] font-bold uppercase ${(stats?.priorityCounts?.[1] || 0) > 0 ? 'text-rose-700' : 'text-slate-400'}`}>
                 Urgent Hazards (P1)
               </span>
               <div className={`text-3xl font-extrabold my-1 ${(stats?.priorityCounts?.[1] || 0) > 0 ? 'text-rose-600' : 'text-slate-900'}`}>
                 {stats?.priorityCounts?.[1] || 0}
               </div>
-              <span className="text-[11px] font-medium text-slate-600">Immediate Action</span>
+              <span className="text-[12px] font-medium text-slate-600">Immediate Action</span>
             </div>
 
             <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm text-center">
-              <span className="text-[10px] font-bold text-slate-400 uppercase">Remediation CapEx</span>
+              <span className="text-[11px] font-bold text-slate-400 uppercase">Remediation CapEx</span>
               <div className="text-2xl sm:text-3xl font-extrabold text-slate-900 my-1 truncate">
                 ${(stats?.totalCost || 0).toLocaleString()}
               </div>
-              <span className="text-[11px] text-slate-500 font-medium">Preliminary Budget</span>
+              <span className="text-[12px] text-slate-500 font-medium">Preliminary Budget</span>
             </div>
           </div>
 
@@ -319,7 +319,7 @@ export default function ReportModal({ survey = {}, onClose }) {
             
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs">
-                <thead className="bg-slate-100 text-slate-600 uppercase text-[10px]">
+                <thead className="bg-slate-100 text-slate-600 uppercase text-[11px]">
                   <tr>
                     <th className="p-2.5">Department / Trade</th>
                     <th className="p-2.5 text-center">Defect Count</th>
@@ -336,7 +336,7 @@ export default function ReportModal({ survey = {}, onClose }) {
                     return (
                       <tr key={dKey}>
                         <td className="p-2.5 font-bold text-slate-800 flex items-center gap-2">
-                          <span className={`px-2 py-0.5 rounded text-[10px] ${dept.badge}`}>
+                          <span className={`px-2 py-0.5 rounded text-[11px] ${dept.badge}`}>
                             {dept.name}
                           </span>
                         </td>
@@ -365,7 +365,7 @@ export default function ReportModal({ survey = {}, onClose }) {
 
           <div className="overflow-x-auto border border-slate-200 rounded-xl">
             <table className="w-full text-left text-xs text-slate-700">
-              <thead className="bg-slate-900 text-white uppercase text-[10px] tracking-wider">
+              <thead className="bg-slate-900 text-white uppercase text-[11px] tracking-wider">
                 <tr>
                   <th className="p-3">#</th>
                   <th className="p-3">Asset / Component</th>
@@ -391,22 +391,22 @@ export default function ReportModal({ survey = {}, onClose }) {
                           <span>{item.location || 'General Site Area'}</span>
                         </div>
                         {(googleLoc.latitude || googleLoc.address) && (
-                          <div className="text-[10px] text-emerald-700 font-medium mt-0.5">
+                          <div className="text-[11px] text-emerald-700 font-medium mt-0.5">
                             {googleLoc.latitude ? `${googleLoc.latitude}, ${googleLoc.longitude}` : googleLoc.address}
                           </div>
                         )}
                       </td>
                       <td className="p-3">
-                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${dept.badge || 'border-slate-200'}`}>
+                        <span className={`px-2 py-0.5 rounded text-[11px] font-bold border ${dept.badge || 'border-slate-200'}`}>
                           {(dept?.name || 'General').split('&')[0]}
                         </span>
                       </td>
                       <td className="p-3 text-center">
-                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${priority.badge}`}>
+                        <span className={`px-2 py-0.5 rounded text-[11px] font-bold ${priority.badge}`}>
                           P{item.priority}
                         </span>
                       </td>
-                      <td className="p-3 max-w-xs text-[11px] text-slate-600">
+                      <td className="p-3 max-w-xs text-[12px] text-slate-600">
                         {item.defectDescription || 'No defect noted.'}
                       </td>
                       <td className="p-3 text-center font-medium text-slate-700">
@@ -445,10 +445,10 @@ export default function ReportModal({ survey = {}, onClose }) {
                         <span className="font-extrabold text-slate-900 text-sm">
                           Snag #{snagIdx + 1}: {item.assetName}
                         </span>
-                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${PRIORITY_LEVELS[item.priority]?.badge}`}>
+                        <span className={`px-2 py-0.5 rounded text-[11px] font-bold ${PRIORITY_LEVELS[item.priority]?.badge}`}>
                           P{item.priority}
                         </span>
-                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${DEPARTMENTS[item.department]?.badge || 'bg-slate-100'}`}>
+                        <span className={`px-2 py-0.5 rounded text-[11px] font-bold border ${DEPARTMENTS[item.department]?.badge || 'bg-slate-100'}`}>
                           {DEPARTMENTS[item.department]?.name || 'General FM'}
                         </span>
                       </div>
@@ -460,7 +460,7 @@ export default function ReportModal({ survey = {}, onClose }) {
                           <span>Location: <strong className="text-slate-800">{item.location || 'General Site Area'}</strong></span>
                         </span>
                         {(googleLoc.latitude || googleLoc.address) && (
-                          <span className="text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 text-[11px] font-medium flex items-center gap-1">
+                          <span className="text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 text-[12px] font-medium flex items-center gap-1">
                             <Compass className="w-3 h-3 text-emerald-600" />
                             <span>GPS: {googleLoc.latitude ? `${googleLoc.latitude}, ${googleLoc.longitude}` : googleLoc.address}</span>
                           </span>
@@ -472,7 +472,7 @@ export default function ReportModal({ survey = {}, onClose }) {
                       <span className="text-xs font-bold text-slate-700 block">
                         Est. Cost: ${(parseFloat(item.estimatedCost) || 0).toLocaleString()}
                       </span>
-                      <span className="text-[11px] font-semibold text-sky-600">
+                      <span className="text-[12px] font-semibold text-sky-600">
                         {item.photos.length} {item.photos.length === 1 ? 'Photo attached' : 'Photos attached'}
                       </span>
                     </div>
@@ -489,15 +489,15 @@ export default function ReportModal({ survey = {}, onClose }) {
                       <div key={photo.id || pIdx} className="bg-slate-900 rounded-xl overflow-hidden border border-slate-200 shadow-xs flex flex-col">
                         <div className="aspect-video bg-black flex items-center justify-center relative overflow-hidden">
                           <img src={photo.dataUrl} alt={photo.caption || photo.name} className="w-full h-full object-cover" />
-                          <span className="absolute top-1.5 left-1.5 px-2 py-0.5 rounded bg-black/75 text-white font-bold text-[10px]">
+                          <span className="absolute top-1.5 left-1.5 px-2 py-0.5 rounded bg-black/75 text-white font-bold text-[11px]">
                             Photo #{pIdx + 1} of {item.photos.length}
                           </span>
                         </div>
                         <div className="p-2 bg-slate-800 text-white text-xs">
-                          <p className="text-[11px] font-medium text-slate-200 truncate">
+                          <p className="text-[12px] font-medium text-slate-200 truncate">
                             {photo.caption || `Defect Evidence #${pIdx + 1}`}
                           </p>
-                          <span className="text-[10px] text-slate-400 block mt-0.5">
+                          <span className="text-[11px] text-slate-400 block mt-0.5">
                             {photo.timestamp ? new Date(photo.timestamp).toLocaleDateString() : 'Site Camera'}
                           </span>
                         </div>
@@ -554,7 +554,7 @@ export default function ReportModal({ survey = {}, onClose }) {
             </div>
           </div>
 
-          <div className="text-center text-[11px] text-slate-400 pt-4 border-t border-slate-100">
+          <div className="text-center text-[12px] text-slate-400 pt-4 border-t border-slate-100">
             Report generated electronically via FM Condition Survey Engine • Confidential
           </div>
         </div>

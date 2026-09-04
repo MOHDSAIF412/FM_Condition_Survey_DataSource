@@ -176,7 +176,22 @@ export default function App() {
     pushTimeoutRef.current = setTimeout(async () => {
       try {
         setSyncState('syncing');
-        await pushSurvey(surveyRef.current);
+        const pushResult = await pushSurvey(surveyRef.current);
+
+        // The server was ahead of us, so the push was refused rather than
+        // allowed to overwrite newer work. Take the server's copy instead.
+        if (pushResult && pushResult.conflict) {
+          const current = surveyRef.current;
+          const remote = await pullSurvey(current.id, collectKnownPhotos(current));
+          if (remote && Array.isArray(remote.items)) {
+            markAsExternalChange();
+            setSurvey(remote);
+            await saveSurveyOffline(remote, { pendingSync: false });
+          }
+          setSyncState('synced');
+          return;
+        }
+
         await markSurveySynced(surveyRef.current.id);
         setSyncState('synced');
       } catch (err) {

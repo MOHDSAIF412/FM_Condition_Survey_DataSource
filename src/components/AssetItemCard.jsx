@@ -162,12 +162,12 @@ export default function AssetItemCard({
               </span>
 
               {/* Department Badge */}
-              <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold border ${currentDept.badge || 'border-slate-200'}`}>
+              <span className={`px-2 py-0.5 rounded-md text-[11px] font-bold border ${currentDept.badge || 'border-slate-200'}`}>
                 {(currentDept.name || 'General').split('&')[0]}
               </span>
 
               {/* Priority Badge */}
-              <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold ${currentPriority.badge}`}>
+              <span className={`px-2 py-0.5 rounded-md text-[11px] font-bold ${currentPriority.badge}`}>
                 P{item.priority}
               </span>
             </div>
@@ -191,7 +191,7 @@ export default function AssetItemCard({
         <div className="flex items-center space-x-2 shrink-0">
           {/* Photos Count Badge */}
           {photosList.length > 0 ? (
-            <span className="text-[11px] font-bold text-sky-700 bg-sky-100/80 px-2 py-0.5 rounded-full border border-sky-300 flex items-center gap-1">
+            <span className="text-[12px] font-bold text-sky-700 bg-sky-100/80 px-2 py-0.5 rounded-full border border-sky-300 flex items-center gap-1">
               <ImageIcon className="w-3 h-3" />
               <span>{photosList.length}</span>
             </span>
@@ -232,7 +232,7 @@ export default function AssetItemCard({
           
           {/* Asset Name */}
           <div>
-            <label className="block text-[11px] font-bold uppercase text-slate-600 mb-1">
+            <label className="block text-[12px] font-bold uppercase text-slate-600 mb-1">
               Asset / Component / Snag Name *
             </label>
             <input
@@ -247,12 +247,12 @@ export default function AssetItemCard({
           {/* Asset Location / Room / Area */}
           <div>
             <div className="flex items-center justify-between mb-1">
-              <label className="block text-[11px] font-bold uppercase text-slate-600 flex items-center gap-1.5">
+              <label className="block text-[12px] font-bold uppercase text-slate-600 flex items-center gap-1.5">
                 <MapPin className="w-3.5 h-3.5 text-sky-600" />
                 Asset Location / Room / Area *
               </label>
               {recentLocations && recentLocations.length > 0 && (
-                <span className="text-[10px] text-slate-400">23 Facilities Available</span>
+                <span className="text-[11px] text-slate-400">23 Facilities Available</span>
               )}
             </div>
 
@@ -308,7 +308,7 @@ export default function AssetItemCard({
           {/* Department / Trade Selector */}
           <div>
             <div className="flex items-center justify-between mb-1.5">
-              <label className="block text-[11px] font-bold uppercase text-slate-600 flex items-center gap-1.5">
+              <label className="block text-[12px] font-bold uppercase text-slate-600 flex items-center gap-1.5">
                 <Wrench className="w-3.5 h-3.5 text-sky-600" />
                 Department / Trade *
               </label>
@@ -326,7 +326,7 @@ export default function AssetItemCard({
                     key={dKey}
                     type="button"
                     onClick={() => handleDepartmentSelect(dKey)}
-                    className={`py-1.5 px-2 rounded-xl text-center font-bold truncate transition-all text-[11px] border ${
+                    className={`py-1.5 px-2 rounded-xl text-center font-bold truncate transition-all text-[12px] border ${
                       isSelected
                         ? `${dept.badgeSolid} border-transparent shadow-sm scale-[1.02]`
                         : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100'
@@ -342,7 +342,7 @@ export default function AssetItemCard({
           {/* Remedial Urgency / Priority Selector (1 - 4) */}
           <div>
             <div className="flex items-center justify-between mb-1.5">
-              <label className="block text-[11px] font-bold uppercase text-slate-600">
+              <label className="block text-[12px] font-bold uppercase text-slate-600">
                 Remedial Priority (1 - 4)
               </label>
               <span className="text-xs font-semibold text-slate-500">
@@ -366,21 +366,21 @@ export default function AssetItemCard({
                     }`}
                   >
                     <span className="font-extrabold text-sm">P{pNum}</span>
-                    <span className="text-[10px] truncate max-w-full font-medium">
+                    <span className="text-[11px] truncate max-w-full font-medium">
                       {p.label ? (p.label.split(' ')[1] || p.label) : `P${pNum}`}
                     </span>
                   </button>
                 );
               })}
             </div>
-            <p className="text-[11px] text-slate-500 mt-1.5">
+            <p className="text-[12px] text-slate-500 mt-1.5">
               {currentPriority.description}
             </p>
           </div>
 
           {/* Observations & Defects */}
           <div>
-            <label className="block text-[11px] font-bold uppercase text-slate-600 mb-1">
+            <label className="block text-[12px] font-bold uppercase text-slate-600 mb-1">
               Observed Defects & Condition Notes
             </label>
             <textarea
@@ -395,7 +395,7 @@ export default function AssetItemCard({
           {/* Quantity and Estimated Cost */}
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-[11px] font-bold uppercase text-slate-600 mb-1">
+              <label className="block text-[12px] font-bold uppercase text-slate-600 mb-1">
                 Estimated Remediation Cost ($)
               </label>
               <div className="relative">
@@ -413,7 +413,7 @@ export default function AssetItemCard({
             </div>
 
             <div>
-              <label className="block text-[11px] font-bold uppercase text-slate-600 mb-1">
+              <label className="block text-[12px] font-bold uppercase text-slate-600 mb-1">
                 Quantity
               </label>
               <input
@@ -436,7 +436,7 @@ export default function AssetItemCard({
                   Snag Photos & Evidence ({photosList.length} Attached)
                 </span>
               </div>
-              <span className="text-[11px] text-slate-500">
+              <span className="text-[12px] text-slate-500">
                 Continuous photo snapping supported
               </span>
             </div>
@@ -458,7 +458,7 @@ export default function AssetItemCard({
                         alt={photo.caption || photo.name || 'Defect'}
                         className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                       />
-                      <span className="absolute top-1.5 left-1.5 px-1.5 py-0.5 rounded-md bg-black/70 text-white font-bold text-[10px]">
+                      <span className="absolute top-1.5 left-1.5 px-1.5 py-0.5 rounded-md bg-black/70 text-white font-bold text-[11px]">
                         #{pIdx + 1}
                       </span>
                       
@@ -489,13 +489,13 @@ export default function AssetItemCard({
                             onBlur={() => setEditingCaptionId(null)}
                             onKeyDown={(e) => e.key === 'Enter' && setEditingCaptionId(null)}
                             autoFocus
-                            className="w-full px-1.5 py-0.5 text-[10px] text-slate-900 rounded bg-white focus:outline-none"
+                            className="w-full px-1.5 py-0.5 text-[11px] text-slate-900 rounded bg-white focus:outline-none"
                             placeholder="Type caption..."
                           />
                           <button
                             type="button"
                             onClick={() => setEditingCaptionId(null)}
-                            className="text-[10px] text-sky-400 font-bold px-1"
+                            className="text-[11px] text-sky-400 font-bold px-1"
                           >
                             OK
                           </button>
@@ -506,7 +506,7 @@ export default function AssetItemCard({
                           onClick={() => setEditingCaptionId(photo.id)}
                           title="Click to edit caption"
                         >
-                          <span className="text-[10px] truncate max-w-[120px] font-medium text-slate-200">
+                          <span className="text-[11px] truncate max-w-[120px] font-medium text-slate-200">
                             {photo.caption || 'Add caption...'}
                           </span>
                           <Edit3 className="w-2.5 h-2.5 text-slate-400 shrink-0 ml-1" />
@@ -667,7 +667,7 @@ export default function AssetItemCard({
                 />
               </div>
 
-              <div className="flex items-center space-x-3 text-[11px] text-slate-400">
+              <div className="flex items-center space-x-3 text-[12px] text-slate-400">
                 <button
                   type="button"
                   onClick={() => handleRemovePhoto(photosList[previewPhotoIndex].id)}

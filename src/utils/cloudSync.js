@@ -93,6 +93,25 @@ async function downloadPhoto(storagePath) {
 export async function pushSurvey(survey) {
   if (!isCloudConfigured || !survey || !survey.id) return { skipped: true };
 
+  // This push replaces the server's items wholesale, so a client pushing a
+  // stale or partially-loaded survey would silently destroy whatever the
+  // server holds. Refuse when the server is ahead of what this client last
+  // saw, and let the caller pull instead. (Observed for real: a tab that had
+  // only part of a survey in memory overwrote the full copy, losing items.)
+  const { data: current, error: readErr } = await supabase
+    .from('condition_surveys')
+    .select('revision')
+    .eq('id', survey.id)
+    .limit(1);
+  if (readErr) throw readErr;
+
+  const serverRevision = current && current.length ? current[0].revision || 0 : 0;
+  const localRevision = survey.revision || 0;
+
+  if (serverRevision > localRevision) {
+    return { conflict: true, serverRevision, localRevision };
+  }
+
   const { error: surveyErr } = await supabase.from('condition_surveys').upsert({
     id: survey.id,
     title: survey.title || null,
