@@ -8,9 +8,22 @@ import SignatureSection from './components/SignatureSection';
 import ReportModal from './components/ReportModal';
 import { sampleSurveyData } from './data/sampleSurvey';
 import { createNewSurvey, calculateSurveyStats } from './types/survey';
-import { saveSurveyOffline, loadCurrentSurveyOffline, subscribeToSurveyChanges } from './utils/storage';
+import {
+  saveSurveyOffline,
+  loadCurrentSurveyOffline,
+  subscribeToSurveyChanges,
+  markSurveySynced
+} from './utils/storage';
 import { generateSurveyExcel } from './utils/excelGenerator';
 import { saveText } from './utils/fileSaver';
+import {
+  pushSurvey,
+  pullSurvey,
+  fetchLatestSurveyId,
+  collectKnownPhotos,
+  subscribeToCloudChanges
+} from './utils/cloudSync';
+import { isCloudConfigured } from './utils/supabaseClient';
 
 export default function App() {
   const [survey, setSurvey] = useState(sampleSurveyData);
@@ -19,15 +32,63 @@ export default function App() {
   const [lastSavedTime, setLastSavedTime] = useState('');
   const [isLoaded, setIsLoaded] = useState(false);
   const saveTimeoutRef = useRef(null);
-  // Set while adopting another tab's data, so the autosave below doesn't
-  // immediately write it back and ping-pong between tabs.
-  const applyingRemoteRef = useRef(false);
+  // Set when adopting data that came from elsewhere (another tab or another
+  // device). Each consumer gets its own flag: a single shared boolean is
+  // cleared by whichever effect runs first, so the other one never sees it and
+  // writes the change straight back out again.
+  const skipLocalSaveRef = useRef(false);
+  const skipCloudPushRef = useRef(false);
+
+  function markAsExternalChange() {
+    skipLocalSaveRef.current = true;
+    skipCloudPushRef.current = true;
+  }
+  const [syncState, setSyncState] = useState(isCloudConfigured ? 'idle' : 'off');
+  const surveyRef = useRef(null);
+  const pushTimeoutRef = useRef(null);
+  surveyRef.current = survey;
 
   // Load from IndexedDB on initial launch
   useEffect(() => {
     async function initStorage() {
       try {
         const saved = await loadCurrentSurveyOffline();
+
+        const localHasUnpushedWork =
+          saved && saved.pendingSync && Array.isArray(saved.items) && saved.items.length > 0;
+
+        // Work done with no signal has not reached the server yet. Pulling here
+        // would overwrite it with the older server copy and lose the survey.
+        if (localHasUnpushedWork) {
+          setSurvey(saved);
+          return;
+        }
+
+        // Otherwise prefer the server copy, so a phone and a laptop open the
+        // same survey.
+        if (isCloudConfigured) {
+          try {
+            const remoteId = (saved && saved.id) || (await fetchLatestSurveyId());
+            if (remoteId) {
+              const remote = await pullSurvey(remoteId, collectKnownPhotos(saved));
+              // An empty array is truthy, so a server survey whose items failed
+              // to upload would otherwise wipe perfectly good local data.
+              const remoteHasContent = remote && Array.isArray(remote.items) && remote.items.length > 0;
+              const localHasContent = saved && Array.isArray(saved.items) && saved.items.length > 0;
+              if (remoteHasContent || (remote && !localHasContent)) {
+                setSurvey(remote);
+                await saveSurveyOffline(remote, { pendingSync: false });
+                setIsLoaded(true);
+                setLastSavedTime(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
+                return;
+              }
+            }
+          } catch (cloudErr) {
+            // Offline or unreachable: fall through to the local copy.
+            console.info('Cloud unavailable at startup, using local data:', cloudErr.message);
+          }
+        }
+
         if (saved && saved.items) {
           setSurvey(saved);
         } else {
@@ -55,7 +116,7 @@ export default function App() {
       try {
         const latest = await loadCurrentSurveyOffline();
         if (latest && latest.items) {
-          applyingRemoteRef.current = true;
+          markAsExternalChange();
           setSurvey(latest);
           setLastSavedTime(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
         }
@@ -72,8 +133,8 @@ export default function App() {
     if (!isLoaded) return;
 
     // This change came from another tab, so it is already saved.
-    if (applyingRemoteRef.current) {
-      applyingRemoteRef.current = false;
+    if (skipLocalSaveRef.current) {
+      skipLocalSaveRef.current = false;
       return;
     }
 
@@ -88,7 +149,7 @@ export default function App() {
         // Refused because another tab had newer data. Take theirs rather than
         // silently destroying it.
         if (result && result.conflict) {
-          applyingRemoteRef.current = true;
+          markAsExternalChange();
           setSurvey(result.stored);
         }
         setLastSavedTime(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
@@ -101,6 +162,65 @@ export default function App() {
       if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
     };
   }, [survey, isLoaded]);
+
+  // Push local changes to the server so other devices see them.
+  useEffect(() => {
+    if (!isLoaded || !isCloudConfigured) return;
+    if (skipCloudPushRef.current) {
+      skipCloudPushRef.current = false;
+      return; // came from elsewhere, it is already on the server
+    }
+
+    if (pushTimeoutRef.current) clearTimeout(pushTimeoutRef.current);
+
+    pushTimeoutRef.current = setTimeout(async () => {
+      try {
+        setSyncState('syncing');
+        await pushSurvey(surveyRef.current);
+        await markSurveySynced(surveyRef.current.id);
+        setSyncState('synced');
+      } catch (err) {
+        // Offline is the normal case on site, not an error worth shouting about.
+        console.info('Cloud push deferred:', err.message);
+        setSyncState('offline');
+      }
+    }, 1500);
+
+    return () => {
+      if (pushTimeoutRef.current) clearTimeout(pushTimeoutRef.current);
+    };
+  }, [survey, isLoaded]);
+
+  // Another device changed this survey: pull it in.
+  useEffect(() => {
+    if (!isLoaded || !isCloudConfigured || !survey?.id) return;
+
+    const unsubscribe = subscribeToCloudChanges(survey.id, async () => {
+      try {
+        const current = surveyRef.current;
+        const remote = await pullSurvey(current.id, collectKnownPhotos(current));
+        if (!remote || !Array.isArray(remote.items)) return;
+
+        // Never let an empty remote replace local work that has content.
+        if (remote.items.length === 0 && (current.items || []).length > 0) return;
+
+        // Ignore the echo of our own push.
+        if (JSON.stringify(remote.items) === JSON.stringify(current.items) &&
+            JSON.stringify(remote.facility) === JSON.stringify(current.facility)) {
+          return;
+        }
+
+        markAsExternalChange();
+        setSurvey(remote);
+        await saveSurveyOffline(remote, { pendingSync: false });
+        setSyncState('synced');
+      } catch (err) {
+        console.warn('Could not pull remote change:', err);
+      }
+    });
+
+    return unsubscribe;
+  }, [isLoaded, survey?.id]);
 
   // Handle Tab Switch to Report
   const handleTabChange = (tabId) => {
@@ -216,6 +336,7 @@ export default function App() {
         onImportJSON={handleImportJSON}
         onExportExcel={() => generateSurveyExcel(survey || {})}
         lastSaved={lastSavedTime}
+        syncState={syncState}
       />
 
       {/* Navigation (Desktop Tabs & Mobile Sticky Bottom Bar) */}

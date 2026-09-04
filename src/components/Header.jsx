@@ -20,8 +20,16 @@ export default function Header({
   onExportJSON, 
   onImportJSON,
   onExportExcel,
-  lastSaved 
+  lastSaved,
+  syncState = 'off'
 }) {
+  const sync = {
+    off:     { label: 'Offline Ready', cls: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' },
+    idle:    { label: 'Cloud Sync On', cls: 'bg-sky-500/20 text-sky-300 border-sky-500/30' },
+    syncing: { label: 'Syncing...',    cls: 'bg-amber-500/20 text-amber-300 border-amber-500/30' },
+    synced:  { label: 'Synced',        cls: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' },
+    offline: { label: 'Offline',       cls: 'bg-slate-500/20 text-slate-300 border-slate-500/30' }
+  }[syncState] || { label: 'Offline Ready', cls: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' };
   const [showMenu, setShowMenu] = useState(false);
 
   return (
@@ -43,8 +51,8 @@ export default function Header({
               <h1 className="text-base font-bold tracking-tight text-white flex items-center gap-1.5">
                 FM Condition Survey
               </h1>
-              <span className="hidden sm:inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
-                Offline Ready
+              <span className={`hidden sm:inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold border ${sync.cls}`}>
+                {sync.label}
               </span>
             </div>
             <p className="text-xs text-slate-400 truncate max-w-[200px] sm:max-w-sm">

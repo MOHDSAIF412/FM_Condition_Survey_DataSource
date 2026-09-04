@@ -79,7 +79,36 @@ function openDB() {
   });
 }
 
-export async function saveSurveyOffline(survey) {
+/**
+ * Marks the locally stored survey as successfully pushed to the server.
+ * Written directly rather than through React state so it cannot retrigger a save.
+ */
+export async function markSurveySynced(surveyId) {
+  try {
+    const db = await openDB();
+    return new Promise((resolve) => {
+      const tx = db.transaction(STORE_SURVEYS, 'readwrite');
+      const store = tx.objectStore(STORE_SURVEYS);
+      const req = store.get(surveyId);
+      req.onsuccess = () => {
+        if (!req.result) return resolve(false);
+        store.put({ ...req.result, pendingSync: false });
+        resolve(true);
+      };
+      req.onerror = () => resolve(false);
+    });
+  } catch (e) {
+    return false;
+  }
+}
+
+/**
+ * @param {object} survey
+ * @param {{pendingSync?: boolean}} [options] pendingSync marks local edits that
+ *        have not reached the server yet, so a later startup does not let the
+ *        server copy overwrite work done with no signal.
+ */
+export async function saveSurveyOffline(survey, options = {}) {
   try {
     const db = await openDB();
     return new Promise((resolve, reject) => {
@@ -104,6 +133,7 @@ export async function saveSurveyOffline(survey) {
           ...survey,
           revision: nextRevision,
           writerId: TAB_ID,
+          pendingSync: options.pendingSync === undefined ? true : options.pendingSync,
           updatedAt: new Date().toISOString()
         };
         const req = store.put(dataToSave);
