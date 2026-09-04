@@ -95,9 +95,18 @@ export async function pushSurvey(survey) {
 
   // This push replaces the server's items wholesale, so a client pushing a
   // stale or partially-loaded survey would silently destroy whatever the
-  // server holds. Refuse when the server is ahead of what this client last
-  // saw, and let the caller pull instead. (Observed for real: a tab that had
-  // only part of a survey in memory overwrote the full copy, losing items.)
+  // server holds.
+  //
+  // Comparing `revision` counters is NOT sufficient: each browser increments
+  // its own local counter on every save, so a device that has been edited a
+  // lot ends up with a higher number than the server without ever having seen
+  // the server's current state. That defeated the first version of this guard
+  // and cost a survey its items.
+  //
+  // The reliable test is the one an ETag makes: only push if this client has
+  // actually seen the server revision it is about to overwrite. `cloudRevision`
+  // is stamped onto the local record whenever we pull, so it means "the server
+  // state I am building on".
   const { data: current, error: readErr } = await supabase
     .from('condition_surveys')
     .select('revision')
@@ -105,20 +114,40 @@ export async function pushSurvey(survey) {
     .limit(1);
   if (readErr) throw readErr;
 
-  const serverRevision = current && current.length ? current[0].revision || 0 : 0;
-  const localRevision = survey.revision || 0;
+  const serverExists = Boolean(current && current.length);
+  const serverRevision = serverExists ? current[0].revision || 0 : 0;
+  const seenRevision = survey.cloudRevision;
 
-  if (serverRevision > localRevision) {
-    return { conflict: true, serverRevision, localRevision };
+  if (serverExists && seenRevision !== undefined && seenRevision !== serverRevision) {
+    return { conflict: true, reason: 'stale', serverRevision, seenRevision };
   }
 
+  // Belt and braces for the case the ETag check cannot see: a client that has
+  // never pulled (cloudRevision undefined) and holds far less than the server.
+  // Losing most of a survey is never an acceptable silent outcome, so refuse
+  // and make the caller reconcile.
+  if (serverExists && seenRevision === undefined) {
+    const { count, error: countErr } = await supabase
+      .from('survey_items')
+      .select('id', { count: 'exact', head: true })
+      .eq('survey_id', survey.id);
+    if (countErr) throw countErr;
+
+    const serverItems = count || 0;
+    const localItems = (survey.items || []).length;
+    if (serverItems >= 3 && localItems < serverItems / 2) {
+      return { conflict: true, reason: 'destructive', serverItems, localItems };
+    }
+  }
+
+  const nextRevision = serverRevision + 1;
   const { error: surveyErr } = await supabase.from('condition_surveys').upsert({
     id: survey.id,
     title: survey.title || null,
     facility: survey.facility || {},
     signatures: survey.signatures || {},
     general_notes: survey.generalNotes || null,
-    revision: survey.revision || 1,
+    revision: nextRevision,
     updated_at: new Date().toISOString()
   });
   if (surveyErr) throw surveyErr;
@@ -181,7 +210,13 @@ export async function pushSurvey(survey) {
     if (photoErr) throw photoErr;
   }
 
-  return { pushed: true, items: items.length, photos: photoRows.length };
+  return {
+    pushed: true,
+    items: items.length,
+    photos: photoRows.length,
+    // We are now the server state, so this is what the next push builds on.
+    cloudRevision: nextRevision
+  };
 }
 
 /* -------------------------------------------------------------------- pull */
@@ -245,6 +280,9 @@ export async function pullSurvey(surveyId, knownPhotos = {}) {
     signatures: row.signatures || {},
     generalNotes: row.general_notes || '',
     revision: row.revision || 1,
+    // The server revision this copy is built on. pushSurvey refuses to
+    // overwrite a server state the client has not actually seen.
+    cloudRevision: row.revision || 0,
     updatedAt: row.updated_at,
     items: (itemResult.data || []).map((it) => ({
       id: it.id,

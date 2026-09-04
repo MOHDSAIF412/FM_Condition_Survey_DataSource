@@ -209,6 +209,15 @@ export default function App() {
           return;
         }
 
+        // Remember the server revision we now sit on, so the next push can
+        // prove it is building on current server state rather than guessing
+        // from a local counter.
+        if (pushResult && pushResult.cloudRevision !== undefined) {
+          surveyRef.current = { ...surveyRef.current, cloudRevision: pushResult.cloudRevision };
+          skipLocalSaveRef.current = true;
+          skipCloudPushRef.current = true;
+          setSurvey(surveyRef.current);
+        }
         await markSurveySynced(surveyRef.current.id);
         setSyncState('synced');
       } catch (err) {
