@@ -8,7 +8,7 @@ import SignatureSection from './components/SignatureSection';
 import ReportModal from './components/ReportModal';
 import { sampleSurveyData } from './data/sampleSurvey';
 import { createNewSurvey, calculateSurveyStats } from './types/survey';
-import { saveSurveyOffline, loadCurrentSurveyOffline } from './utils/storage';
+import { saveSurveyOffline, loadCurrentSurveyOffline, subscribeToSurveyChanges } from './utils/storage';
 import { generateSurveyExcel } from './utils/excelGenerator';
 import { saveText } from './utils/fileSaver';
 
@@ -19,6 +19,9 @@ export default function App() {
   const [lastSavedTime, setLastSavedTime] = useState('');
   const [isLoaded, setIsLoaded] = useState(false);
   const saveTimeoutRef = useRef(null);
+  // Set while adopting another tab's data, so the autosave below doesn't
+  // immediately write it back and ping-pong between tabs.
+  const applyingRemoteRef = useRef(false);
 
   // Load from IndexedDB on initial launch
   useEffect(() => {
@@ -43,9 +46,36 @@ export default function App() {
     initStorage();
   }, []);
 
+  // Another tab in this browser saved: adopt its version instead of showing
+  // stale data. (This is same-browser only - it cannot reach another device.)
+  useEffect(() => {
+    if (!isLoaded) return;
+
+    const unsubscribe = subscribeToSurveyChanges(async () => {
+      try {
+        const latest = await loadCurrentSurveyOffline();
+        if (latest && latest.items) {
+          applyingRemoteRef.current = true;
+          setSurvey(latest);
+          setLastSavedTime(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
+        }
+      } catch (err) {
+        console.warn('Could not sync change from another tab:', err);
+      }
+    });
+
+    return unsubscribe;
+  }, [isLoaded]);
+
   // Auto-save to offline IndexedDB whenever survey changes
   useEffect(() => {
     if (!isLoaded) return;
+
+    // This change came from another tab, so it is already saved.
+    if (applyingRemoteRef.current) {
+      applyingRemoteRef.current = false;
+      return;
+    }
 
     if (saveTimeoutRef.current) {
       clearTimeout(saveTimeoutRef.current);
@@ -53,7 +83,14 @@ export default function App() {
 
     saveTimeoutRef.current = setTimeout(async () => {
       try {
-        await saveSurveyOffline(survey);
+        const result = await saveSurveyOffline(survey);
+
+        // Refused because another tab had newer data. Take theirs rather than
+        // silently destroying it.
+        if (result && result.conflict) {
+          applyingRemoteRef.current = true;
+          setSurvey(result.stored);
+        }
         setLastSavedTime(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
       } catch (err) {
         console.error('Auto-save error:', err);
