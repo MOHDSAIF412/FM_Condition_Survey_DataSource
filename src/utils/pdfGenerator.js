@@ -482,10 +482,22 @@ export async function generateSurveyPDF(survey, selectedFacility = 'ALL') {
 
         // Details next to photo
         const infoX = 110;
-        doc.setFontSize(10);
+        const titleWidth = pageWidth - infoX - 25;
         doc.setFont('helvetica', 'bold');
         doc.setTextColor(15, 23, 42);
-        doc.text(item.assetName || 'Unnamed Asset', infoX, photoY + 11);
+
+        // Step the title down a size until it fits the card, then clip it.
+        let assetTitle = item.assetName || 'Unnamed Asset';
+        let titleSize = 10;
+        doc.setFontSize(titleSize);
+        while (titleSize > 8 && doc.getTextWidth(assetTitle) > titleWidth) {
+          titleSize -= 0.5;
+          doc.setFontSize(titleSize);
+        }
+        if (doc.getTextWidth(assetTitle) > titleWidth) {
+          assetTitle = doc.splitTextToSize(assetTitle, titleWidth)[0];
+        }
+        doc.text(assetTitle, infoX, photoY + 11);
 
         // Multi-photo count & caption
         doc.setFontSize(8);
