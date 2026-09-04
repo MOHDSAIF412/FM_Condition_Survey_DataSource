@@ -60,3 +60,35 @@
     break-inside: avoid;
   }
 }
+
+/* Tab switching: compositor-only enter animation.
+   Only opacity and transform are animated -- never width/height/top/left --
+   so the browser can run this off the main thread and hold frame rate on a
+   mid-range Android. */
+@layer components {
+  .tab-panel-enter {
+    animation: tab-panel-in 180ms cubic-bezier(0.2, 0, 0, 1) both;
+  }
+}
+
+@keyframes tab-panel-in {
+  from { opacity: 0; transform: translate3d(0, 6px, 0); }
+  to   { opacity: 1; transform: translate3d(0, 0, 0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tab-panel-enter { animation: none; }
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* `safe-area-pb` was used on the mobile bottom nav but never defined, so the
+   nav sat under the home indicator on notched phones despite viewport-fit=cover. */
+@layer components {
+  .safe-area-pb {
+    padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 0.25rem);
+  }
+}

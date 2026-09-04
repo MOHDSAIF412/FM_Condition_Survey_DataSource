@@ -211,7 +211,7 @@ export default function SurveyList({
           <div className="pt-2 flex justify-center">
             <button
               onClick={() => handleAddNewAsset()}
-              className="w-full sm:w-auto px-6 py-3 rounded-2xl bg-white border-2 border-dashed border-sky-400 hover:bg-sky-50 text-sky-700 font-bold text-sm shadow-sm flex items-center justify-center space-x-2 transition-all active:scale-98 cursor-pointer"
+              className="w-full sm:w-auto px-6 py-3 rounded-2xl bg-white border-2 border-dashed border-sky-400 hover:bg-sky-50 text-sky-700 font-bold text-sm shadow-sm flex items-center justify-center space-x-2 transition-all active:scale-[0.98] cursor-pointer"
             >
               <Plus className="w-4 h-4" />
               <span>+ Next Asset / Add Another Asset</span>

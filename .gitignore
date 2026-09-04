@@ -44,3 +44,6 @@ sample-reports/
 
 # Local APK build output
 android-build-output/
+
+# local UI-test env (cloud disabled)
+.env.uitest

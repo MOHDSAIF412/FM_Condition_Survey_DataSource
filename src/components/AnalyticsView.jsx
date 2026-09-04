@@ -139,7 +139,7 @@ export default function AnalyticsView({ items = [], onOpenReport }) {
                   <div>
                     <span className="font-bold text-slate-800">{item.assetName || 'Unnamed Asset'}</span>
                     <span className="text-slate-500 ml-2">({item.location || 'Site'})</span>
-                    <span className={`ml-2 px-1.5 py-0.2 rounded text-[11px] font-bold ${itemDept.badge || 'bg-slate-100'}`}>
+                    <span className={`ml-2 px-1.5 py-0.5 rounded text-[11px] font-bold ${itemDept.badge || 'bg-slate-100'}`}>
                       {(itemDept.name || 'FM').split('&')[0]}
                     </span>
                   </div>

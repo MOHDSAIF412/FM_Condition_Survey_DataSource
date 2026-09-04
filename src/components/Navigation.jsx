@@ -32,13 +32,13 @@ export default function Navigation({ activeTab, setActiveTab, itemsCount = 0, ur
                 <span>{tab.label}</span>
 
                 {tab.badge !== undefined && tab.badge > 0 && (
-                  <span className="ml-1 px-1.5 py-0.2 rounded-full text-[12px] font-bold bg-slate-100 text-slate-700">
+                  <span className="ml-1 px-1.5 py-0.5 rounded-full text-[12px] font-bold bg-slate-100 text-slate-700">
                     {tab.badge}
                   </span>
                 )}
 
                 {tab.alertBadge && (
-                  <span className="ml-1 px-1.5 py-0.2 rounded-full text-[12px] font-bold bg-rose-500 text-white flex items-center gap-0.5">
+                  <span className="ml-1 px-1.5 py-0.5 rounded-full text-[12px] font-bold bg-rose-500 text-white flex items-center gap-0.5">
                     <AlertTriangle className="w-2.5 h-2.5" />
                     {tab.alertBadge}
                   </span>

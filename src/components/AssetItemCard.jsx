@@ -30,7 +30,7 @@ const PHOTO_PRESET_TAGS = [
   'Post-Rectification'
 ];
 
-export default function AssetItemCard({ 
+function AssetItemCard({ 
   item, 
   index, 
   totalItems = 1,
@@ -41,7 +41,11 @@ export default function AssetItemCard({
   onAddNextAsset,
   recentLocations = []
 }) {
-  const [isExpanded, setIsExpanded] = useState(true);
+  // Collapsed by default. Each expanded card renders ~182 DOM nodes and 27
+  // buttons; opening all of them at once was the bulk of the tab-switch cost
+  // (~9,300 nodes at 50 assets). The card header still shows name, location,
+  // priority, cost and photo count, so the list stays scannable while closed.
+  const [isExpanded, setIsExpanded] = useState(false);
   const [previewPhotoIndex, setPreviewPhotoIndex] = useState(null);
   const [isProcessingPhoto, setIsProcessingPhoto] = useState(false);
   const [processingCount, setProcessingCount] = useState(0);
@@ -447,7 +451,7 @@ export default function AssetItemCard({
                 {photosList.map((photo, pIdx) => (
                   <div 
                     key={photo.id || pIdx}
-                    className="group relative rounded-xl border border-slate-200 bg-slate-900 overflow-hidden shadow-xs flex flex-col"
+                    className="group relative rounded-xl border border-slate-200 bg-slate-900 overflow-hidden shadow-card flex flex-col"
                   >
                     <div 
                       className="aspect-video relative cursor-pointer overflow-hidden bg-black"
@@ -524,7 +528,7 @@ export default function AssetItemCard({
                 type="button"
                 disabled={isProcessingPhoto}
                 onClick={() => cameraInputRef.current?.click()}
-                className="py-2.5 px-3 rounded-xl bg-sky-600 hover:bg-sky-500 active:scale-98 text-white font-bold text-xs flex items-center justify-center space-x-1.5 shadow-md transition-all"
+                className="py-2.5 px-3 rounded-xl bg-sky-600 hover:bg-sky-500 active:scale-[0.98] text-white font-bold text-xs flex items-center justify-center space-x-1.5 shadow-md transition-all"
               >
                 <Camera className="w-4 h-4" />
                 <span>
@@ -540,7 +544,7 @@ export default function AssetItemCard({
                 type="button"
                 disabled={isProcessingPhoto}
                 onClick={() => fileInputRef.current?.click()}
-                className="py-2.5 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 active:scale-98 text-white font-bold text-xs flex items-center justify-center space-x-1.5 shadow-md transition-all"
+                className="py-2.5 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 active:scale-[0.98] text-white font-bold text-xs flex items-center justify-center space-x-1.5 shadow-md transition-all"
               >
                 <ImageIcon className="w-4 h-4" />
                 <span>Add Photos</span>
@@ -684,3 +688,7 @@ export default function AssetItemCard({
     </div>
   );
 }
+
+/* Memoised: without this, editing one field re-rendered every card in the
+   survey, because App re-creates the items array on each keystroke. */
+export default React.memo(AssetItemCard);

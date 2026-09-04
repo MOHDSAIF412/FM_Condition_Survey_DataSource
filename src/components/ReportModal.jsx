@@ -486,7 +486,7 @@ export default function ReportModal({ survey = {}, onClose }) {
                   {/* Multi-Photo Grid for this Snag */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 pt-1">
                     {item.photos.map((photo, pIdx) => (
-                      <div key={photo.id || pIdx} className="bg-slate-900 rounded-xl overflow-hidden border border-slate-200 shadow-xs flex flex-col">
+                      <div key={photo.id || pIdx} className="bg-slate-900 rounded-xl overflow-hidden border border-slate-200 shadow-card flex flex-col">
                         <div className="aspect-video bg-black flex items-center justify-center relative overflow-hidden">
                           <img src={photo.dataUrl} alt={photo.caption || photo.name} className="w-full h-full object-cover" />
                           <span className="absolute top-1.5 left-1.5 px-2 py-0.5 rounded bg-black/75 text-white font-bold text-[11px]">

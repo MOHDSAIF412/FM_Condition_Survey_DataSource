@@ -257,7 +257,7 @@ export default function SignatureSection({ signatures, onChange, facility, onOpe
       <div className="pt-2 flex justify-center sm:justify-end">
         <button
           onClick={onOpenReport}
-          className="w-full sm:w-auto px-8 py-3.5 rounded-xl bg-sky-600 hover:bg-sky-500 active:scale-98 text-white font-bold text-sm shadow-xl shadow-sky-600/30 transition-all flex items-center justify-center space-x-2"
+          className="w-full sm:w-auto px-8 py-3.5 rounded-xl bg-sky-600 hover:bg-sky-500 active:scale-[0.98] text-white font-bold text-sm shadow-xl shadow-sky-600/30 transition-all flex items-center justify-center space-x-2"
         >
           <span>View Audit Report & Download PDF</span>
           <span>→</span>

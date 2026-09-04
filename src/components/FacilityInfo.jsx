@@ -351,7 +351,7 @@ export default function FacilityInfo({ facility = {}, onChange, onNext }) {
       <div className="flex justify-end pt-2">
         <button
           onClick={onNext}
-          className="w-full sm:w-auto px-6 py-3 rounded-xl bg-sky-600 hover:bg-sky-500 active:scale-98 text-white font-semibold text-sm shadow-md transition-all flex items-center justify-center space-x-2"
+          className="w-full sm:w-auto px-6 py-3 rounded-xl bg-sky-600 hover:bg-sky-500 active:scale-[0.98] text-white font-semibold text-sm shadow-md transition-all flex items-center justify-center space-x-2"
         >
           <span>Proceed to Survey Items</span>
           <span>→</span>
