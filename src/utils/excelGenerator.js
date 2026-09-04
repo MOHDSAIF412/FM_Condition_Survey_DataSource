@@ -1,6 +1,7 @@
 import ExcelJS from 'exceljs';
 import { PRIORITY_LEVELS, DEPARTMENTS, calculateSurveyStats } from '../types/survey.js';
 import { OCS_LOGO_BASE64 } from '../assets/logoDataUrl.js';
+import { saveBlob } from './fileSaver.js';
 
 /**
  * Converts image data (including SVG data URLs) to a clean JPEG base64 string via an offscreen
@@ -706,14 +707,7 @@ export async function generateSurveyExcel(survey, selectedFacility = 'ALL') {
   
   if (typeof window !== 'undefined') {
     const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-    const url = window.URL.createObjectURL(blob);
-    const anchor = document.createElement('a');
-    anchor.href = url;
-    anchor.download = `${safeTitle}${facilitySuffix}_audit_report.xlsx`;
-    document.body.appendChild(anchor);
-    anchor.click();
-    document.body.removeChild(anchor);
-    window.URL.revokeObjectURL(url);
+    await saveBlob(blob, `${safeTitle}${facilitySuffix}_audit_report.xlsx`, 'FM Condition Survey Report');
   }
 
   return buffer;

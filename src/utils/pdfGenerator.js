@@ -2,6 +2,7 @@ import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 import { PRIORITY_LEVELS, DEPARTMENTS, calculateSurveyStats } from '../types/survey';
 import { OCS_LOGO_BASE64 } from '../assets/logoDataUrl';
+import { saveBlob } from './fileSaver';
 
 /**
  * Converts image data (including SVG data URLs) to clean JPEG/PNG data URL via an offscreen canvas
@@ -567,5 +568,7 @@ export async function generateSurveyPDF(survey, selectedFacility = 'ALL') {
     .replace(/_+/g, '_')
     .replace(/^_|_$/g, '')
     .toLowerCase() || 'fm_condition_survey';
-  doc.save(`${safeFilename}${facilitySuffix}_audit_report.pdf`);
+  const pdfName = `${safeFilename}${facilitySuffix}_audit_report.pdf`;
+  await saveBlob(doc.output('blob'), pdfName, 'FM Condition Survey Report');
+  return pdfName;
 }

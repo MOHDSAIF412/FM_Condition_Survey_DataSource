@@ -10,6 +10,7 @@ import { sampleSurveyData } from './data/sampleSurvey';
 import { createNewSurvey, calculateSurveyStats } from './types/survey';
 import { saveSurveyOffline, loadCurrentSurveyOffline } from './utils/storage';
 import { generateSurveyExcel } from './utils/excelGenerator';
+import { saveText } from './utils/fileSaver';
 
 export default function App() {
   const [survey, setSurvey] = useState(sampleSurveyData);
@@ -93,15 +94,15 @@ export default function App() {
   };
 
   // Backup export as JSON
-  const handleExportJSON = () => {
-    const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(survey, null, 2));
-    const downloadAnchor = document.createElement('a');
+  const handleExportJSON = async () => {
     const safeTitle = (survey.facility?.buildingName || 'survey').replace(/\s+/g, '_').toLowerCase();
-    downloadAnchor.setAttribute('href', dataStr);
-    downloadAnchor.setAttribute('download', `${safeTitle}_backup_${new Date().toISOString().split('T')[0]}.json`);
-    document.body.appendChild(downloadAnchor);
-    downloadAnchor.click();
-    downloadAnchor.remove();
+    const filename = `${safeTitle}_backup_${new Date().toISOString().split('T')[0]}.json`;
+    try {
+      await saveText(JSON.stringify(survey, null, 2), filename, 'application/json', 'Survey backup');
+    } catch (err) {
+      console.error('Backup export failed:', err);
+      alert('Could not save the backup file: ' + err.message);
+    }
   };
 
   // Restore import from JSON
