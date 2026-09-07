@@ -9,12 +9,10 @@ import {
   Smartphone, 
   FileCheck,
   ChevronDown,
-  Sparkles
 } from 'lucide-react';
 
 export default function Header({ 
   survey, 
-  onLoadSample, 
   onReset, 
   onOpenReport, 
   onExportJSON, 
@@ -112,14 +110,6 @@ export default function Header({
                       Saved to Device {lastSaved ? `(${lastSaved})` : ''}
                     </p>
                   </div>
-
-                  <button
-                    onClick={() => { setShowMenu(false); onLoadSample(); }}
-                    className="w-full text-left px-3.5 py-2 text-xs hover:bg-slate-700 flex items-center space-x-2 text-sky-400 font-medium"
-                  >
-                    <Sparkles className="w-4 h-4 text-sky-400" />
-                    <span>Load Sample Commercial Survey</span>
-                  </button>
 
                   <button
                     onClick={() => { setShowMenu(false); if (onExportExcel) onExportExcel(); }}

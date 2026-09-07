@@ -7,7 +7,6 @@ import AnalyticsView from './components/AnalyticsView';
 import SignatureSection from './components/SignatureSection';
 import ReportModal from './components/ReportModal';
 import SavedFacilities from './components/SavedFacilities';
-import { sampleSurveyData } from './data/sampleSurvey';
 import { createNewSurvey, calculateSurveyStats } from './types/survey';
 import {
   saveSurveyOffline,
@@ -455,15 +454,6 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
     }
   };
 
-  // Sample Data Loader
-  const handleLoadSample = async () => {
-    if (confirm('Load sample Commercial Tower condition survey? Current unsaved changes will be overwritten.')) {
-      setSurvey(sampleSurveyData);
-      await saveSurveyOffline(sampleSurveyData);
-      setLastSavedTime(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
-    }
-  };
-
   // Reset / Clear
   const handleReset = async () => {
     if (confirm('Start a fresh blank condition survey?')) {
@@ -585,7 +575,6 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
       {/* Top Header */}
       <Header
         survey={survey || {}}
-        onLoadSample={handleLoadSample}
         onReset={handleReset}
         onOpenReport={() => setShowReportModal(true)}
         onExportJSON={handleExportJSON}
