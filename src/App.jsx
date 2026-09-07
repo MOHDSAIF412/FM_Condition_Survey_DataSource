@@ -75,6 +75,10 @@ export default function App() {
   // writes the change straight back out again.
   const skipLocalSaveRef = useRef(false);
   const skipCloudPushRef = useRef(false);
+  // True from the moment the user changes anything until that change has been
+  // pushed. While it is set, a pull must never replace local state -- the
+  // server is by definition behind us.
+  const hasUnpushedEditsRef = useRef(false);
 
   function markAsExternalChange() {
     skipLocalSaveRef.current = true;
@@ -209,12 +213,22 @@ export default function App() {
 
     const unsubscribe = subscribeToSurveyChanges(async () => {
       try {
+        // Same rule as the cloud handler: a tab holding older state must not
+        // roll back edits this one has made but not yet saved.
+        if (hasUnpushedEditsRef.current) return;
+
         const latest = await loadCurrentSurveyOffline();
-        if (latest && latest.items) {
-          markAsExternalChange();
-          setSurvey(latest);
-          setLastSavedTime(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
-        }
+        if (!latest || !Array.isArray(latest.items)) return;
+        if (hasUnpushedEditsRef.current) return;
+
+        const current = surveyRef.current || {};
+        const countPhotos = (s2) => (s2.items || []).reduce((n, i) => n + (i.photos || []).length, 0);
+        if (latest.items.length < (current.items || []).length) return;
+        if (countPhotos(latest) < countPhotos(current)) return;
+
+        markAsExternalChange();
+        setSurvey(latest);
+        setLastSavedTime(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
       } catch (err) {
         console.warn('Could not sync change from another tab:', err);
       }
@@ -232,6 +246,8 @@ export default function App() {
       skipLocalSaveRef.current = false;
       return;
     }
+
+    hasUnpushedEditsRef.current = true;
 
     if (saveTimeoutRef.current) {
       clearTimeout(saveTimeoutRef.current);
@@ -292,6 +308,10 @@ export default function App() {
         // Remember the server revision we now sit on, so the next push can
         // prove it is building on current server state rather than guessing
         // from a local counter.
+        if (pushResult && pushResult.pushed) {
+          hasUnpushedEditsRef.current = false;
+        }
+
         // Tombstones have been applied server-side; drop them so they are not
         // replayed forever.
         if (pushResult && pushResult.pushed) {
@@ -326,12 +346,30 @@ export default function App() {
 
     const unsubscribe = subscribeToCloudChanges(survey.id, async () => {
       try {
+        // Our own push fires this subscription too. By the time the pull
+        // returns, the user has usually typed or added something else -- and
+        // the server copy does not have it yet. Adopting it here is what made a
+        // second photo, or a newly added snag, appear and then vanish a
+        // fraction of a second later. If we have anything unpushed, skip: our
+        // pending push is the newer truth and will reconcile.
+        if (hasUnpushedEditsRef.current) return;
+
         const current = surveyRef.current;
         const remote = await pullSurvey(current.id, collectKnownPhotos(current));
         if (!remote || !Array.isArray(remote.items)) return;
 
+        // Re-check: the await above is a window in which the user may have
+        // started editing again.
+        if (hasUnpushedEditsRef.current) return;
+
         // Never let an empty remote replace local work that has content.
         if (remote.items.length === 0 && (current.items || []).length > 0) return;
+
+        // Never go backwards: fewer snags or fewer photos than we hold means
+        // this is a stale view of the server, not a genuine remote change.
+        const countPhotos = (s2) => (s2.items || []).reduce((n, i) => n + (i.photos || []).length, 0);
+        if (remote.items.length < (current.items || []).length) return;
+        if (countPhotos(remote) < countPhotos(current)) return;
 
         // Ignore the echo of our own push.
         if (JSON.stringify(remote.items) === JSON.stringify(current.items) &&
