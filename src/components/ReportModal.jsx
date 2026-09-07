@@ -27,6 +27,7 @@ import { PRIORITY_LEVELS, DEPARTMENTS, calculateSurveyStats } from '../types/sur
 import { generateSurveyPDF } from '../utils/pdfGenerator';
 import { generateSurveyExcel } from '../utils/excelGenerator';
 import { formatMoney } from '../utils/currency';
+import { hydratePhotos } from '../utils/cloudSync';
 
 export default function ReportModal({ survey = {}, onClose }) {
   const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
@@ -51,7 +52,7 @@ export default function ReportModal({ survey = {}, onClose }) {
   const handleExportExcel = async () => {
     setIsGeneratingExcel(true);
     try {
-      await generateSurveyExcel(survey, selectedFacility);
+      await generateSurveyExcel(await hydratePhotos(survey), selectedFacility);
       confetti({
         particleCount: 60,
         spread: 60,
@@ -68,7 +69,7 @@ export default function ReportModal({ survey = {}, onClose }) {
   const handleDownloadPDF = async () => {
     setIsGeneratingPDF(true);
     try {
-      await generateSurveyPDF(survey, selectedFacility);
+      await generateSurveyPDF(await hydratePhotos(survey), selectedFacility);
       confetti({
         particleCount: 80,
         spread: 70,

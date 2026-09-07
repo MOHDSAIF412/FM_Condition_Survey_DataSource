@@ -150,7 +150,7 @@ function AssetItemCard({
 
   const handleRemovePhoto = (photoId) => {
     const updated = (item.photos || []).filter((p) => p.id !== photoId);
-    onUpdate({ ...item, photos: updated }, { persistNow: true });
+    onUpdate({ ...item, photos: updated, _deletedPhotoId: photoId }, { persistNow: true });
     if (previewPhotoIndex !== null && previewPhotoIndex >= updated.length) {
       setPreviewPhotoIndex(updated.length > 0 ? updated.length - 1 : null);
     }

@@ -21,7 +21,8 @@ import {
   pullSurvey,
   fetchLatestSurveyId,
   collectKnownPhotos,
-  subscribeToCloudChanges
+  subscribeToCloudChanges,
+  listSurveys
 } from './utils/cloudSync';
 import { isCloudConfigured } from './utils/supabaseClient';
 import { initNetworkMonitor, onNetworkChange, isOnline } from './utils/network';
@@ -291,6 +292,14 @@ export default function App() {
         // Remember the server revision we now sit on, so the next push can
         // prove it is building on current server state rather than guessing
         // from a local counter.
+        // Tombstones have been applied server-side; drop them so they are not
+        // replayed forever.
+        if (pushResult && pushResult.pushed) {
+          const cur = surveyRef.current;
+          if ((cur.deletedItemIds || []).length || (cur.deletedPhotoIds || []).length) {
+            surveyRef.current = { ...cur, deletedItemIds: [], deletedPhotoIds: [] };
+          }
+        }
         if (pushResult && pushResult.cloudRevision !== undefined) {
           surveyRef.current = { ...surveyRef.current, cloudRevision: pushResult.cloudRevision };
           skipLocalSaveRef.current = true;
@@ -341,6 +350,98 @@ export default function App() {
 
     return unsubscribe;
   }, [isLoaded, survey?.id]);
+
+  /**
+   * Finishes the current facility and starts a fresh one.
+   *
+   * The current survey is only marked submitted and set aside once it is
+   * actually stored. If there is no connection it is kept locally as submitted
+   * and pending, and uploads on reconnect - the surveyor is never blocked from
+   * moving to the next facility just because there is no signal.
+   */
+  const handleSubmitFacility = async () => {
+    const current = surveyRef.current;
+    const name = current?.facility?.facilityName || current?.facility?.buildingName;
+
+    if (!name || !String(name).trim()) {
+      alert('Enter the Facility Name before submitting.');
+      setActiveTab('facility');
+      return;
+    }
+    if (!(current.items || []).some((i) => (i.assetName || '').trim())) {
+      alert('Add at least one snag before submitting this facility.');
+      setActiveTab('items');
+      return;
+    }
+    if (!confirm(`Submit "${name}" and start a new facility?
+
+It stays available in the facility list for reports.`)) {
+      return;
+    }
+
+    const submitted = {
+      ...current,
+      status: 'submitted',
+      submittedAt: new Date().toISOString()
+    };
+
+    // Store locally first - that is what guarantees nothing is lost offline.
+    try {
+      await saveSurveyOffline(submitted, { pendingSync: true });
+    } catch (err) {
+      console.error('Could not save the submitted facility:', err);
+      alert('Could not save this facility locally. Nothing has been changed.');
+      return;
+    }
+
+    if (isCloudConfigured && isOnline()) {
+      try {
+        setSyncState('syncing');
+        await pushSurvey(submitted);
+        await markSurveySynced(submitted.id);
+        setSyncState('synced');
+      } catch (err) {
+        console.info('Submitted facility will upload when there is a connection:', err.message);
+        setSyncState('offline');
+      }
+    }
+
+    // Fresh blank facility, with its own new id so nothing is overwritten.
+    const next = createNewSurvey();
+    skipCloudPushRef.current = true;
+    setSurvey(next);
+    await saveSurveyOffline(next, { pendingSync: false });
+    setActiveTab('facility');
+    refreshSurveyList();
+    alert(`"${name}" submitted. Starting a new facility.`);
+  };
+
+  const [surveyList, setSurveyList] = useState([]);
+
+  const refreshSurveyList = async () => {
+    if (!isCloudConfigured) return;
+    try { setSurveyList(await listSurveys()); } catch { /* offline */ }
+  };
+
+  useEffect(() => { if (isLoaded) refreshSurveyList(); }, [isLoaded]);
+
+  /** Opens a previously submitted facility so its report can be generated. */
+  const handleOpenSurvey = async (surveyId) => {
+    if (surveyId === survey?.id) return;
+    try {
+      setSyncState('syncing');
+      const loaded = await pullSurvey(surveyId, {});
+      if (loaded) {
+        markAsExternalChange();
+        setSurvey(loaded);
+        await saveSurveyOffline(loaded, { pendingSync: false });
+      }
+      setSyncState('synced');
+    } catch (err) {
+      alert('Could not open that facility: ' + err.message);
+      setSyncState('offline');
+    }
+  };
 
   // Handle Tab Switch to Report
   const handleTabChange = (tabId) => {
@@ -415,9 +516,15 @@ export default function App() {
 
   const handleUpdateItem = (updatedItem, options = {}) => {
     setSurvey((prev) => {
+      // A removed photo is tombstoned so the deletion reaches other devices;
+      // the marker itself is stripped before storing.
+      const { _deletedPhotoId, ...cleanItem } = updatedItem;
       const next = {
         ...prev,
-        items: (prev.items || []).map((i) => (i.id === updatedItem.id ? updatedItem : i))
+        items: (prev.items || []).map((i) => (i.id === cleanItem.id ? cleanItem : i)),
+        deletedPhotoIds: _deletedPhotoId
+          ? [...new Set([...(prev.deletedPhotoIds || []), _deletedPhotoId])]
+          : prev.deletedPhotoIds
       };
 
       // A photo cannot wait for the 600ms autosave debounce. The camera can get
@@ -433,10 +540,18 @@ export default function App() {
   };
 
   const handleDeleteItem = (itemId) => {
-    setSurvey((prev) => ({
-      ...prev,
-      items: (prev.items || []).filter((i) => i.id !== itemId && String(i.id) !== String(itemId))
-    }));
+    setSurvey((prev) => {
+      const removed = (prev.items || []).find((i) => String(i.id) === String(itemId));
+      const photoIds = removed ? (removed.photos || []).map((p) => p.id) : [];
+      return {
+        ...prev,
+        items: (prev.items || []).filter((i) => String(i.id) !== String(itemId)),
+        // Tombstones. The push no longer wipes the server's item list, so a
+        // deletion has to be stated explicitly to travel to other devices.
+        deletedItemIds: [...new Set([...(prev.deletedItemIds || []), String(itemId)])],
+        deletedPhotoIds: [...new Set([...(prev.deletedPhotoIds || []), ...photoIds])]
+      };
+    });
   };
 
   const handleUpdateFacility = (facilityData) => {
@@ -488,6 +603,55 @@ export default function App() {
       />
 
       {/* Main Content Area */}
+      {/* Facility bar: which facility is open, switch to another, and submit
+          this one when it is finished. */}
+      <div className="bg-white border-b border-slate-200">
+        <div className="max-w-6xl mx-auto px-3 sm:px-6 py-2 flex items-center gap-3 flex-wrap">
+          <div className="flex items-center gap-2 min-w-0 flex-1">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 shrink-0">
+              Facility
+            </span>
+            <span className="text-sm font-bold text-slate-900 truncate">
+              {survey?.facility?.facilityName || survey?.facility?.buildingName || 'New facility'}
+            </span>
+            {survey?.status === 'submitted' && (
+              <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 shrink-0">
+                Submitted
+              </span>
+            )}
+          </div>
+
+          {surveyList.length > 0 && (
+            <select
+              value={survey?.id || ''}
+              onChange={(e) => handleOpenSurvey(e.target.value)}
+              className="px-3 py-1.5 rounded-lg border border-slate-300 text-xs font-semibold text-slate-800 bg-white max-w-[240px]"
+              title="Open another facility to view or report on it"
+            >
+              {!surveyList.some((s2) => s2.id === survey?.id) && (
+                <option value={survey?.id || ''}>
+                  {survey?.facility?.facilityName || 'Current (unsaved)'}
+                </option>
+              )}
+              {surveyList.map((s2) => (
+                <option key={s2.id} value={s2.id}>
+                  {s2.facilityName}{s2.status === 'submitted' ? '  ✓' : '  (draft)'}
+                </option>
+              ))}
+            </select>
+          )}
+
+          <button
+            type="button"
+            onClick={handleSubmitFacility}
+            className="px-4 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 active:scale-[0.98] text-white font-bold text-xs shadow-card transition-[background-color,transform] duration-150"
+            title="Save this facility and start a new one"
+          >
+            Submit &amp; Start New Facility
+          </button>
+        </div>
+      </div>
+
       {/* Tab panels stay MOUNTED and are hidden with CSS rather than unmounted.
           Conditional rendering meant every tab tap tore down and rebuilt the
           whole subtree -- measured at 1,608 DOM nodes for 8 assets, and ~9,300

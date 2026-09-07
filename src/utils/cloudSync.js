@@ -148,6 +148,9 @@ export async function pushSurvey(survey) {
     signatures: survey.signatures || {},
     general_notes: survey.generalNotes || null,
     revision: nextRevision,
+    status: survey.status || 'draft',
+    submitted_at: survey.submittedAt || null,
+    facility_name: (survey.facility && (survey.facility.facilityName || survey.facility.buildingName)) || null,
     updated_at: new Date().toISOString()
   });
   if (surveyErr) throw surveyErr;
@@ -160,6 +163,21 @@ export async function pushSurvey(survey) {
   for (const item of items) {
     for (const photo of item.photos || []) {
       if (!photo.dataUrl && !photo.storagePath) continue;
+
+      // Already in storage and we never loaded the bytes: keep the row pointing
+      // at the existing object rather than re-uploading nothing.
+      if (!photo.dataUrl && photo.storagePath) {
+        photoRows.push({
+          id: photo.id,
+          survey_id: survey.id,
+          item_id: item.id,
+          caption: photo.caption || null,
+          name: photo.name || null,
+          storage_path: photo.storagePath,
+          taken_at: photo.timestamp || null
+        });
+        continue;
+      }
 
       let storagePath;
       try {
@@ -184,12 +202,26 @@ export async function pushSurvey(survey) {
     }
   }
 
-  // Replace items (cascade clears their photo rows), then re-insert.
-  const { error: delErr } = await supabase.from('survey_items').delete().eq('survey_id', survey.id);
-  if (delErr) throw delErr;
+  // Deleting every row and re-inserting was the single most destructive thing
+  // in this file. Any device pushing a partial copy wiped whatever the server
+  // held -- and because survey_photos cascades off survey_items, it silently
+  // destroyed photos taken on another device too, leaving orphaned files in
+  // storage. Upsert what we have and delete ONLY what the user actually
+  // removed, tracked as explicit tombstones.
+  const deletedItemIds = Array.isArray(survey.deletedItemIds) ? survey.deletedItemIds : [];
+  const deletedPhotoIds = Array.isArray(survey.deletedPhotoIds) ? survey.deletedPhotoIds : [];
+
+  if (deletedPhotoIds.length) {
+    const { error } = await supabase.from('survey_photos').delete().in('id', deletedPhotoIds);
+    if (error) throw error;
+  }
+  if (deletedItemIds.length) {
+    const { error } = await supabase.from('survey_items').delete().in('id', deletedItemIds);
+    if (error) throw error;
+  }
 
   if (items.length) {
-    const { error: itemErr } = await supabase.from('survey_items').insert(
+    const { error: itemErr } = await supabase.from('survey_items').upsert(
       items.map((item, position) => ({
         id: item.id,
         survey_id: survey.id,
@@ -209,7 +241,9 @@ export async function pushSurvey(survey) {
   }
 
   if (photoRows.length) {
-    const { error: photoErr } = await supabase.from('survey_photos').insert(photoRows);
+    // Upsert by id: re-sending a photo that is already there is a no-op rather
+    // than a duplicate-key failure, which is what makes a retry safe.
+    const { error: photoErr } = await supabase.from('survey_photos').upsert(photoRows);
     if (photoErr) throw photoErr;
   }
 
@@ -265,8 +299,13 @@ export async function pullSurvey(surveyId, knownPhotos = {}) {
       try {
         dataUrl = await downloadPhoto(p.storage_path);
       } catch (err) {
-        console.warn('Could not download photo', p.storage_path, err);
-        continue;
+        // Keep the photo record even though the bytes did not arrive. Dropping
+        // it here used to delete the photo from the server on this client's
+        // next push, because that push replaced the item list wholesale -- one
+        // flaky download permanently destroyed the picture. Retaining the row
+        // with its storagePath means it can be fetched again later.
+        console.warn('Photo bytes unavailable, keeping reference:', p.storage_path, err?.message);
+        dataUrl = null;
       }
     }
     if (!photosByItem[p.item_id]) photosByItem[p.item_id] = [];
@@ -286,6 +325,8 @@ export async function pullSurvey(surveyId, knownPhotos = {}) {
     facility: row.facility || {},
     signatures: row.signatures || {},
     generalNotes: row.general_notes || '',
+    status: row.status || 'draft',
+    submittedAt: row.submitted_at || null,
     revision: row.revision || 1,
     // The server revision this copy is built on. pushSurvey refuses to
     // overwrite a server state the client has not actually seen.
@@ -304,6 +345,30 @@ export async function pullSurvey(surveyId, knownPhotos = {}) {
       photos: photosByItem[it.id] || []
     }))
   };
+}
+
+/**
+ * Every survey on the server, newest first - the facility list. Cheap: reads
+ * only the summary columns, never the photo payloads.
+ */
+export async function listSurveys() {
+  if (!isCloudConfigured) return [];
+  const { data, error } = await supabase
+    .from('condition_surveys')
+    .select('id, title, facility_name, status, submitted_at, updated_at, revision')
+    .order('updated_at', { ascending: false });
+  if (error) {
+    console.warn('Could not list surveys:', error.message);
+    return [];
+  }
+  return (data || []).map((r) => ({
+    id: r.id,
+    title: r.title,
+    facilityName: r.facility_name || 'Unnamed facility',
+    status: r.status || 'draft',
+    submittedAt: r.submitted_at,
+    updatedAt: r.updated_at
+  }));
 }
 
 /** Latest survey id on the server, so a fresh device knows what to open. */
@@ -358,4 +423,50 @@ export function subscribeToCloudChanges(surveyId, onRemoteChange) {
     .subscribe();
 
   return () => supabase.removeChannel(channel);
+}
+
+/**
+ * Fills in photo bytes that are not held locally.
+ *
+ * A survey pulled from the server (or opened from the facility list) carries
+ * each photo's storagePath but may have no dataUrl, either because the download
+ * failed once or because it was never needed. The PDF and Excel generators draw
+ * from dataUrl, so without this a report from a synced facility came out with
+ * no pictures at all - which is exactly the "Excel has no photo" symptom.
+ *
+ * Returns a copy; the original is untouched. Failures leave that one photo
+ * without bytes rather than aborting the whole report.
+ */
+export async function hydratePhotos(survey) {
+  if (!isCloudConfigured || !survey) return survey;
+
+  const needsBytes = (survey.items || []).some((it) =>
+    (it.photos || []).some((p) => !p.dataUrl && p.storagePath)
+  );
+  if (!needsBytes) return survey;
+
+  let fetched = 0;
+  let failed = 0;
+  const items = [];
+  for (const item of survey.items || []) {
+    const photos = [];
+    for (const photo of item.photos || []) {
+      if (photo.dataUrl || !photo.storagePath) {
+        photos.push(photo);
+        continue;
+      }
+      try {
+        photos.push({ ...photo, dataUrl: await downloadPhoto(photo.storagePath) });
+        fetched++;
+      } catch (err) {
+        console.warn('[report] photo unavailable:', photo.storagePath, err?.message);
+        photos.push(photo);
+        failed++;
+      }
+    }
+    items.push({ ...item, photos });
+  }
+
+  console.info(`[report] fetched ${fetched} photo(s) for the report` + (failed ? `, ${failed} unavailable` : ''));
+  return { ...survey, items };
 }
