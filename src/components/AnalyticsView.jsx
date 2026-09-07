@@ -12,7 +12,7 @@ import {
   Camera,
   MapPin
 } from 'lucide-react';
-import { PRIORITY_LEVELS, calculateSurveyStats, DEPARTMENTS } from '../types/survey';
+import { PRIORITY_LEVELS, calculateSurveyStats, DEPARTMENTS, snagLabel } from '../types/survey';
 import { formatMoney } from '../utils/currency';
 
 export default function AnalyticsView({ items = [], onOpenReport }) {
@@ -130,12 +130,12 @@ export default function AnalyticsView({ items = [], onOpenReport }) {
             The following snags pose an immediate life safety, structural, or statutory compliance hazard:
           </p>
           <div className="space-y-1.5 pt-1">
-            {p1Items.map((item) => {
+            {p1Items.map((item, idx) => {
               const itemDept = DEPARTMENTS[item.department] || DEPARTMENTS.GENERAL || { name: 'FM', badge: 'bg-slate-100' };
               return (
                 <div key={item.id} className="bg-white p-2.5 rounded-xl border border-rose-200 text-xs flex items-center justify-between">
                   <div>
-                    <span className="font-bold text-slate-800">{item.assetName || 'Unnamed Asset'}</span>
+                    <span className="font-bold text-slate-800">{snagLabel(item, idx)}</span>
                     <span className="text-slate-500 ml-2">({item.location || 'Site'})</span>
                     <span className={`ml-2 px-1.5 py-0.5 rounded text-[11px] font-bold ${itemDept.badge || 'bg-slate-100'}`}>
                       {(itemDept.name || 'FM').split('&')[0]}

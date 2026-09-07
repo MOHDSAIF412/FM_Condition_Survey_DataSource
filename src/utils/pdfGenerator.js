@@ -1,6 +1,6 @@
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
-import { PRIORITY_LEVELS, DEPARTMENTS, calculateSurveyStats } from '../types/survey';
+import { PRIORITY_LEVELS, DEPARTMENTS, calculateSurveyStats, snagLabel } from '../types/survey';
 import { OCS_LOGO_TRIMMED, OCS_LOGO_WHITE, OCS_LOGO_TRIMMED_RATIO } from '../assets/logoTrimmed';
 import { formatMoney } from './currency';
 
@@ -427,7 +427,7 @@ export async function generateSurveyPDF(survey, selectedFacility = 'ALL') {
     const deptName = (DEPARTMENTS[item.department]?.name || 'General').split('&')[0];
     return [
       String(index + 1),
-      item.assetName || 'Unnamed Asset',
+      snagLabel(item, index),
       item.location || 'General Site Area',
       deptName,
       `P${item.priority}`,
@@ -517,7 +517,7 @@ export async function generateSurveyPDF(survey, selectedFacility = 'ALL') {
         doc.setTextColor(15, 23, 42);
 
         // Step the title down a size until it fits the card, then clip it.
-        let assetTitle = item.assetName || 'Unnamed Asset';
+        let assetTitle = snagLabel(item, i);
         let titleSize = 10;
         doc.setFontSize(titleSize);
         while (titleSize > 8 && doc.getTextWidth(assetTitle) > titleWidth) {

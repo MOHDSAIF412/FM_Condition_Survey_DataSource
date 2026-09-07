@@ -18,7 +18,7 @@ import {
   ArrowRight,
   Copy
 } from 'lucide-react';
-import { PRIORITY_LEVELS, DEPARTMENTS } from '../types/survey';
+import { PRIORITY_LEVELS, DEPARTMENTS, snagLabel } from '../types/survey';
 import { compressImage } from '../utils/imageCompressor';
 import { formatMoney } from '../utils/currency';
 import { Capacitor } from '@capacitor/core';
@@ -192,7 +192,7 @@ function AssetItemCard({
           <div className="min-w-0 flex-1">
             <div className="flex items-center space-x-2 flex-wrap gap-y-1">
               <span className="font-bold text-slate-800 text-sm truncate">
-                {item.assetName || `Asset / Snag #${index + 1}`}
+                {snagLabel(item, index)}
               </span>
 
               {/* Department Badge */}
@@ -264,19 +264,6 @@ function AssetItemCard({
       {isExpanded && (
         <div className="p-4 sm:p-5 space-y-4 border-t border-slate-100">
           
-          {/* Asset Name */}
-          <div>
-            <label className="block text-[12px] font-bold uppercase text-slate-600 mb-1">
-              Snag / Component Name *
-            </label>
-            <input
-              type="text"
-              value={item.assetName || ''}
-              onChange={(e) => handleFieldChange('assetName', e.target.value)}
-              className="w-full px-3 py-2.5 text-sm rounded-xl border border-slate-300 focus:ring-2 focus:ring-sky-500 focus:outline-none font-medium"
-            />
-          </div>
-
           {/* Snag Location / Room / Area */}
           <div>
             <div className="flex items-center justify-between mb-1">
@@ -631,7 +618,7 @@ function AssetItemCard({
                   Photo {previewPhotoIndex + 1} of {photosList.length}
                 </span>
                 <span className="text-xs font-semibold text-slate-200 truncate">
-                  {photosList[previewPhotoIndex].caption || item.assetName}
+                  {photosList[previewPhotoIndex].caption || snagLabel(item, index)}
                 </span>
               </div>
               <button 

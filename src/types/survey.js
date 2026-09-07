@@ -117,6 +117,29 @@ export const DEFAULT_CATEGORIES = [
   { id: 'cat_external', name: 'External Grounds & Civil', icon: 'Trees' }
 ];
 
+/**
+ * How a snag is named on screen and in reports.
+ *
+ * The "Snag / Component Name" input was removed from the form, so `assetName`
+ * is empty on anything recorded since. Falling back to the defect text (then
+ * the location) keeps reports readable instead of listing "Unnamed Asset" on
+ * every row. `assetName` is still read first so older snags that do have one
+ * keep the name the surveyor typed; the field also remains in the model and
+ * the `asset_name` column, since dropping it would be a data migration.
+ */
+export function snagLabel(item = {}, index = 0) {
+  const existing = (item.assetName || '').trim();
+  if (existing) return existing;
+
+  const defect = (item.defectDescription || '').trim();
+  if (defect) return defect.length > 60 ? `${defect.slice(0, 57)}...` : defect;
+
+  const location = (item.location || '').trim();
+  if (location) return location;
+
+  return `Snag #${index + 1}`;
+}
+
 export function createDefaultAsset(location = '', department = 'HVAC') {
   return {
     id: 'item_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7),

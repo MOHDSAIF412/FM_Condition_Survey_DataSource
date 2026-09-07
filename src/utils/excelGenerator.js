@@ -1,5 +1,5 @@
 import ExcelJS from 'exceljs';
-import { PRIORITY_LEVELS, DEPARTMENTS, calculateSurveyStats } from '../types/survey.js';
+import { PRIORITY_LEVELS, DEPARTMENTS, calculateSurveyStats, snagLabel } from '../types/survey.js';
 import { OCS_LOGO_BASE64 } from '../assets/logoDataUrl.js';
 import { saveBlob } from './fileSaver.js';
 import { formatMoney, EXCEL_MONEY_FORMAT } from './currency.js';
@@ -582,7 +582,7 @@ export async function generateSurveyExcel(survey, selectedFacility = 'ALL') {
       i + 1,
       '', // Placeholder for embedded thumbnail in Col B
       item.location || 'General Site Area',
-      item.assetName || 'Unnamed Asset',
+      snagLabel(item, i),
       dept.name,
       `P${item.priority}`,
       item.defectDescription || 'No defect observed.',
@@ -678,160 +678,6 @@ export async function generateSurveyExcel(survey, selectedFacility = 'ALL') {
       snagRowIdx++;
     }
 
-  // ==========================================
-  // SHEET 4: DEFECT PHOTOGRAPHIC EVIDENCE LOG (FULL GALLERY)
-  // ==========================================
-  const itemsWithPhotos = itemsToReport.filter((i) => i.photos && i.photos.length > 0);
-
-  if (itemsWithPhotos.length > 0) {
-    const wsPhotos = workbook.addWorksheet('Photo Evidence Log', {
-      views: [{ showGridLines: true }]
-    });
-
-    // Each photo gets a single framed box spanning the 7 detail rows beside it.
-    const PHOTO_COL_WIDTH = 43;        // ~306 px
-    const PHOTO_ROW_PTS = 22;          // ~29 px per row
-    const PHOTO_BLOCK_ROWS = 7;
-    const PHOTO_PADDING_PX = 10;
-    const PHOTO_BOX_HEIGHT_PX = rowHeightToPx(PHOTO_ROW_PTS) * PHOTO_BLOCK_ROWS;
-
-    wsPhotos.columns = [
-      { width: 4 },
-      { width: PHOTO_COL_WIDTH }, // Photo image block
-      { width: 28 }, // Info labels
-      { width: 48 }, // Info values
-      { width: 20 }
-    ];
-
-    wsPhotos.mergeCells('B2:E2');
-    const photoBanner = wsPhotos.getCell('B2');
-    photoBanner.value = selectedFacility === 'ALL'
-      ? 'DEFECT PHOTOGRAPHIC EVIDENCE LOG'
-      : `DEFECT PHOTOGRAPHIC LOG — ${selectedFacility.toUpperCase()}`;
-    photoBanner.font = { name: 'Arial', size: 12, bold: true, color: { argb: 'FFFFFFFF' } };
-    photoBanner.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: primaryNavy } };
-    photoBanner.alignment = { horizontal: 'center', vertical: 'middle' };
-    wsPhotos.getRow(2).height = 28;
-
-    let pRowIdx = 4;
-
-    for (let i = 0; i < itemsWithPhotos.length; i++) {
-      const item = itemsWithPhotos[i];
-      const dept = DEPARTMENTS[item.department] || DEPARTMENTS.GENERAL;
-      const priority = PRIORITY_LEVELS[item.priority] || PRIORITY_LEVELS[2];
-      const totalPhotos = item.photos.length;
-
-      for (let p = 0; p < totalPhotos; p++) {
-        const photo = item.photos[p];
-        const currentRow = pRowIdx;
-
-        // Fixed, known row heights so the photo box geometry is exact
-        for (let r = 0; r < PHOTO_BLOCK_ROWS; r++) {
-          wsPhotos.getRow(currentRow + r).height = PHOTO_ROW_PTS;
-        }
-
-        // Merge column B across the block into a single framed photo box
-        wsPhotos.mergeCells(`B${currentRow}:B${currentRow + PHOTO_BLOCK_ROWS - 1}`);
-        const photoBox = wsPhotos.getCell(`B${currentRow}`);
-        photoBox.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFFFFF' } };
-        photoBox.border = {
-          top: { style: 'thin', color: { argb: 'FFCBD5E1' } },
-          left: { style: 'thin', color: { argb: 'FFCBD5E1' } },
-          bottom: { style: 'thin', color: { argb: 'FFCBD5E1' } },
-          right: { style: 'thin', color: { argb: 'FFCBD5E1' } }
-        };
-        photoBox.alignment = { horizontal: 'center', vertical: 'middle' };
-
-        // Info details next to photo
-        wsPhotos.getCell(`C${currentRow}`).value = `Snag Item #${i + 1}:`;
-        wsPhotos.getCell(`C${currentRow}`).font = { name: 'Arial', size: 9, bold: true, color: { argb: 'FF64748B' } };
-        wsPhotos.getCell(`D${currentRow}`).value = `${item.assetName} (Photo ${p + 1} of ${totalPhotos})`;
-        wsPhotos.getCell(`D${currentRow}`).font = { name: 'Arial', size: 10, bold: true, color: { argb: 'FF0F172A' } };
-
-        wsPhotos.getCell(`C${currentRow + 1}`).value = 'Snag Location / Room:';
-        wsPhotos.getCell(`C${currentRow + 1}`).font = { name: 'Arial', size: 9, bold: true, color: { argb: 'FF64748B' } };
-        wsPhotos.getCell(`D${currentRow + 1}`).value = item.location || 'General Site Area';
-        wsPhotos.getCell(`D${currentRow + 1}`).font = { name: 'Arial', size: 9, bold: true, color: { argb: 'FF0284C7' } };
-
-        wsPhotos.getCell(`C${currentRow + 2}`).value = 'Facility Name:';
-        wsPhotos.getCell(`C${currentRow + 2}`).font = { name: 'Arial', size: 9, bold: true, color: { argb: 'FF64748B' } };
-        wsPhotos.getCell(`D${currentRow + 2}`).value = facName;
-        wsPhotos.getCell(`D${currentRow + 2}`).font = { name: 'Arial', size: 9 };
-
-        wsPhotos.getCell(`C${currentRow + 3}`).value = 'Department / Trade:';
-        wsPhotos.getCell(`C${currentRow + 3}`).font = { name: 'Arial', size: 9, bold: true, color: { argb: 'FF64748B' } };
-        wsPhotos.getCell(`D${currentRow + 3}`).value = dept.name;
-        wsPhotos.getCell(`D${currentRow + 3}`).font = { name: 'Arial', size: 9 };
-
-        wsPhotos.getCell(`C${currentRow + 4}`).value = 'Remedial Priority:';
-        wsPhotos.getCell(`C${currentRow + 4}`).font = { name: 'Arial', size: 9, bold: true, color: { argb: 'FF64748B' } };
-        wsPhotos.getCell(`D${currentRow + 4}`).value = `Priority ${item.priority} (${priority.timeframe})`;
-        wsPhotos.getCell(`D${currentRow + 4}`).font = { name: 'Arial', size: 9, bold: true };
-
-        wsPhotos.getCell(`C${currentRow + 5}`).value = 'Observed Defect:';
-        wsPhotos.getCell(`C${currentRow + 5}`).font = { name: 'Arial', size: 9, bold: true, color: { argb: 'FF64748B' } };
-        wsPhotos.getCell(`D${currentRow + 5}`).value = item.defectDescription || 'None recorded.';
-        wsPhotos.getCell(`D${currentRow + 5}`).font = { name: 'Arial', size: 8.5 };
-
-        wsPhotos.getCell(`C${currentRow + 6}`).value = 'Remedial Estimate:';
-        wsPhotos.getCell(`C${currentRow + 6}`).font = { name: 'Arial', size: 9, bold: true, color: { argb: 'FF64748B' } };
-        wsPhotos.getCell(`D${currentRow + 6}`).value = formatMoney(item.estimatedCost);
-        wsPhotos.getCell(`D${currentRow + 6}`).font = { name: 'Arial', size: 10, bold: true };
-
-        // Embed full photo
-        if (photo.dataUrl) {
-          try {
-            const cellW = colWidthToPx(PHOTO_COL_WIDTH);
-            const cellH = PHOTO_BOX_HEIGHT_PX;
-            let cropped = null;
-            try {
-              cropped = await coverCropToRatio(photo.dataUrl, cellW / cellH, cellW * 2);
-            } catch (cropErr) {
-              console.warn('Photo Log crop failed, falling back to uncropped embed:', cropErr);
-            }
-            if (cropped && cropped.base64) {
-              const imageId = workbook.addImage({
-                base64: cropped.base64,
-                extension: 'jpeg'
-              });
-
-              placeImageInBox(wsPhotos, imageId, cropped, {
-                col: 1, // column B (0-based)
-                row: currentRow - 1,
-                widthPx: cellW,
-                heightPx: cellH,
-                fit: 'cover'
-              });
-            } else {
-              // Cropping failed -- fall back to the uncropped photo, contain-fit,
-              // rather than dropping it silently (this used to leave Excel with
-              // no photos at all while the PDF, which has this same fallback,
-              // came out fine).
-              const safe = await getSafeJpegImage(photo.dataUrl);
-              if (safe && safe.base64) {
-                const imageId = workbook.addImage({ base64: safe.base64, extension: 'jpeg' });
-                placeImageInBox(wsPhotos, imageId, safe, {
-                  col: 1,
-                  row: currentRow - 1,
-                  widthPx: cellW,
-                  heightPx: cellH,
-                  fit: 'contain'
-                });
-              } else {
-                photoBox.value = 'Photo unavailable';
-                photoBox.font = { italic: true, color: { argb: 'FF94A3B8' } };
-              }
-            }
-          } catch (pErr) {
-            console.warn('Failed embedding full photo into Excel Photo Log:', pErr);
-          }
-        }
-
-        // One blank spacer row between photo blocks
-        pRowIdx += PHOTO_BLOCK_ROWS + 1;
-      }
-    }
-  }
 
   // Trigger Excel file download in browser
   const facilitySuffix = selectedFacility !== 'ALL' ? `_${selectedFacility.replace(/[^a-z0-9]/gi, '_')}` : '';

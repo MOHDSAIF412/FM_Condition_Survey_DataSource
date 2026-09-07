@@ -410,7 +410,13 @@ export default function App() {
       setActiveTab('facility');
       return;
     }
-    if (!(current.items || []).some((i) => (i.assetName || '').trim())) {
+    // Checks the defect text, not the old snag-name field: that input was
+    // removed from the form, so requiring it here would make every facility
+    // impossible to submit.
+    const hasRealSnag = (current.items || []).some(
+      (i) => (i.defectDescription || '').trim() || (i.location || '').trim()
+    );
+    if (!hasRealSnag) {
       alert('Add at least one snag before submitting this facility.');
       setActiveTab('items');
       return;

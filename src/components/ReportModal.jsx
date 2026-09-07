@@ -23,7 +23,7 @@ import {
   Camera
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
-import { PRIORITY_LEVELS, DEPARTMENTS, calculateSurveyStats } from '../types/survey';
+import { PRIORITY_LEVELS, DEPARTMENTS, calculateSurveyStats, snagLabel } from '../types/survey';
 import { generateSurveyPDF } from '../utils/pdfGenerator';
 import { generateSurveyExcel } from '../utils/excelGenerator';
 import { formatMoney } from '../utils/currency';
@@ -382,7 +382,7 @@ export default function ReportModal({ survey = {}, onClose }) {
                   return (
                     <tr key={item.id || idx} className="hover:bg-slate-50/80">
                       <td className="p-3 font-bold text-slate-500">{idx + 1}</td>
-                      <td className="p-3 font-bold text-slate-900">{item.assetName || 'Unnamed Asset'}</td>
+                      <td className="p-3 font-bold text-slate-900">{snagLabel(item, idx)}</td>
                       <td className="p-3">
                         <div className="font-semibold text-slate-800 flex items-center gap-1">
                           <MapPin className="w-3.5 h-3.5 text-sky-600 shrink-0" />
@@ -441,7 +441,7 @@ export default function ReportModal({ survey = {}, onClose }) {
                     <div>
                       <div className="flex items-center space-x-2 flex-wrap gap-y-1">
                         <span className="font-extrabold text-slate-900 text-sm">
-                          Snag #{snagIdx + 1}: {item.assetName}
+                          Snag #{snagIdx + 1}: {snagLabel(item, snagIdx)}
                         </span>
                         <span className={`px-2 py-0.5 rounded text-[11px] font-bold ${PRIORITY_LEVELS[item.priority]?.badge}`}>
                           P{item.priority}
