@@ -28,7 +28,7 @@ import {
 } from './utils/cloudSync';
 import { isCloudConfigured } from './utils/supabaseClient';
 import { initNetworkMonitor, onNetworkChange, isOnline } from './utils/network';
-import { PHOTO_SYNC } from './utils/photoCapture';
+import { PHOTO_SYNC, consumeCaptureReturn } from './utils/photoCapture';
 
 /**
  * Keeps a tab's subtree mounted and toggles visibility with CSS.
@@ -51,12 +51,14 @@ export default function App() {
   // A blank survey, never the demo one. Seeding sampleSurveyData meant every
   // new inspection opened with "Old Grandstand" already in the facility field.
   const [survey, setSurvey] = useState(() => createNewSurvey());
-  // Restored from localStorage, not defaulted. Android can destroy this
+  // Opens on Facility Info, the first page of an inspection -- except when this
+  // launch is the app coming back from the camera. Android can destroy the
   // Activity while the camera app is in front; on return the WebView reloads
   // and React remounts, which used to dump the surveyor back on the Facility
-  // screen mid-inspection.
+  // screen mid-inspection. Only that case restores the previous tab.
   const [activeTab, setActiveTab] = useState(() => {
     try {
+      if (!consumeCaptureReturn()) return 'facility';
       const saved = localStorage.getItem('fm_active_tab');
       return ['facility', 'items', 'analytics', 'signatures'].includes(saved) ? saved : 'facility';
     } catch {

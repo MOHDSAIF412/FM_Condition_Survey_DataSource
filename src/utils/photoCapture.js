@@ -34,6 +34,42 @@ export const PHOTO_SYNC = {
 };
 
 /**
+ * Marks that the camera is in front, so a relaunch can tell "Android killed us
+ * mid-capture" apart from "the surveyor opened the app".
+ *
+ * Point 3 above requires the recreated Activity to return to the tab it was on.
+ * Restoring that tab on *every* launch is what made the app open on whatever
+ * screen was last used, instead of the first page of the inspection.
+ */
+const CAPTURE_FLAG = 'fm_capture_in_flight';
+
+function markCaptureStarted() {
+  try { localStorage.setItem(CAPTURE_FLAG, String(Date.now())); } catch { /* private mode */ }
+}
+
+function markCaptureFinished() {
+  try { localStorage.removeItem(CAPTURE_FLAG); } catch { /* private mode */ }
+}
+
+/**
+ * True when this launch is a return from a capture that never came back --
+ * i.e. the Activity was destroyed while the camera was open.
+ *
+ * Reads once and clears: a flag left behind by a capture that died must not
+ * keep hijacking the opening screen on every later launch. The age check is a
+ * second guard for the same thing.
+ */
+export function consumeCaptureReturn() {
+  try {
+    const started = Number(localStorage.getItem(CAPTURE_FLAG) || 0);
+    localStorage.removeItem(CAPTURE_FLAG);
+    return started > 0 && Date.now() - started < 10 * 60 * 1000;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Collision-resistant id. crypto.randomUUID where available, otherwise random
  * bytes - never the filename, and never a bare timestamp, since a burst of
  * photos can share a millisecond.
@@ -106,6 +142,7 @@ export async function captureFromCamera() {
       return { ok: false, message: 'Camera permission denied. Enable it in Settings to take photos.' };
     }
 
+    markCaptureStarted();
     const shot = await Camera.getPhoto({
       quality: 85,
       allowEditing: false,
@@ -123,6 +160,10 @@ export async function captureFromCamera() {
     const msg = String(err?.message || err);
     if (/cancel/i.test(msg)) return { ok: false, cancelled: true };
     return { ok: false, message: describeNativeFailure(msg) };
+  } finally {
+    // Reached only if the Activity survived. If Android killed it, the flag
+    // stays set -- which is exactly how the next launch knows to restore.
+    markCaptureFinished();
   }
 }
 
@@ -133,6 +174,7 @@ export async function pickFromGallery() {
   }
   try {
     const { Camera } = await import('@capacitor/camera');
+    markCaptureStarted();
     const result = await Camera.pickImages({ quality: 85, limit: 10, width: 1600 });
 
     const photos = [];
@@ -152,6 +194,8 @@ export async function pickFromGallery() {
     const msg = String(err?.message || err);
     if (/cancel/i.test(msg)) return { ok: false, cancelled: true };
     return { ok: false, message: describeNativeFailure(msg) };
+  } finally {
+    markCaptureFinished();
   }
 }
 
