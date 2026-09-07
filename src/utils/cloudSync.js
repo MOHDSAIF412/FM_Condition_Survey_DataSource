@@ -156,6 +156,7 @@ export async function pushSurvey(survey) {
 
   // Upload any photo not yet in storage, before rows reference it.
   const photoRows = [];
+  const failedPhotoIds = [];
   for (const item of items) {
     for (const photo of item.photos || []) {
       if (!photo.dataUrl && !photo.storagePath) continue;
@@ -164,8 +165,10 @@ export async function pushSurvey(survey) {
       try {
         storagePath = await uploadPhoto(survey.id, item.id, photo);
       } catch (err) {
-        // Skip this image rather than losing the whole survey's sync.
-        console.warn('Skipping photo that could not be uploaded:', photo.id, err.message);
+        // Skip this image rather than losing the whole survey's sync. It stays
+        // on the device and is retried on the next push -- never discarded.
+        console.warn('Photo upload deferred, will retry:', photo.id, err.message);
+        failedPhotoIds.push(photo.id);
         continue;
       }
 
@@ -214,6 +217,10 @@ export async function pushSurvey(survey) {
     pushed: true,
     items: items.length,
     photos: photoRows.length,
+    // Ids the server has confirmed, so the caller can mark exactly those
+    // photos synced rather than assuming the whole batch succeeded.
+    syncedPhotoIds: photoRows.map((r) => r.id),
+    failedPhotoIds: failedPhotoIds,
     // We are now the server state, so this is what the next push builds on.
     cloudRevision: nextRevision
   };

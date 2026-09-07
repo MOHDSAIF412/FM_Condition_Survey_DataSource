@@ -24,6 +24,8 @@ import {
   subscribeToCloudChanges
 } from './utils/cloudSync';
 import { isCloudConfigured } from './utils/supabaseClient';
+import { initNetworkMonitor, onNetworkChange, isOnline } from './utils/network';
+import { PHOTO_SYNC } from './utils/photoCapture';
 
 /**
  * Keeps a tab's subtree mounted and toggles visibility with CSS.
@@ -43,8 +45,25 @@ function TabPanel({ active, children }) {
 }
 
 export default function App() {
-  const [survey, setSurvey] = useState(sampleSurveyData);
-  const [activeTab, setActiveTab] = useState('facility');
+  // A blank survey, never the demo one. Seeding sampleSurveyData meant every
+  // new inspection opened with "Old Grandstand" already in the facility field.
+  const [survey, setSurvey] = useState(() => createNewSurvey());
+  // Restored from localStorage, not defaulted. Android can destroy this
+  // Activity while the camera app is in front; on return the WebView reloads
+  // and React remounts, which used to dump the surveyor back on the Facility
+  // screen mid-inspection.
+  const [activeTab, setActiveTab] = useState(() => {
+    try {
+      const saved = localStorage.getItem('fm_active_tab');
+      return ['facility', 'items', 'analytics', 'signatures'].includes(saved) ? saved : 'facility';
+    } catch {
+      return 'facility';
+    }
+  });
+
+  useEffect(() => {
+    try { localStorage.setItem('fm_active_tab', activeTab); } catch { /* private mode */ }
+  }, [activeTab]);
   const [showReportModal, setShowReportModal] = useState(false);
   const [lastSavedTime, setLastSavedTime] = useState('');
   const [isLoaded, setIsLoaded] = useState(false);
@@ -61,9 +80,65 @@ export default function App() {
     skipCloudPushRef.current = true;
   }
   const [syncState, setSyncState] = useState(isCloudConfigured ? 'idle' : 'off');
+  const [online, setOnline] = useState(isOnline());
   const surveyRef = useRef(null);
   const pushTimeoutRef = useRef(null);
   surveyRef.current = survey;
+
+  // Connectivity monitoring. A returning connection is what kicks off the
+  // pending sync, so nothing has to be re-entered after working offline.
+  useEffect(() => {
+    initNetworkMonitor().then(() => setOnline(isOnline()));
+
+    return onNetworkChange((nowOnline) => {
+      setOnline(nowOnline);
+      if (!nowOnline) {
+        setSyncState('offline');
+        return;
+      }
+      // Back online: flush whatever is waiting.
+      if (isCloudConfigured && surveyRef.current) {
+        setSyncState('syncing');
+        pushSurvey(surveyRef.current)
+          .then((res) => {
+            if (res && res.pushed) {
+              applyPhotoSyncResult(res);
+              setSyncState('synced');
+            } else {
+              setSyncState('idle');
+            }
+          })
+          .catch((err) => {
+            console.info('Reconnect sync deferred:', err.message);
+            setSyncState('offline');
+          });
+      }
+    });
+  }, []);
+
+  /** Marks exactly the photos the server confirmed, so the badges tell the truth. */
+  function applyPhotoSyncResult(result) {
+    if (!result) return;
+    const synced = new Set(result.syncedPhotoIds || []);
+    const failed = new Set(result.failedPhotoIds || []);
+    if (!synced.size && !failed.size) return;
+
+    setSurvey((prev) => {
+      const next = {
+        ...prev,
+        items: (prev.items || []).map((it) => ({
+          ...it,
+          photos: (it.photos || []).map((p) =>
+            synced.has(p.id) ? { ...p, syncStatus: PHOTO_SYNC.SYNCED }
+            : failed.has(p.id) ? { ...p, syncStatus: PHOTO_SYNC.FAILED }
+            : p
+          )
+        }))
+      };
+      skipCloudPushRef.current = true; // status only, nothing to send back up
+      return next;
+    });
+  }
 
   // Load from IndexedDB on initial launch
   useEffect(() => {
@@ -109,13 +184,15 @@ export default function App() {
         if (saved && saved.items) {
           setSurvey(saved);
         } else {
-          // Store sample survey initially so the user has immediate demo data
-          setSurvey(sampleSurveyData);
-          await saveSurveyOffline(sampleSurveyData);
+          // Nothing stored yet: start a genuinely empty inspection so the
+          // surveyor must choose the facility rather than inherit a demo one.
+          const fresh = createNewSurvey();
+          setSurvey(fresh);
+          await saveSurveyOffline(fresh);
         }
       } catch (e) {
         console.warn('Storage initial load notice:', e);
-        setSurvey(sampleSurveyData);
+        setSurvey(createNewSurvey());
       } finally {
         setIsLoaded(true);
         setLastSavedTime(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
@@ -192,8 +269,10 @@ export default function App() {
 
     pushTimeoutRef.current = setTimeout(async () => {
       try {
+        if (!isOnline()) { setSyncState('offline'); return; }
         setSyncState('syncing');
         const pushResult = await pushSurvey(surveyRef.current);
+        applyPhotoSyncResult(pushResult);
 
         // The server was ahead of us, so the push was refused rather than
         // allowed to overwrite newer work. Take the server's copy instead.
@@ -334,11 +413,23 @@ export default function App() {
     }));
   };
 
-  const handleUpdateItem = (updatedItem) => {
-    setSurvey((prev) => ({
-      ...prev,
-      items: (prev.items || []).map((i) => (i.id === updatedItem.id ? updatedItem : i))
-    }));
+  const handleUpdateItem = (updatedItem, options = {}) => {
+    setSurvey((prev) => {
+      const next = {
+        ...prev,
+        items: (prev.items || []).map((i) => (i.id === updatedItem.id ? updatedItem : i))
+      };
+
+      // A photo cannot wait for the 600ms autosave debounce. The camera can get
+      // the app killed by Android, and anything not yet written is simply gone.
+      // Write straight through before the process has a chance to die.
+      if (options.persistNow) {
+        saveSurveyOffline(next).catch((err) =>
+          console.error('Immediate save failed after photo capture:', err)
+        );
+      }
+      return next;
+    });
   };
 
   const handleDeleteItem = (itemId) => {
@@ -362,6 +453,12 @@ export default function App() {
     }));
   };
 
+  // Photos still only on this device - what "waiting to sync" actually means.
+  const pendingPhotoCount = (survey?.items || []).reduce(
+    (n, it) => n + (it.photos || []).filter((p) => p.syncStatus && p.syncStatus !== PHOTO_SYNC.SYNCED).length,
+    0
+  );
+
   const stats = calculateSurveyStats(survey?.items || []);
   const urgentCount = stats?.priorityCounts?.[1] || 0;
 
@@ -378,6 +475,8 @@ export default function App() {
         onExportExcel={() => generateSurveyExcel(survey || {})}
         lastSaved={lastSavedTime}
         syncState={syncState}
+        online={online}
+        pendingCount={pendingPhotoCount}
       />
 
       {/* Navigation (Desktop Tabs & Mobile Sticky Bottom Bar) */}

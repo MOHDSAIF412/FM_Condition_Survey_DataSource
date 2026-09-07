@@ -139,7 +139,6 @@ export function createNewSurvey() {
     facility: {
       facilityName: '',
       buildingName: '',
-      buildingCode: '',
       address: '',
       googleLocation: {
         address: '',

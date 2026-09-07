@@ -200,20 +200,28 @@ export async function generateSurveyPDF(survey, selectedFacility = 'ALL') {
     doc.text(shown, x + 35, y);
   };
 
-  printMeta('Building Code:', facility.buildingCode, col1X, rowY);
-  printMeta('Lead Inspector:', facility.surveyorName, col2X, rowY);
-  rowY += 8;
-  printMeta('Inspection Date:', facility.surveyDate, col1X, rowY);
-  printMeta('Consultancy:', facility.surveyorCompany, col2X, rowY);
-  rowY += 8;
-  printMeta('Gross Int. Area:', facility.grossInternalArea, col1X, rowY);
-  printMeta('Client / Owner:', facility.clientName, col2X, rowY);
-  rowY += 8;
-  printMeta('Building Levels:', facility.floorsCount, col1X, rowY);
-  printMeta('Facility Mgr:', facility.facilityManager, col2X, rowY);
-  rowY += 8;
-  printMeta('Weather / Temp:', facility.weatherCondition, col1X, rowY);
-  printMeta('Total Snags:', `${stats.total} Snags`, col2X, rowY);
+  // Rebalanced after the reference-code row was removed, so the grid does not
+  // open with a hole in the left column. Only fields that have a value are
+  // printed, so an empty facility does not render a column of "N/A".
+  const metaPairs = [
+    ['Inspection Date:', facility.surveyDate],
+    ['Lead Inspector:', facility.surveyorName],
+    ['Gross Int. Area:', facility.grossInternalArea],
+    ['Consultancy:', facility.surveyorCompany],
+    ['Building Levels:', facility.floorsCount],
+    ['Client / Owner:', facility.clientName],
+    ['Weather / Temp:', facility.weatherCondition],
+    ['Facility Mgr:', facility.facilityManager],
+    ['Total Snags:', `${stats.total} Snags`],
+    ['GPS Accuracy:', googleLoc.accuracy ? `${googleLoc.accuracy} m` : null]
+  ].filter(([, v]) => v !== null && v !== undefined && String(v).trim() !== '');
+
+  metaPairs.forEach(([label, value], i) => {
+    const col = i % 2 === 0 ? col1X : col2X;
+    printMeta(label, value, col, rowY);
+    if (i % 2 === 1) rowY += 8;
+  });
+  if (metaPairs.length % 2 === 1) rowY += 8;
 
   // Executive KPI summary cards
   curY = metaBoxY + 54;

@@ -44,7 +44,6 @@ export const sampleSurveyData = {
   facility: {
     facilityName: 'Old Grandstand',
     buildingName: 'Zone A - Old Grandstand',
-    buildingCode: 'Zone A',
     address: 'Old Grandstand, Zone A, Abu Dhabi, United Arab Emirates',
     googleLocation: {
       address: 'Old Grandstand, Zone A, Abu Dhabi, United Arab Emirates',

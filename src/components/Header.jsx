@@ -21,15 +21,25 @@ export default function Header({
   onImportJSON,
   onExportExcel,
   lastSaved,
-  syncState = 'off'
+  syncState = 'off',
+  online = true,
+  pendingCount = 0
 }) {
-  const sync = {
-    off:     { label: 'Offline Ready', cls: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' },
-    idle:    { label: 'Cloud Sync On', cls: 'bg-white/10 text-ocs-100 border-white/20' },
-    syncing: { label: 'Syncing...',    cls: 'bg-amber-500/20 text-amber-300 border-amber-500/30' },
-    synced:  { label: 'Synced',        cls: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' },
-    offline: { label: 'Offline',       cls: 'bg-slate-500/20 text-slate-300 border-slate-500/30' }
-  }[syncState] || { label: 'Offline Ready', cls: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' };
+  // Connectivity wins over sync state: if there is no connection, saying
+  // "Synced" would be a lie even when the last push did succeed.
+  const sync = !online
+    ? { label: pendingCount > 0
+          ? `Offline - ${pendingCount} waiting to sync`
+          : 'Offline - saved on device',
+        cls: 'bg-amber-500/20 text-amber-200 border-amber-400/40' }
+    : ({
+        off:     { label: 'Offline Ready', cls: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' },
+        idle:    { label: 'Online',        cls: 'bg-white/10 text-ocs-100 border-white/20' },
+        syncing: { label: pendingCount > 0 ? `Syncing ${pendingCount}...` : 'Syncing...',
+                   cls: 'bg-sky-500/20 text-sky-200 border-sky-400/40' },
+        synced:  { label: 'All data synced', cls: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' },
+        offline: { label: 'Waiting to sync',  cls: 'bg-amber-500/20 text-amber-200 border-amber-400/40' }
+      }[syncState] || { label: 'Online', cls: 'bg-white/10 text-ocs-100 border-white/20' });
   const [showMenu, setShowMenu] = useState(false);
 
   return (
@@ -54,6 +64,10 @@ export default function Header({
                 FM Condition Survey
               </h1>
               <span className={`hidden sm:inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold border ${sync.cls}`}>
+                <span
+                  aria-hidden="true"
+                  className={`w-1.5 h-1.5 rounded-full mr-1.5 ${online ? 'bg-emerald-400' : 'bg-amber-400'}`}
+                />
                 {sync.label}
               </span>
             </div>

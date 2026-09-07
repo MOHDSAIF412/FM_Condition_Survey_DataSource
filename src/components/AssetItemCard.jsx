@@ -21,6 +21,8 @@ import {
 import { PRIORITY_LEVELS, DEPARTMENTS } from '../types/survey';
 import { compressImage } from '../utils/imageCompressor';
 import { formatMoney } from '../utils/currency';
+import { Capacitor } from '@capacitor/core';
+import { captureFromCamera, pickFromGallery, photosFromFiles, PHOTO_SYNC } from '../utils/photoCapture';
 
 const PHOTO_PRESET_TAGS = [
   'Defect Close-up',
@@ -79,34 +81,65 @@ function AssetItemCard({
   };
 
   // Multi-photo upload / Camera append
+  /**
+   * Appends photos to THIS snag and writes them through immediately.
+   *
+   * `persistNow` matters: the autosave is debounced by 600ms, and Android can
+   * kill the app the moment the camera hands control back. Anything not yet
+   * written at that point is lost, which is why photos used to disappear.
+   *
+   * Photos are appended, never assigned, so an existing photo cannot be
+   * replaced by the next one.
+   */
+  const appendPhotos = (newPhotos) => {
+    if (!newPhotos || !newPhotos.length) return;
+    const existing = item.photos || [];
+    const captioned = newPhotos.map((p, i) => ({
+      ...p,
+      caption: p.caption || `Evidence Photo #${existing.length + i + 1}`,
+      syncStatus: p.syncStatus || PHOTO_SYNC.LOCAL
+    }));
+    onUpdate({ ...item, photos: [...existing, ...captioned] }, { persistNow: true });
+  };
+
+  /** Native camera. Stays on this screen; the plugin returns the shot even if
+   *  Android recreated the Activity while the camera was open. */
+  const handleNativeCamera = async () => {
+    setIsProcessingPhoto(true);
+    setProcessingCount(1);
+    try {
+      const result = await captureFromCamera();
+      if (result.ok) appendPhotos([result.photo]);
+      else if (!result.cancelled) alert(result.message);
+    } finally {
+      setIsProcessingPhoto(false);
+      setProcessingCount(0);
+    }
+  };
+
+  const handleNativeGallery = async () => {
+    setIsProcessingPhoto(true);
+    try {
+      const result = await pickFromGallery();
+      if (result.ok) appendPhotos(result.photos);
+      else if (!result.cancelled) alert(result.message);
+    } finally {
+      setIsProcessingPhoto(false);
+      setProcessingCount(0);
+    }
+  };
+
+  /** Browser fallback (and the web app) - plain file input. */
   const handlePhotoUpload = async (e) => {
     const files = Array.from(e.target.files || []);
     if (files.length === 0) return;
 
     setIsProcessingPhoto(true);
     setProcessingCount(files.length);
-
     try {
-      const compressedPhotos = [];
-      const currentPhotosCount = (item.photos || []).length;
-
-      for (let i = 0; i < files.length; i++) {
-        const file = files[i];
-        const compressed = await compressImage(file);
-        
-        const photoNum = currentPhotosCount + i + 1;
-        compressedPhotos.push({
-          ...compressed,
-          caption: photoNum === 1 ? 'Defect Close-up' : photoNum === 2 ? 'Wide Angle Overview' : `Evidence Photo #${photoNum}`
-        });
-      }
-
-      onUpdate({
-        ...item,
-        photos: [...(item.photos || []), ...compressedPhotos]
-      });
+      appendPhotos(await photosFromFiles(files));
     } catch (err) {
-      console.error('Error compressing image:', err);
+      console.error('Error processing image:', err);
       alert('Could not process photo: ' + err.message);
     } finally {
       setIsProcessingPhoto(false);
@@ -117,10 +150,7 @@ function AssetItemCard({
 
   const handleRemovePhoto = (photoId) => {
     const updated = (item.photos || []).filter((p) => p.id !== photoId);
-    onUpdate({
-      ...item,
-      photos: updated
-    });
+    onUpdate({ ...item, photos: updated }, { persistNow: true });
     if (previewPhotoIndex !== null && previewPhotoIndex >= updated.length) {
       setPreviewPhotoIndex(updated.length > 0 ? updated.length - 1 : null);
     }
@@ -432,6 +462,29 @@ function AssetItemCard({
                       <span className="absolute top-1.5 left-1.5 px-1.5 py-0.5 rounded-md bg-black/70 text-white font-bold text-[11px]">
                         #{pIdx + 1}
                       </span>
+
+                      {/* Upload state per photo, so it is obvious what has
+                          actually reached the server and what is still only on
+                          this phone. */}
+                      <span
+                        className={`absolute bottom-1.5 left-1.5 px-1.5 py-0.5 rounded-md text-[10px] font-bold ${
+                          photo.syncStatus === PHOTO_SYNC.SYNCED ? 'bg-emerald-600 text-white' :
+                          photo.syncStatus === PHOTO_SYNC.UPLOADING ? 'bg-sky-600 text-white' :
+                          photo.syncStatus === PHOTO_SYNC.FAILED ? 'bg-rose-600 text-white' :
+                          'bg-amber-500 text-white'
+                        }`}
+                        title={
+                          photo.syncStatus === PHOTO_SYNC.SYNCED ? 'Uploaded to the server' :
+                          photo.syncStatus === PHOTO_SYNC.UPLOADING ? 'Uploading now' :
+                          photo.syncStatus === PHOTO_SYNC.FAILED ? 'Upload failed - will retry' :
+                          'Saved on this device, waiting to upload'
+                        }
+                      >
+                        {photo.syncStatus === PHOTO_SYNC.SYNCED ? '✓ Synced' :
+                         photo.syncStatus === PHOTO_SYNC.UPLOADING ? '⟳ Uploading' :
+                         photo.syncStatus === PHOTO_SYNC.FAILED ? '⚠ Retry' :
+                         '● Saved'}
+                      </span>
                       
                       <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
                         <Maximize2 className="w-4 h-4 text-white" />
@@ -493,7 +546,7 @@ function AssetItemCard({
               <button
                 type="button"
                 disabled={isProcessingPhoto}
-                onClick={() => cameraInputRef.current?.click()}
+                onClick={() => (Capacitor.isNativePlatform() ? handleNativeCamera() : cameraInputRef.current?.click())}
                 className="py-2.5 px-3 rounded-xl bg-sky-600 hover:bg-sky-500 active:scale-[0.98] text-white font-bold text-xs flex items-center justify-center space-x-1.5 shadow-md transition-all"
               >
                 <Camera className="w-4 h-4" />
@@ -509,7 +562,7 @@ function AssetItemCard({
               <button
                 type="button"
                 disabled={isProcessingPhoto}
-                onClick={() => fileInputRef.current?.click()}
+                onClick={() => (Capacitor.isNativePlatform() ? handleNativeGallery() : fileInputRef.current?.click())}
                 className="py-2.5 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 active:scale-[0.98] text-white font-bold text-xs flex items-center justify-center space-x-1.5 shadow-md transition-all"
               >
                 <ImageIcon className="w-4 h-4" />

@@ -56,7 +56,10 @@ export function subscribeToSurveyChanges(onExternalChange) {
   ch.addEventListener('message', handler);
   return () => ch.removeEventListener('message', handler);
 }
-const DB_VERSION = 1;
+// Bumped to 2 for the sync_queue store. Every opener of this database must
+// agree on the version, or the one asking for the lower number fails with a
+// VersionError and the app cannot read its own data.
+const DB_VERSION = 2;
 const STORE_SURVEYS = 'surveys';
 const STORE_SETTINGS = 'settings';
 
@@ -71,6 +74,13 @@ function openDB() {
       }
       if (!db.objectStoreNames.contains(STORE_SETTINGS)) {
         db.createObjectStore(STORE_SETTINGS, { keyPath: 'key' });
+      }
+      // Created here as well as in syncQueue.js: whichever module opens the
+      // database first runs the upgrade, so both must know the full schema.
+      if (!db.objectStoreNames.contains('sync_queue')) {
+        const q = db.createObjectStore('sync_queue', { keyPath: 'id' });
+        q.createIndex('status', 'status');
+        q.createIndex('nextAttemptAt', 'nextAttemptAt');
       }
     };
 

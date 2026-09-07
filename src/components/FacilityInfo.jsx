@@ -8,10 +8,12 @@ import {
   Compass,
   CheckCircle2
 } from 'lucide-react';
+import { captureLocation, GPS_STATUS } from '../utils/geolocation';
 
 export default function FacilityInfo({ facility = {}, onChange, onNext }) {
   const [isGettingGps, setIsGettingGps] = useState(false);
   const [gpsError, setGpsError] = useState('');
+  const [gpsStatus, setGpsStatus] = useState(GPS_STATUS.IDLE);
 
   const updateField = (field, value) => {
     onChange({
@@ -42,39 +44,39 @@ export default function FacilityInfo({ facility = {}, onChange, onNext }) {
     });
   };
 
-  // Trigger Phone GPS geolocation
-  const handleGetDeviceGPS = () => {
-    if (!navigator.geolocation) {
-      setGpsError('Geolocation is not supported by your browser.');
-      return;
-    }
-
+  /**
+   * Reads the device GPS. Uses the native location service via the plugin,
+   * which is why this now works on Android at all -- the WebView call was
+   * failing silently because the app never declared location permissions.
+   * Never throws: a denial or a missing fix reports a message and leaves the
+   * inspection usable.
+   */
+  const handleGetDeviceGPS = async () => {
     setIsGettingGps(true);
     setGpsError('');
 
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        const lat = position.coords.latitude.toFixed(6);
-        const lng = position.coords.longitude.toFixed(6);
-        const mapsUrl = `https://www.google.com/maps?q=${lat},${lng}`;
+    const result = await captureLocation();
+    setIsGettingGps(false);
+    setGpsStatus(result.status);
 
-        onChange({
-          ...facility,
-          googleLocation: {
-            ...(facility.googleLocation || {}),
-            latitude: lat,
-            longitude: lng,
-            mapsUrl: mapsUrl
-          }
-        });
-        setIsGettingGps(false);
-      },
-      (err) => {
-        setIsGettingGps(false);
-        setGpsError('Could not retrieve GPS: ' + (err.message || 'Permission denied'));
-      },
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
-    );
+    if (!result.ok) {
+      setGpsError(result.message);
+      return;
+    }
+
+    const loc = result.location;
+    onChange({
+      ...facility,
+      googleLocation: {
+        ...(facility.googleLocation || {}),
+        latitude: loc.latitude,
+        longitude: loc.longitude,
+        accuracy: loc.accuracy,
+        capturedAt: loc.capturedAt,
+        source: loc.source,
+        mapsUrl: loc.mapsUrl
+      }
+    });
   };
 
   const googleLoc = facility.googleLocation || {};
@@ -132,18 +134,6 @@ export default function FacilityInfo({ facility = {}, onChange, onNext }) {
 
           <div>
             <label className="block text-xs font-semibold text-slate-700 mb-1">
-              Facility / Asset Reference Code
-            </label>
-            <input
-              type="text"
-              value={facility.buildingCode || ''}
-              onChange={(e) => updateField('buildingCode', e.target.value)}
-              className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-sky-500 text-sm"
-            />
-          </div>
-
-          <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">
               Gross Internal Area (GIA)
             </label>
             <input
@@ -176,10 +166,56 @@ export default function FacilityInfo({ facility = {}, onChange, onNext }) {
           </button>
         </div>
 
+        {/* Location status. Always says what happened -- captured, refused, or
+            no fix -- rather than failing quietly the way the old call did. */}
         {gpsError && (
-          <p className="text-xs text-rose-600 font-medium bg-rose-50 p-2.5 rounded-xl border border-rose-200">
-            {gpsError}
-          </p>
+          <div className="rounded-xl border border-amber-300 bg-amber-50 p-3 space-y-2">
+            <p className="text-xs font-semibold text-amber-900 flex items-center gap-1.5">
+              <span aria-hidden="true">⚠</span>
+              {gpsStatus === GPS_STATUS.DENIED ? 'Location permission denied' :
+               gpsStatus === GPS_STATUS.TIMEOUT ? 'No GPS fix yet' : 'Location unavailable'}
+            </p>
+            <p className="text-xs text-amber-800">{gpsError}</p>
+            <button
+              type="button"
+              onClick={handleGetDeviceGPS}
+              disabled={isGettingGps}
+              className="px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold disabled:opacity-60"
+            >
+              {isGettingGps ? 'Retrying...' : 'Retry'}
+            </button>
+            <p className="text-[11px] text-amber-700">
+              You can carry on with the inspection without it.
+            </p>
+          </div>
+        )}
+
+        {!gpsError && googleLoc.latitude && (
+          <div className="rounded-xl border border-emerald-300 bg-emerald-50 p-3">
+            <p className="text-xs font-bold text-emerald-900 flex items-center gap-1.5 mb-2">
+              <span aria-hidden="true">✓</span> Location captured
+            </p>
+            <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-emerald-900">
+              <dt className="text-emerald-700">Latitude</dt>
+              <dd className="font-mono font-semibold text-right">{googleLoc.latitude}</dd>
+              <dt className="text-emerald-700">Longitude</dt>
+              <dd className="font-mono font-semibold text-right">{googleLoc.longitude}</dd>
+              {googleLoc.accuracy != null && (
+                <>
+                  <dt className="text-emerald-700">Accuracy</dt>
+                  <dd className="font-mono font-semibold text-right">{googleLoc.accuracy} m</dd>
+                </>
+              )}
+              {googleLoc.capturedAt && (
+                <>
+                  <dt className="text-emerald-700">Captured</dt>
+                  <dd className="font-semibold text-right">
+                    {new Date(googleLoc.capturedAt).toLocaleString()}
+                  </dd>
+                </>
+              )}
+            </dl>
+          </div>
         )}
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

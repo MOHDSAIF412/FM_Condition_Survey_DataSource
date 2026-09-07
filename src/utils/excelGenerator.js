@@ -297,7 +297,6 @@ export async function generateSurveyExcel(survey, selectedFacility = 'ALL') {
   const metaFields = [
     ['Facility / Complex Name', facility.facilityName || facility.buildingName || 'N/A'],
     ['Primary Building Title', facility.buildingName || 'N/A'],
-    ['Asset / Building Reference Code', facility.buildingCode || 'N/A'],
     ['Site Physical Address', facility.address || 'N/A'],
     ['Google Location Address', siteAddress],
     ['Google GPS Coordinates', gpsCoords],

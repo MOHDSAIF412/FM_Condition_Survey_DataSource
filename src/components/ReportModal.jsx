@@ -251,11 +251,7 @@ export default function ReportModal({ survey = {}, onClose }) {
             )}
           </div>
 
-          <div className="mt-6 pt-6 border-t border-slate-800 grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs">
-            <div>
-              <span className="text-slate-400 text-[11px] uppercase font-semibold block">Asset Code</span>
-              <span className="font-semibold text-white">{facility.buildingCode || 'N/A'}</span>
-            </div>
+          <div className="mt-6 pt-6 border-t border-slate-800 grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
             <div>
               <span className="text-slate-400 text-[11px] uppercase font-semibold block">Inspection Date</span>
               <span className="font-semibold text-white">{facility.surveyDate || new Date().toLocaleDateString()}</span>
