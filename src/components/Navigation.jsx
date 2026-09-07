@@ -50,7 +50,10 @@ export default function Navigation({ activeTab, setActiveTab, itemsCount = 0, ur
       </div>
 
       {/* Mobile Sticky Bottom Navigation */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-slate-200 shadow-lg px-2 py-1 safe-area-pb">
+      {/* pt-1, not py-1: a `pb` utility sits in Tailwind's utilities layer and
+          overrides .safe-area-pb from the components layer, which silently
+          cancelled the safe-area padding and left the tabs under the system bar. */}
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-slate-200 shadow-lg px-2 pt-1 safe-area-pb">
         <div className="grid grid-cols-5 gap-1">
           {navItems.map((tab) => {
             const Icon = tab.icon;

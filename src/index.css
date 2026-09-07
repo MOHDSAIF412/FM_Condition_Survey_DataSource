@@ -85,10 +85,30 @@
   }
 }
 
-/* `safe-area-pb` was used on the mobile bottom nav but never defined, so the
-   nav sat under the home indicator on notched phones despite viewport-fit=cover. */
+/* Safe areas.
+ *
+ * `env(safe-area-inset-*)` is NOT reliable on Android: WebView below version 140
+ * returns 0 for it (chromium issue 40699457). With targetSdk 36 the system also
+ * forces edge-to-edge, so the app is always drawn behind the status bar and the
+ * navigation bar -- the header ended up under the clock and the bottom tabs
+ * under the Android back/home buttons, which made them mistap.
+ *
+ * Capacitor's SystemBars plugin works around it by measuring the real window
+ * insets natively and setting them as these custom properties. So read the
+ * variable first and keep env() only as the fallback for iOS and the browser,
+ * where the variable does not exist.
+ */
 @layer components {
+  .safe-area-pt {
+    padding-top: var(--safe-area-inset-top, env(safe-area-inset-top, 0px));
+  }
+
   .safe-area-pb {
-    padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 0.25rem);
+    padding-bottom: calc(var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)) + 0.25rem);
+  }
+
+  /* Keeps content clear of the fixed bottom nav *and* the system bar under it. */
+  .safe-area-content-pb {
+    padding-bottom: calc(var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)) + 5rem);
   }
 }

@@ -41,7 +41,7 @@ export default function Header({
   const [showMenu, setShowMenu] = useState(false);
 
   return (
-    <header className="sticky top-0 z-30 bg-ocs-800 border-b border-ocs-600/60 text-white shadow-raised">
+    <header className="sticky top-0 z-30 bg-ocs-800 border-b border-ocs-600/60 text-white shadow-raised safe-area-pt">
       <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
 
         {/* Left: Brand and App Name */}

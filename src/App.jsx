@@ -731,7 +731,7 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
           at 50 assets, which is what made switching feel slow. Keeping them
           mounted makes a switch a style change instead of a rebuild, and it
           also preserves each tab's scroll position and in-progress input. */}
-      <main className="flex-1 max-w-6xl w-full mx-auto px-3 sm:px-6 pt-4 sm:pt-6">
+      <main className="flex-1 max-w-6xl w-full mx-auto px-3 sm:px-6 pt-4 sm:pt-6 safe-area-content-pb md:pb-8">
         <TabPanel active={activeTab === 'facility'}>
           <FacilityInfo
             facility={survey?.facility || {}}
