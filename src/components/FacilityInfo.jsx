@@ -291,17 +291,6 @@ export default function FacilityInfo({ facility = {}, onChange, onNext }) {
             </div>
           )}
 
-          <div className="sm:col-span-2">
-            <label className="block text-xs font-semibold text-slate-700 mb-1">
-              Google Location Description & Access Landmarks
-            </label>
-            <textarea
-              rows={2}
-              value={googleLoc.description || ''}
-              onChange={(e) => updateGoogleLocation('description', e.target.value)}
-              className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-sky-500 text-sm"
-            />
-          </div>
         </div>
       </div>
 

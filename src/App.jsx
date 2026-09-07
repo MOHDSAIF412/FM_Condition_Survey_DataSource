@@ -105,22 +105,13 @@ export default function App() {
         setSyncState('offline');
         return;
       }
-      // Back online: flush whatever is waiting.
+      // Back online: flush whatever was recorded with no signal.
       if (isCloudConfigured && surveyRef.current) {
         setSyncState('syncing');
-        pushSurvey(surveyRef.current)
-          .then((res) => {
-            if (res && res.pushed) {
-              applyPhotoSyncResult(res);
-              setSyncState('synced');
-            } else {
-              setSyncState('idle');
-            }
-          })
-          .catch((err) => {
-            console.info('Reconnect sync deferred:', err.message);
-            setSyncState('offline');
-          });
+        pushAndSettle().catch((err) => {
+          console.info('Reconnect sync deferred:', err.message);
+          setSyncState('offline');
+        });
       }
     });
   }, []);
@@ -147,6 +138,62 @@ export default function App() {
       skipCloudPushRef.current = true; // status only, nothing to send back up
       return next;
     });
+  }
+
+  /**
+   * Pushes the current survey and settles everything that must follow a push.
+   *
+   * Both callers -- the debounced autosave and the back-online handler -- have
+   * to run this. They used to be written separately, and the reconnect path
+   * pushed the data but skipped the bookkeeping: `hasUnpushedEditsRef` stayed
+   * true (which blocks incoming realtime pulls, so the device stopped seeing
+   * other devices' work), the local copy stayed flagged `pendingSync`,
+   * tombstones were replayed, and `cloudRevision` went stale so the next push
+   * looked like a conflict. Sharing one implementation is what keeps a
+   * "worked offline, then reconnected" survey behaving like any other.
+   */
+  async function pushAndSettle() {
+    const pushResult = await pushSurvey(surveyRef.current);
+    applyPhotoSyncResult(pushResult);
+
+    // The server was ahead of us, so the push was refused rather than
+    // allowed to overwrite newer work. Take the server's copy instead.
+    if (pushResult && pushResult.conflict) {
+      const current = surveyRef.current;
+      const remote = await pullSurvey(current.id, collectKnownPhotos(current));
+      if (remote && Array.isArray(remote.items)) {
+        markAsExternalChange();
+        setSurvey(remote);
+        await saveSurveyOffline(remote, { pendingSync: false });
+      }
+      setSyncState('synced');
+      return pushResult;
+    }
+
+    if (pushResult && pushResult.pushed) {
+      hasUnpushedEditsRef.current = false;
+
+      // Tombstones have been applied server-side; drop them so they are not
+      // replayed forever.
+      const cur = surveyRef.current;
+      if ((cur.deletedItemIds || []).length || (cur.deletedPhotoIds || []).length) {
+        surveyRef.current = { ...cur, deletedItemIds: [], deletedPhotoIds: [] };
+      }
+    }
+
+    // Remember the server revision we now sit on, so the next push can prove
+    // it is building on current server state rather than guessing from a
+    // local counter.
+    if (pushResult && pushResult.cloudRevision !== undefined) {
+      surveyRef.current = { ...surveyRef.current, cloudRevision: pushResult.cloudRevision };
+      skipLocalSaveRef.current = true;
+      skipCloudPushRef.current = true;
+      setSurvey(surveyRef.current);
+    }
+
+    await markSurveySynced(surveyRef.current.id);
+    setSyncState('synced');
+    return pushResult;
   }
 
   // Load from IndexedDB on initial launch
@@ -292,46 +339,7 @@ export default function App() {
       try {
         if (!isOnline()) { setSyncState('offline'); return; }
         setSyncState('syncing');
-        const pushResult = await pushSurvey(surveyRef.current);
-        applyPhotoSyncResult(pushResult);
-
-        // The server was ahead of us, so the push was refused rather than
-        // allowed to overwrite newer work. Take the server's copy instead.
-        if (pushResult && pushResult.conflict) {
-          const current = surveyRef.current;
-          const remote = await pullSurvey(current.id, collectKnownPhotos(current));
-          if (remote && Array.isArray(remote.items)) {
-            markAsExternalChange();
-            setSurvey(remote);
-            await saveSurveyOffline(remote, { pendingSync: false });
-          }
-          setSyncState('synced');
-          return;
-        }
-
-        // Remember the server revision we now sit on, so the next push can
-        // prove it is building on current server state rather than guessing
-        // from a local counter.
-        if (pushResult && pushResult.pushed) {
-          hasUnpushedEditsRef.current = false;
-        }
-
-        // Tombstones have been applied server-side; drop them so they are not
-        // replayed forever.
-        if (pushResult && pushResult.pushed) {
-          const cur = surveyRef.current;
-          if ((cur.deletedItemIds || []).length || (cur.deletedPhotoIds || []).length) {
-            surveyRef.current = { ...cur, deletedItemIds: [], deletedPhotoIds: [] };
-          }
-        }
-        if (pushResult && pushResult.cloudRevision !== undefined) {
-          surveyRef.current = { ...surveyRef.current, cloudRevision: pushResult.cloudRevision };
-          skipLocalSaveRef.current = true;
-          skipCloudPushRef.current = true;
-          setSurvey(surveyRef.current);
-        }
-        await markSurveySynced(surveyRef.current.id);
-        setSyncState('synced');
+        await pushAndSettle();
       } catch (err) {
         // Offline is the normal case on site, not an error worth shouting about.
         console.info('Cloud push deferred:', err.message);

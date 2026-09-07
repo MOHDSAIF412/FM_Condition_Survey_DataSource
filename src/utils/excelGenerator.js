@@ -301,7 +301,6 @@ export async function generateSurveyExcel(survey, selectedFacility = 'ALL') {
     ['Google Location Address', siteAddress],
     ['Google GPS Coordinates', gpsCoords],
     ['Google Maps Link', mapsUrl ? { text: 'Open Google Maps Pin', hyperlink: mapsUrl } : 'N/A'],
-    ['Access Landmarks / Gate', googleLoc.description || 'N/A'],
     ['Gross Internal Area (GIA)', facility.grossInternalArea || 'N/A'],
     ['Building Age / Year Built', facility.buildingAge || 'N/A'],
     ['Building Levels & Floors', facility.floorsCount || 'N/A'],

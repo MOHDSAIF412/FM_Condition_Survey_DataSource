@@ -1,36 +1,62 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useCallback } from 'react';
 import { PenTool, RotateCcw, Check, User, Calendar, ShieldCheck } from 'lucide-react';
 
 function CanvasSignaturePad({ value, onSave, label }) {
   const canvasRef = useRef(null);
   const isDrawing = useRef(false);
+  const sizeRef = useRef({ w: 0, h: 0 });
 
-  useEffect(() => {
+  /**
+   * Sizes the drawing surface, and repaints an existing signature into it.
+   *
+   * ROOT CAUSE of "the signature does not work": tab panels stay mounted and
+   * are hidden with `display:none` (a deliberate performance decision), so the
+   * Sign-Off panel exists from app start but measures **0x0** until its tab is
+   * opened. Sizing the canvas once on mount therefore created a 0x0 drawing
+   * surface -- strokes had nowhere to land and `toDataURL()` returned a blank
+   * image, so nothing was ever saved.
+   *
+   * The ResizeObserver below runs this again the moment the panel becomes
+   * visible, which is the first time the element has a real size. The size
+   * guard means a repeat call cannot wipe a signature in progress, and
+   * `setTransform` is absolute so the DPR scale cannot compound.
+   */
+  const setupCanvas = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const ctx = canvas.getContext('2d');
 
-    // Set high DPR for crisp lines
-    const ratio = window.devicePixelRatio || 1;
     const rect = canvas.getBoundingClientRect();
+    if (!rect.width || !rect.height) return;              // still hidden
+    if (sizeRef.current.w === rect.width && sizeRef.current.h === rect.height) return;
+
+    const ratio = window.devicePixelRatio || 1;
+    sizeRef.current = { w: rect.width, h: rect.height };
     canvas.width = rect.width * ratio;
     canvas.height = rect.height * ratio;
-    ctx.scale(ratio, ratio);
 
+    const ctx = canvas.getContext('2d');
+    ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
     ctx.strokeStyle = '#0f172a';
     ctx.lineWidth = 2.5;
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
 
-    // If there's an existing signature dataUrl, draw it
     if (value) {
       const img = new Image();
-      img.onload = () => {
-        ctx.drawImage(img, 0, 0, rect.width, rect.height);
-      };
+      img.onload = () => ctx.drawImage(img, 0, 0, rect.width, rect.height);
       img.src = value;
     }
-  }, []);
+  }, [value]);
+
+  useEffect(() => {
+    setupCanvas();
+
+    const canvas = canvasRef.current;
+    if (!canvas || typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(setupCanvas);
+    observer.observe(canvas);
+    return () => observer.disconnect();
+  }, [setupCanvas]);
 
   const getCoordinates = (e) => {
     const canvas = canvasRef.current;
@@ -49,6 +75,15 @@ function CanvasSignaturePad({ value, onSave, label }) {
 
   const startDrawing = (e) => {
     e.preventDefault();
+
+    // Size the surface here too, not only from the ResizeObserver. The pad
+    // lives in a panel that is `display:none` until its tab is opened, and an
+    // observer on a box-less element is not reliably delivered when the box
+    // appears -- measured: the canvas was still at its 300x150 default after
+    // the panel became visible. By pointerdown the element definitely has a
+    // real size, so this is the one moment sizing cannot be missed.
+    setupCanvas();
+
     isDrawing.current = true;
     const canvas = canvasRef.current;
     const ctx = canvas.getContext('2d');
@@ -71,15 +106,17 @@ function CanvasSignaturePad({ value, onSave, label }) {
     if (!isDrawing.current) return;
     isDrawing.current = false;
     const canvas = canvasRef.current;
-    const dataUrl = canvas.toDataURL('image/png');
-    onSave(dataUrl);
+    // A zero-sized surface yields a blank image; saving it would overwrite a
+    // real signature with nothing.
+    if (!canvas || !canvas.width || !canvas.height) return;
+    onSave(canvas.toDataURL('image/png'));
   };
 
   const clearCanvas = () => {
     const canvas = canvasRef.current;
+    if (!canvas) return;
     const ctx = canvas.getContext('2d');
-    const ratio = window.devicePixelRatio || 1;
-    ctx.clearRect(0, 0, canvas.width / ratio, canvas.height / ratio);
+    ctx.clearRect(0, 0, sizeRef.current.w || canvas.width, sizeRef.current.h || canvas.height);
     onSave('');
   };
 
