@@ -47,6 +47,15 @@ function classify(err) {
   const code = err && err.code;
   const msg = String((err && err.message) || '').toLowerCase();
 
+  // The native plugin is missing from the installed app. Over-the-air updates
+  // only replace the web bundle, so a phone running an APK built before the
+  // location plugin was added will never get GPS no matter how many updates it
+  // downloads -- it needs the APK reinstalled. Say so, because the raw plugin
+  // error ("not implemented on android") reads like a bug in the survey.
+  if (msg.includes('not implemented') || msg.includes('unimplemented') || msg.includes('plugin is not')) {
+    return { status: GPS_STATUS.UNAVAILABLE,
+      message: 'This installed app version has no location support. Reinstall the latest APK - an over-the-air update cannot add it.' };
+  }
   if (code === 1 || msg.includes('denied') || msg.includes('permission')) {
     return { status: GPS_STATUS.DENIED,
       message: 'Location permission denied. Enable location for this app in Settings, then retry.' };

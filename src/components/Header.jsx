@@ -57,8 +57,8 @@ export default function Header({
             className="h-7 w-auto shrink-0 pr-3 mr-0.5 border-r border-white/15"
           />
           <div className="min-w-0">
-            <div className="flex items-center space-x-2">
-              <h1 className="text-base font-bold tracking-tight text-white flex items-center gap-1.5">
+            <div className="flex items-center space-x-2 min-w-0">
+              <h1 className="text-sm sm:text-base font-bold tracking-tight text-white truncate">
                 FM Condition Survey
               </h1>
               <span className={`hidden sm:inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold border ${sync.cls}`}>
@@ -76,14 +76,15 @@ export default function Header({
         </div>
 
         {/* Right: Actions */}
-        <div className="flex items-center space-x-2">
+        <div className="flex items-center space-x-2 shrink-0">
           {/* Quick Generate Report Button */}
           <button
             onClick={onOpenReport}
             className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-flame-500 hover:bg-flame-400 active:bg-flame-600 text-white font-semibold text-xs sm:text-sm shadow-raised transition-[background-color,transform] duration-150 ease-emphasis active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flame-300 focus-visible:ring-offset-2 focus-visible:ring-offset-ocs-800"
           >
-            <FileText className="w-4 h-4" />
-            <span>Reports (PDF/Excel)</span>
+            <FileText className="w-4 h-4 shrink-0" />
+            <span className="sm:hidden">Reports</span>
+            <span className="hidden sm:inline">Reports (PDF/Excel)</span>
           </button>
 
           {/* More Actions Dropdown */}

@@ -72,6 +72,21 @@ async function compressBase64(base64, mime = 'image/jpeg') {
 }
 
 /**
+ * Turns a native plugin failure into something a surveyor can act on.
+ *
+ * "not implemented on android" means the camera plugin is absent from the
+ * installed APK. Over-the-air updates only swap the web bundle, so this can
+ * only be fixed by reinstalling the app -- worth saying plainly, since the raw
+ * message reads like the survey itself is broken.
+ */
+function describeNativeFailure(msg) {
+  if (/not implemented|unimplemented|plugin is not/i.test(msg)) {
+    return 'This installed app version has no camera support. Reinstall the latest APK - an over-the-air update cannot add it.';
+  }
+  return msg;
+}
+
+/**
  * Opens the camera. Native only.
  * Resolves { ok, photo } or { ok:false, cancelled|message } - never throws, so
  * a refused permission cannot interrupt the inspection.
@@ -107,7 +122,7 @@ export async function captureFromCamera() {
   } catch (err) {
     const msg = String(err?.message || err);
     if (/cancel/i.test(msg)) return { ok: false, cancelled: true };
-    return { ok: false, message: msg };
+    return { ok: false, message: describeNativeFailure(msg) };
   }
 }
 
@@ -136,7 +151,7 @@ export async function pickFromGallery() {
   } catch (err) {
     const msg = String(err?.message || err);
     if (/cancel/i.test(msg)) return { ok: false, cancelled: true };
-    return { ok: false, message: msg };
+    return { ok: false, message: describeNativeFailure(msg) };
   }
 }
 
