@@ -212,7 +212,7 @@ export async function generateSurveyPDF(survey, selectedFacility = 'ALL') {
   printMeta('Facility Mgr:', facility.facilityManager, col2X, rowY);
   rowY += 8;
   printMeta('Weather / Temp:', facility.weatherCondition, col1X, rowY);
-  printMeta('Total Snags:', `${stats.total} Assets`, col2X, rowY);
+  printMeta('Total Snags:', `${stats.total} Snags`, col2X, rowY);
 
   // Executive KPI summary cards
   curY = metaBoxY + 54;
@@ -239,7 +239,7 @@ export async function generateSurveyPDF(survey, selectedFacility = 'ALL') {
     doc.text(sub, x + 4, y + 22);
   };
 
-  drawKpiCard(20, curY, 'AUDITED ASSETS', stats.total, 'Snag Elements', [40, 65, 124]);
+  drawKpiCard(20, curY, 'AUDITED SNAGS', stats.total, 'Snag Elements', [40, 65, 124]);
   drawKpiCard(20 + kpiWidth + 3, curY, 'ATTACHED PHOTOS', stats.totalPhotos, 'Defect Evidence', [2, 132, 199]);
   drawKpiCard(20 + (kpiWidth + 3) * 2, curY, 'URGENT HAZARDS', stats.priorityCounts[1], 'Priority 1 Life Safety', [220, 38, 38]);
   drawKpiCard(20 + (kpiWidth + 3) * 3, curY, 'REMEDIAL CAPEX', `$${stats.totalCost.toLocaleString()}`, 'Estimated Budget', [40, 65, 124]);
@@ -405,11 +405,11 @@ export async function generateSurveyPDF(survey, selectedFacility = 'ALL') {
 
 
   // ==========================================
-  // PAGE 3: DETAILED ASSET AUDIT SCHEDULE (FACILITY-WISE)
+  // PAGE 3: DETAILED SNAG AUDIT SCHEDULE (FACILITY-WISE)
   // ==========================================
   doc.addPage();
   const scheduleTitle = selectedFacility === 'ALL'
-    ? 'DETAILED ASSET AUDIT SCHEDULE'
+    ? 'DETAILED SNAG AUDIT SCHEDULE'
     : `AUDIT SCHEDULE — ${selectedFacility.toUpperCase()}`;
   const assetSchedulePage = doc.internal.getNumberOfPages();
   renderHeader(scheduleTitle);
@@ -429,7 +429,7 @@ export async function generateSurveyPDF(survey, selectedFacility = 'ALL') {
 
   doc.autoTable({
     startY: 26,
-    head: [['#', 'Asset / Component', 'Location / Room', 'Dept', 'Priority', 'Observations & Defects', 'Est. Cost']],
+    head: [['#', 'Snag / Component', 'Location / Room', 'Dept', 'Priority', 'Observations & Defects', 'Est. Cost']],
     body: assetTableRows,
     theme: 'grid',
     headStyles: { fillColor: [12, 74, 110], textColor: [255, 255, 255], fontSize: 8, fontStyle: 'bold' },

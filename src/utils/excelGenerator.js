@@ -352,7 +352,7 @@ export async function generateSurveyExcel(survey, selectedFacility = 'ALL') {
   wsExec.getCell('D5').font = { name: 'Arial', size: 11, bold: true, color: { argb: primaryNavy } };
 
   const kpis = [
-    { label: 'TOTAL ASSETS AUDITED', val: stats.total, color: 'FF0F172A', sub: 'Cataloged building elements' },
+    { label: 'TOTAL SNAGS AUDITED', val: stats.total, color: 'FF0F172A', sub: 'Cataloged building elements' },
     { label: 'TOTAL DEFECT PHOTOS', val: stats.totalPhotos, color: 'FF0284C7', sub: 'Attached photographic evidence' },
     { label: 'URGENT HAZARDS (P1)', val: stats.priorityCounts[1], color: 'FFDC2626', sub: 'Immediate life safety' },
     { label: 'REMEDIAL CAPEX BUDGET', val: `$${stats.totalCost.toLocaleString()}`, color: 'FF0F172A', sub: 'Estimated remediation expenditure' }
@@ -493,7 +493,7 @@ export async function generateSurveyExcel(survey, selectedFacility = 'ALL') {
   // A: Snag #
   // B: Evidence Photo
   // C: Facility / Location
-  // D: Asset / Component Name
+  // D: Snag / Component Name
   // E: Department / Trade
   // F: Priority
   // G: Observed Defects & Notes
@@ -501,7 +501,7 @@ export async function generateSurveyExcel(survey, selectedFacility = 'ALL') {
   // I: Est. Cost ($)
   // ==========================================
 
-  const wsSnags = workbook.addWorksheet('Snag & Asset Register', {
+  const wsSnags = workbook.addWorksheet('Snag Register', {
     views: [{ showGridLines: true }]
   });
 
@@ -514,7 +514,7 @@ export async function generateSurveyExcel(survey, selectedFacility = 'ALL') {
     { width: 8 },  // A: Snag #
     { width: THUMB_COL_WIDTH }, // B: Evidence Photo Thumbnail
     { width: 32 }, // C: Facility / Location
-    { width: 34 }, // D: Asset / Component Name
+    { width: 34 }, // D: Snag / Component Name
     { width: 24 }, // E: Department / Trade
     { width: 14 }, // F: Priority
     { width: 48 }, // G: Observed Defects & Notes
@@ -526,8 +526,8 @@ export async function generateSurveyExcel(survey, selectedFacility = 'ALL') {
   wsSnags.mergeCells('A1:I1');
   const snagBanner = wsSnags.getCell('A1');
   snagBanner.value = selectedFacility === 'ALL'
-    ? 'FACILITY-WISE ASSET CONDITION & DEFECT SCHEDULE'
-    : `ASSET DEFECT SCHEDULE — ${selectedFacility.toUpperCase()}`;
+    ? 'FACILITY-WISE SNAG CONDITION & DEFECT SCHEDULE'
+    : `SNAG DEFECT SCHEDULE — ${selectedFacility.toUpperCase()}`;
   snagBanner.font = { name: 'Arial', size: 12, bold: true, color: { argb: 'FFFFFFFF' } };
   snagBanner.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: primaryNavy } };
   snagBanner.alignment = { horizontal: 'center', vertical: 'middle' };
@@ -537,8 +537,8 @@ export async function generateSurveyExcel(survey, selectedFacility = 'ALL') {
   const snagHeaders = [
     'Snag #',
     'Evidence Photo',
-    'Asset Location / Room',
-    'Asset / Component Name',
+    'Snag Location / Room',
+    'Snag / Component Name',
     'Department / Trade',
     'Priority',
     'Observed Defects & Notes',
@@ -564,7 +564,7 @@ export async function generateSurveyExcel(survey, selectedFacility = 'ALL') {
   // Facility Section Header Row
   wsSnags.mergeCells(`A${snagRowIdx}:I${snagRowIdx}`);
   const facBannerCell = wsSnags.getCell(`A${snagRowIdx}`);
-  facBannerCell.value = `🏢 FACILITY: ${facName.toUpperCase()} (${itemsToReport.length} Audited Assets  •  $${stats.totalCost.toLocaleString()} Total Remedial CapEx)`;
+  facBannerCell.value = `🏢 FACILITY: ${facName.toUpperCase()} (${itemsToReport.length} Audited Snags  •  $${stats.totalCost.toLocaleString()} Total Remedial CapEx)`;
   facBannerCell.font = { name: 'Arial', size: 10, bold: true, color: { argb: 'FFFFFFFF' } };
   facBannerCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: facilityHeaderBg } };
   facBannerCell.alignment = { vertical: 'middle', indent: 1 };
@@ -725,7 +725,7 @@ export async function generateSurveyExcel(survey, selectedFacility = 'ALL') {
         wsPhotos.getCell(`D${currentRow}`).value = `${item.assetName} (Photo ${p + 1} of ${totalPhotos})`;
         wsPhotos.getCell(`D${currentRow}`).font = { name: 'Arial', size: 10, bold: true, color: { argb: 'FF0F172A' } };
 
-        wsPhotos.getCell(`C${currentRow + 1}`).value = 'Asset Location / Room:';
+        wsPhotos.getCell(`C${currentRow + 1}`).value = 'Snag Location / Room:';
         wsPhotos.getCell(`C${currentRow + 1}`).font = { name: 'Arial', size: 9, bold: true, color: { argb: 'FF64748B' } };
         wsPhotos.getCell(`D${currentRow + 1}`).value = item.location || 'General Site Area';
         wsPhotos.getCell(`D${currentRow + 1}`).font = { name: 'Arial', size: 9, bold: true, color: { argb: 'FF0284C7' } };

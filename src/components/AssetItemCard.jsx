@@ -215,7 +215,7 @@ function AssetItemCard({
               handleDelete();
             }}
             className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
-            title="Delete this asset"
+            title="Delete this snag"
           >
             <Trash2 className="w-4 h-4 text-rose-500" />
           </button>
@@ -237,7 +237,7 @@ function AssetItemCard({
           {/* Asset Name */}
           <div>
             <label className="block text-[12px] font-bold uppercase text-slate-600 mb-1">
-              Asset / Component / Snag Name *
+              Snag / Component Name *
             </label>
             <input
               type="text"
@@ -248,12 +248,12 @@ function AssetItemCard({
             />
           </div>
 
-          {/* Asset Location / Room / Area */}
+          {/* Snag Location / Room / Area */}
           <div>
             <div className="flex items-center justify-between mb-1">
               <label className="block text-[12px] font-bold uppercase text-slate-600 flex items-center gap-1.5">
                 <MapPin className="w-3.5 h-3.5 text-sky-600" />
-                Asset Location / Room / Area *
+                Snag Location / Room / Area *
               </label>
               {recentLocations && recentLocations.length > 0 && (
                 <span className="text-[11px] text-slate-400">23 Facilities Available</span>
@@ -575,10 +575,10 @@ function AssetItemCard({
               type="button"
               onClick={handleDelete}
               className="text-xs font-semibold flex items-center space-x-1.5 py-2 px-3 rounded-xl text-rose-600 bg-rose-50 hover:bg-rose-100 transition-colors cursor-pointer"
-              title="Delete this asset"
+              title="Delete this snag"
             >
               <Trash2 className="w-4 h-4 text-rose-500" />
-              <span>Delete Asset</span>
+              <span>Delete Snag</span>
             </button>
 
             {/* Next Asset Button (inherits location) */}
@@ -586,10 +586,10 @@ function AssetItemCard({
               type="button"
               onClick={() => onAddNextAsset(item.location, item.department)}
               className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs sm:text-sm shadow-md flex items-center space-x-1.5 transition-all active:scale-95 cursor-pointer"
-              title="Add next asset item inheriting this location"
+              title="Add next snag inheriting this location"
             >
               <Plus className="w-4 h-4" />
-              <span>+ Next Asset {item.location ? `(Same Room: ${item.location})` : ''}</span>
+              <span>+ Next Snag {item.location ? `(Same Room: ${item.location})` : ''}</span>
               <ArrowRight className="w-3.5 h-3.5" />
             </button>
           </div>

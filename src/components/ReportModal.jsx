@@ -176,12 +176,12 @@ export default function ReportModal({ survey = {}, onClose }) {
             onChange={(e) => setSelectedFacility(e.target.value)}
             className="px-3 py-1.5 rounded-xl bg-slate-800 border border-slate-700 text-xs font-bold text-sky-300 focus:outline-none focus:ring-2 focus:ring-sky-500 cursor-pointer"
           >
-            <option value="ALL">All Facilities ({allItems.length} Assets)</option>
+            <option value="ALL">All Facilities ({allItems.length} Snags)</option>
             {facilityLocations.map((loc) => {
               const count = allItems.filter((i) => (i.location || 'General') === loc).length;
               return (
                 <option key={loc} value={loc}>
-                  {loc} ({count} Assets)
+                  {loc} ({count} Snags)
                 </option>
               );
             })}
@@ -278,7 +278,7 @@ export default function ReportModal({ survey = {}, onClose }) {
 
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm text-center">
-              <span className="text-[11px] font-bold text-slate-400 uppercase">Assets Audited</span>
+              <span className="text-[11px] font-bold text-slate-400 uppercase">Snags Audited</span>
               <div className="text-3xl font-extrabold text-slate-900 my-1">{stats.total}</div>
               <span className="text-[12px] text-slate-500 font-medium">Cataloged Snags</span>
             </div>
@@ -352,14 +352,14 @@ export default function ReportModal({ survey = {}, onClose }) {
           </div>
         </div>
 
-        {/* Detailed Asset Condition Register Table (Clean Columns) */}
+        {/* Detailed Snag Condition Register Table (Clean Columns) */}
         <div className="p-6 sm:p-8 space-y-4">
           <div className="flex items-center justify-between flex-wrap gap-2">
             <h2 className="text-xs font-bold uppercase tracking-wider text-slate-500">
-              2. Asset Condition & Defect Schedule
+              2. Snag Condition & Defect Schedule
             </h2>
             <span className="text-xs text-slate-500 font-medium">
-              {filteredReportItems.length} Assets in Report
+              {filteredReportItems.length} Snags in Report
             </span>
           </div>
 
@@ -368,7 +368,7 @@ export default function ReportModal({ survey = {}, onClose }) {
               <thead className="bg-slate-900 text-white uppercase text-[11px] tracking-wider">
                 <tr>
                   <th className="p-3">#</th>
-                  <th className="p-3">Asset / Component</th>
+                  <th className="p-3">Snag / Component</th>
                   <th className="p-3">Location / Room</th>
                   <th className="p-3">Department</th>
                   <th className="p-3 text-center">Priority</th>
@@ -453,7 +453,7 @@ export default function ReportModal({ survey = {}, onClose }) {
                         </span>
                       </div>
 
-                      {/* Asset Location with Google GPS */}
+                      {/* Snag Location with Google GPS */}
                       <div className="flex items-center gap-2 mt-1 text-xs text-slate-600 flex-wrap">
                         <span className="flex items-center gap-1">
                           <MapPin className="w-3.5 h-3.5 text-sky-600" />

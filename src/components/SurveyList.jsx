@@ -75,7 +75,7 @@ export default function SurveyList({
         <div className="relative">
           <input
             type="text"
-            placeholder="Search assets, defects, or departments (HVAC, Painting, Carpentry...)..."
+            placeholder="Search snags, defects, or departments (HVAC, Painting, Carpentry...)..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-sky-500 text-sm"
@@ -115,13 +115,13 @@ export default function SurveyList({
             onChange={(e) => setSelectedDept(e.target.value)}
             className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 bg-white font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-sky-500 text-sm shadow-sm cursor-pointer"
           >
-            <option value="ALL">All Departments / Trades ({items.length} Total Assets)</option>
+            <option value="ALL">All Departments / Trades ({items.length} Total Snags)</option>
             {Object.keys(DEPARTMENTS).map((dKey) => {
               const dept = DEPARTMENTS[dKey];
               const count = items.filter((i) => (i.department || 'GENERAL') === dKey).length;
               return (
                 <option key={dKey} value={dKey}>
-                  {dept.name} ({count} {count === 1 ? 'Asset' : 'Assets'})
+                  {dept.name} ({count} {count === 1 ? 'Snag' : 'Snags'})
                 </option>
               );
             })}
@@ -152,16 +152,16 @@ export default function SurveyList({
       {/* Add New Item Button Bar */}
       <div className="flex items-center justify-between flex-wrap gap-2">
         <h2 className="text-sm font-bold uppercase tracking-wider text-slate-600">
-          Audited Assets ({filteredItems.length} of {items.length})
+          Audited Snags ({filteredItems.length} of {items.length})
         </h2>
 
-        {/* Next Asset Button */}
+        {/* Next Snag Button */}
         <button
           onClick={() => handleAddNewAsset()}
           className="px-4 py-2.5 rounded-xl bg-sky-600 hover:bg-sky-500 active:scale-95 text-white font-bold text-xs sm:text-sm shadow-md flex items-center space-x-1.5 transition-all cursor-pointer"
         >
           <Plus className="w-4 h-4" />
-          <span>+ Add Next Asset</span>
+          <span>+ Add Next Snag</span>
           {items.length > 0 && items[items.length - 1]?.location && (
             <span className="text-[12px] opacity-85 hidden sm:inline">
               (in "{items[items.length - 1].location}")
@@ -170,24 +170,24 @@ export default function SurveyList({
         </button>
       </div>
 
-      {/* List of Asset Cards */}
+      {/* List of Snag Cards */}
       {filteredItems.length === 0 ? (
         <div className="bg-white rounded-2xl p-8 border border-slate-200 text-center space-y-3">
           <div className="w-12 h-12 rounded-full bg-slate-100 text-slate-400 mx-auto flex items-center justify-center">
             <Building2 className="w-6 h-6" />
           </div>
-          <h3 className="font-bold text-slate-700 text-base">No Assets Found</h3>
+          <h3 className="font-bold text-slate-700 text-base">No Snags Found</h3>
           <p className="text-xs text-slate-500 max-w-sm mx-auto">
             {searchQuery || selectedDept !== 'ALL' || selectedPriority !== 'ALL'
               ? 'No items match your selected filters.'
-              : 'Your survey list is empty. Tap "Add Next Asset" to begin inspecting.'}
+              : 'Your survey list is empty. Tap "Add Next Snag" to begin inspecting.'}
           </p>
           <button
             onClick={() => handleAddNewAsset()}
             className="px-4 py-2 rounded-xl bg-sky-600 text-white font-semibold text-xs inline-flex items-center space-x-1.5"
           >
             <Plus className="w-3.5 h-3.5" />
-            <span>Add Asset</span>
+            <span>Add Snag</span>
           </button>
         </div>
       ) : (
@@ -207,14 +207,14 @@ export default function SurveyList({
             />
           ))}
 
-          {/* Bottom Add Next Asset Prompt */}
+          {/* Bottom Add Next Snag Prompt */}
           <div className="pt-2 flex justify-center">
             <button
               onClick={() => handleAddNewAsset()}
               className="w-full sm:w-auto px-6 py-3 rounded-2xl bg-white border-2 border-dashed border-sky-400 hover:bg-sky-50 text-sky-700 font-bold text-sm shadow-sm flex items-center justify-center space-x-2 transition-all active:scale-[0.98] cursor-pointer"
             >
               <Plus className="w-4 h-4" />
-              <span>+ Next Asset / Add Another Asset</span>
+              <span>+ Next Snag / Add Another Snag</span>
             </button>
           </div>
         </div>

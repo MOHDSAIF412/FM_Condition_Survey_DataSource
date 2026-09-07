@@ -70,9 +70,9 @@ export default function AnalyticsView({ items = [], onOpenReport }) {
 
       {/* KPI Cards Grid */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        {/* Total Assets */}
+        {/* Total Snags */}
         <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-between">
-          <span className="text-xs font-bold text-slate-500 uppercase">Assets Audited</span>
+          <span className="text-xs font-bold text-slate-500 uppercase">Snags Audited</span>
           <div className="my-2">
             <span className="text-3xl font-extrabold text-slate-900">{stats.total}</span>
           </div>
@@ -129,7 +129,7 @@ export default function AnalyticsView({ items = [], onOpenReport }) {
             <span>CRITICAL ATTENTION REQUIRED: {p1Items.length} Urgent Priority 1 Defect(s)</span>
           </div>
           <p className="text-xs text-rose-700">
-            The following assets pose an immediate life safety, structural, or statutory compliance hazard:
+            The following snags pose an immediate life safety, structural, or statutory compliance hazard:
           </p>
           <div className="space-y-1.5 pt-1">
             {p1Items.map((item) => {
