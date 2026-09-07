@@ -7,5 +7,16 @@
   },
   "server": {
     "androidScheme": "https"
+  },
+  "plugins": {
+    "CapacitorUpdater": {
+      "appId": "com.fmconditionsurvey.app",
+      "autoUpdate": true,
+      "updateUrl": "https://fm-condition-survey-data-source.vercel.app/api/ota",
+      "directUpdate": false,
+      "resetWhenUpdate": true,
+      "autoDeleteFailed": true,
+      "autoDeletePrevious": true
+    }
   }
 }
