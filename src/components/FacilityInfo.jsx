@@ -8,31 +8,10 @@ import {
   Compass,
   CheckCircle2
 } from 'lucide-react';
-import { PRESET_FACILITIES, ZONES } from '../data/facilitiesList';
 
 export default function FacilityInfo({ facility = {}, onChange, onNext }) {
   const [isGettingGps, setIsGettingGps] = useState(false);
   const [gpsError, setGpsError] = useState('');
-
-  const handlePresetFacilityChange = (facId) => {
-    const found = PRESET_FACILITIES.find((f) => f.id === facId);
-    if (!found) return;
-
-    onChange({
-      ...facility,
-      facilityName: found.name,
-      buildingName: `Zone ${found.zone} - ${found.name}`,
-      buildingCode: `Zone ${found.zone}`,
-      address: `${found.name}, Zone ${found.zone}, Abu Dhabi, UAE`,
-      googleLocation: {
-        address: `${found.name}, Zone ${found.zone}, Abu Dhabi, UAE`,
-        latitude: found.latitude,
-        longitude: found.longitude,
-        mapsUrl: found.mapsUrl,
-        description: `DMS: ${found.dms} (Zone ${found.zone})`
-      }
-    });
-  };
 
   const updateField = (field, value) => {
     onChange({
@@ -110,9 +89,6 @@ export default function FacilityInfo({ facility = {}, onChange, onNext }) {
           </div>
           <div>
             <h2 className="text-xl font-bold">Facility & Site Information</h2>
-            <p className="text-xs sm:text-sm text-sky-200/80 mt-1">
-              Enter the Facility Name, Building Title, Google Location with GPS coordinates, and inspection details.
-            </p>
           </div>
         </div>
       </div>
@@ -124,43 +100,6 @@ export default function FacilityInfo({ facility = {}, onChange, onNext }) {
             <Building className="w-4 h-4 text-sky-600" />
             Facility & Complex Identification
           </h3>
-          <span className="text-[12px] font-semibold text-sky-700 bg-sky-50 px-2.5 py-0.5 rounded-full border border-sky-200">
-            23 Pre-Configured Facilities Available
-          </span>
-        </div>
-
-        {/* Dropdown Selection Option */}
-        <div className="bg-gradient-to-r from-sky-50 via-cyan-50 to-sky-50 p-4 rounded-2xl border-2 border-sky-300 shadow-sm space-y-2">
-          <div className="flex items-center justify-between flex-wrap gap-1">
-            <label className="block text-xs font-extrabold text-sky-950 uppercase tracking-wide flex items-center gap-1.5">
-              <Building className="w-4 h-4 text-sky-600" />
-              Select Facility / Stables / Arena (Dropdown Option) *
-            </label>
-            <span className="text-[11px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full flex items-center gap-1">
-              <CheckCircle2 className="w-3 h-3" />
-              Auto-fills GPS Coordinates & Zone
-            </span>
-          </div>
-
-          <select
-            value={PRESET_FACILITIES.find((f) => f.name === facility.facilityName)?.id || ''}
-            onChange={(e) => handlePresetFacilityChange(e.target.value)}
-            className="w-full px-3.5 py-3 rounded-xl border-2 border-sky-400 bg-white font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-sky-500 text-sm shadow-sm cursor-pointer"
-          >
-            <option value="">-- Choose from 23 Facilities (Zone A - E) --</option>
-            {ZONES.map((zone) => (
-              <optgroup key={zone} label={`ZONE ${zone} FACILITIES`}>
-                {PRESET_FACILITIES.filter((f) => f.zone === zone).map((f) => (
-                  <option key={f.id} value={f.id}>
-                    [{f.zone}] {f.name} — {f.dms}
-                  </option>
-                ))}
-              </optgroup>
-            ))}
-          </select>
-          <p className="text-[12px] text-sky-800">
-            Selecting a facility from this dropdown automatically configures its official name, Zone block, and exact GPS coordinates.
-          </p>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
@@ -170,7 +109,6 @@ export default function FacilityInfo({ facility = {}, onChange, onNext }) {
             </label>
             <input
               type="text"
-              placeholder="e.g. Al-Manar Commercial Complex"
               value={facility.facilityName || facility.buildingName || ''}
               onChange={(e) => {
                 updateField('facilityName', e.target.value);
@@ -186,7 +124,6 @@ export default function FacilityInfo({ facility = {}, onChange, onNext }) {
             </label>
             <input
               type="text"
-              placeholder="e.g. Commercial Tower"
               value={facility.buildingName || ''}
               onChange={(e) => updateField('buildingName', e.target.value)}
               className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-sky-500 text-sm"
@@ -199,7 +136,6 @@ export default function FacilityInfo({ facility = {}, onChange, onNext }) {
             </label>
             <input
               type="text"
-              placeholder="e.g. B-042-DXB"
               value={facility.buildingCode || ''}
               onChange={(e) => updateField('buildingCode', e.target.value)}
               className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-sky-500 text-sm"
@@ -212,7 +148,6 @@ export default function FacilityInfo({ facility = {}, onChange, onNext }) {
             </label>
             <input
               type="text"
-              placeholder="e.g. 28,500 sq.m"
               value={facility.grossInternalArea || ''}
               onChange={(e) => updateField('grossInternalArea', e.target.value)}
               className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-sky-500 text-sm"
@@ -255,7 +190,6 @@ export default function FacilityInfo({ facility = {}, onChange, onNext }) {
             <div className="relative">
               <input
                 type="text"
-                placeholder="e.g. Marasi Dr, Business Bay, Dubai, United Arab Emirates"
                 value={googleLoc.address || facility.address || ''}
                 onChange={(e) => {
                   updateGoogleLocation('address', e.target.value);
@@ -273,7 +207,6 @@ export default function FacilityInfo({ facility = {}, onChange, onNext }) {
             </label>
             <input
               type="text"
-              placeholder="e.g. 25.1856"
               value={googleLoc.latitude || ''}
               onChange={(e) => updateGoogleLocation('latitude', e.target.value)}
               className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-sky-500 text-sm font-mono"
@@ -286,7 +219,6 @@ export default function FacilityInfo({ facility = {}, onChange, onNext }) {
             </label>
             <input
               type="text"
-              placeholder="e.g. 55.2678"
               value={googleLoc.longitude || ''}
               onChange={(e) => updateGoogleLocation('longitude', e.target.value)}
               className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-sky-500 text-sm font-mono"
@@ -317,7 +249,6 @@ export default function FacilityInfo({ facility = {}, onChange, onNext }) {
             </label>
             <textarea
               rows={2}
-              placeholder="Describe access gate, perimeter reference, landmark opposite building, loading bay pin..."
               value={googleLoc.description || ''}
               onChange={(e) => updateGoogleLocation('description', e.target.value)}
               className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-sky-500 text-sm"
@@ -339,7 +270,6 @@ export default function FacilityInfo({ facility = {}, onChange, onNext }) {
           </label>
           <textarea
             rows={3}
-            placeholder="Describe the scope of building elements, plant rooms, accessibility constraints..."
             value={facility.scopeNotes || ''}
             onChange={(e) => updateField('scopeNotes', e.target.value)}
             className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-sky-500 text-sm"

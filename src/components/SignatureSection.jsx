@@ -150,9 +150,6 @@ export default function SignatureSection({ signatures, onChange, facility, onOpe
           </div>
           <div>
             <h2 className="text-xl font-bold">Audit Sign-Off & Verification</h2>
-            <p className="text-xs sm:text-sm text-slate-300 mt-1">
-              Capture mobile touchscreen signatures from the Lead Surveyor and Client / Facility Manager to authenticate the assessment report.
-            </p>
           </div>
         </div>
       </div>
@@ -165,9 +162,6 @@ export default function SignatureSection({ signatures, onChange, facility, onOpe
               <User className="w-4 h-4 text-sky-600" />
               Lead Surveyor Sign-Off
             </h3>
-            <p className="text-xs text-slate-500 mt-0.5">
-              Certifies that inspection observations and ratings are true and accurate.
-            </p>
           </div>
 
           <div>
@@ -176,7 +170,6 @@ export default function SignatureSection({ signatures, onChange, facility, onOpe
             </label>
             <input
               type="text"
-              placeholder="e.g. David H. Miller (MRICS)"
               value={signatures.surveyor?.name || facility.surveyorName || ''}
               onChange={(e) => updateSurveyor('name', e.target.value)}
               className="w-full px-3 py-2 text-sm rounded-xl border border-slate-300 focus:ring-2 focus:ring-sky-500 focus:outline-none"
@@ -212,9 +205,6 @@ export default function SignatureSection({ signatures, onChange, facility, onOpe
               <User className="w-4 h-4 text-sky-600" />
               Client / Facility Manager Receipt
             </h3>
-            <p className="text-xs text-slate-500 mt-0.5">
-              Acknowledges receipt and review of the building condition findings.
-            </p>
           </div>
 
           <div>
@@ -223,7 +213,6 @@ export default function SignatureSection({ signatures, onChange, facility, onOpe
             </label>
             <input
               type="text"
-              placeholder="e.g. Eng. Tariq Al-Mansoor"
               value={signatures.client?.name || facility.facilityManager || facility.clientName || ''}
               onChange={(e) => updateClient('name', e.target.value)}
               className="w-full px-3 py-2 text-sm rounded-xl border border-slate-300 focus:ring-2 focus:ring-sky-500 focus:outline-none"

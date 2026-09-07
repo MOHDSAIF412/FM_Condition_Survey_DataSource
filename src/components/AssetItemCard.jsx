@@ -19,7 +19,6 @@ import {
   Copy
 } from 'lucide-react';
 import { PRIORITY_LEVELS, DEPARTMENTS } from '../types/survey';
-import { PRESET_FACILITIES, ZONES } from '../data/facilitiesList';
 import { compressImage } from '../utils/imageCompressor';
 
 const PHOTO_PRESET_TAGS = [
@@ -241,7 +240,6 @@ function AssetItemCard({
             </label>
             <input
               type="text"
-              placeholder="e.g. Chiller Compressor #1, Drywall Paint Peeling, Fire Exit Door"
               value={item.assetName || ''}
               onChange={(e) => handleFieldChange('assetName', e.target.value)}
               className="w-full px-3 py-2.5 text-sm rounded-xl border border-slate-300 focus:ring-2 focus:ring-sky-500 focus:outline-none font-medium"
@@ -255,39 +253,14 @@ function AssetItemCard({
                 <MapPin className="w-3.5 h-3.5 text-sky-600" />
                 Snag Location / Room / Area *
               </label>
-              {recentLocations && recentLocations.length > 0 && (
-                <span className="text-[11px] text-slate-400">23 Facilities Available</span>
-              )}
             </div>
 
-            <div className="space-y-2">
-              <select
-                value={PRESET_FACILITIES.some((f) => f.name === item.location) ? item.location : ''}
-                onChange={(e) => {
-                  if (e.target.value) handleFieldChange('location', e.target.value);
-                }}
-                className="w-full px-3.5 py-2.5 text-sm rounded-xl border border-sky-300 bg-sky-50/50 focus:ring-2 focus:ring-sky-500 focus:outline-none font-bold text-slate-800 cursor-pointer shadow-sm"
-              >
-                <option value="">-- Select from 23 Facilities (Zone A - E) --</option>
-                {ZONES.map((zone) => (
-                  <optgroup key={zone} label={`ZONE ${zone}`}>
-                    {PRESET_FACILITIES.filter((f) => f.zone === zone).map((f) => (
-                      <option key={f.id} value={f.name}>
-                        [{f.zone}] {f.name}
-                      </option>
-                    ))}
-                  </optgroup>
-                ))}
-              </select>
-
-              <input
-                type="text"
-                placeholder="Or specify room / area (e.g. Old Grandstand - Plant Room B1)"
-                value={item.location || ''}
-                onChange={(e) => handleFieldChange('location', e.target.value)}
-                className="w-full px-3 py-2 text-xs rounded-xl border border-slate-300 focus:ring-2 focus:ring-sky-500 focus:outline-none font-medium text-slate-700"
-              />
-            </div>
+            <input
+              type="text"
+              value={item.location || ''}
+              onChange={(e) => handleFieldChange('location', e.target.value)}
+              className="w-full px-3.5 py-2.5 text-sm rounded-xl border border-slate-300 focus:ring-2 focus:ring-sky-500 focus:outline-none font-medium text-slate-700"
+            />
 
             {recentLocations && recentLocations.length > 0 && (
               <div className="flex items-center gap-1.5 mt-2 flex-wrap">
@@ -377,9 +350,6 @@ function AssetItemCard({
                 );
               })}
             </div>
-            <p className="text-[12px] text-slate-500 mt-1.5">
-              {currentPriority.description}
-            </p>
           </div>
 
           {/* Observations & Defects */}
@@ -389,7 +359,6 @@ function AssetItemCard({
             </label>
             <textarea
               rows={2}
-              placeholder="Describe deterioration, paint peeling, carpentry damage, leakage, mechanical noise, crack..."
               value={item.defectDescription || ''}
               onChange={(e) => handleFieldChange('defectDescription', e.target.value)}
               className="w-full px-3 py-2 text-sm rounded-xl border border-slate-300 focus:ring-2 focus:ring-sky-500 focus:outline-none"
@@ -440,9 +409,6 @@ function AssetItemCard({
                   Snag Photos & Evidence ({photosList.length} Attached)
                 </span>
               </div>
-              <span className="text-[12px] text-slate-500">
-                Continuous photo snapping supported
-              </span>
             </div>
 
             {/* Photos Grid */}
@@ -494,7 +460,6 @@ function AssetItemCard({
                             onKeyDown={(e) => e.key === 'Enter' && setEditingCaptionId(null)}
                             autoFocus
                             className="w-full px-1.5 py-0.5 text-[11px] text-slate-900 rounded bg-white focus:outline-none"
-                            placeholder="Type caption..."
                           />
                           <button
                             type="button"
@@ -666,7 +631,6 @@ function AssetItemCard({
                   type="text"
                   value={photosList[previewPhotoIndex].caption || ''}
                   onChange={(e) => handleUpdatePhotoCaption(photosList[previewPhotoIndex].id, e.target.value)}
-                  placeholder="Enter caption for this photo..."
                   className="px-2 py-1 rounded bg-slate-700 text-white border border-slate-600 text-xs flex-1 max-w-sm focus:outline-none"
                 />
               </div>

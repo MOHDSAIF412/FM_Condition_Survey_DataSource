@@ -53,9 +53,6 @@ export default function AnalyticsView({ items = [], onOpenReport }) {
             <h2 className="text-xl sm:text-2xl font-bold mt-0.5">
               Facility Condition Scorecard
             </h2>
-            <p className="text-xs sm:text-sm text-slate-300 mt-1">
-              Urgency classification, evidence photo tracking, and budgetary remediation forecasting by maintenance department.
-            </p>
           </div>
 
           <button
