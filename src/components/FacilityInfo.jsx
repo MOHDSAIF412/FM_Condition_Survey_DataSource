@@ -111,10 +111,22 @@ export default function FacilityInfo({ facility = {}, onChange, onNext }) {
             </label>
             <input
               type="text"
-              value={facility.facilityName || facility.buildingName || ''}
+              /* Bound to facilityName alone. It used to fall back to
+                 `|| facility.buildingName`, so clearing the field made it
+                 immediately repopulate from the building name - the text could
+                 not be deleted. */
+              value={facility.facilityName ?? ''}
               onChange={(e) => {
-                updateField('facilityName', e.target.value);
-                if (!facility.buildingName) updateField('buildingName', e.target.value);
+                const value = e.target.value;
+                /* One update, not two. Both calls spread the same stale
+                   `facility` prop, so the second silently discarded the first
+                   and typing here was lost whenever the building name was
+                   still empty. */
+                onChange({
+                  ...facility,
+                  facilityName: value,
+                  ...(facility.buildingName ? {} : { buildingName: value })
+                });
               }}
               className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-sky-500 text-sm font-semibold"
             />

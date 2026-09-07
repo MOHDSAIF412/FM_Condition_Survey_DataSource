@@ -6,6 +6,7 @@ import SurveyList from './components/SurveyList';
 import AnalyticsView from './components/AnalyticsView';
 import SignatureSection from './components/SignatureSection';
 import ReportModal from './components/ReportModal';
+import SavedFacilities from './components/SavedFacilities';
 import { sampleSurveyData } from './data/sampleSurvey';
 import { createNewSurvey, calculateSurveyStats } from './types/survey';
 import {
@@ -411,9 +412,11 @@ It stays available in the facility list for reports.`)) {
     skipCloudPushRef.current = true;
     setSurvey(next);
     await saveSurveyOffline(next, { pendingSync: false });
-    setActiveTab('facility');
-    refreshSurveyList();
-    alert(`"${name}" submitted. Starting a new facility.`);
+    await refreshSurveyList();
+    setActiveTab('signatures');
+    alert(`"${name}" submitted and saved.
+
+It is now in Saved Facilities, where you can download its PDF or Excel. A new blank facility is ready on the Facility tab.`);
   };
 
   const [surveyList, setSurveyList] = useState([]);
@@ -684,6 +687,14 @@ It stays available in the facility list for reports.`)) {
         </TabPanel>
 
         <TabPanel active={activeTab === 'signatures'}>
+          <div className="max-w-4xl mx-auto mb-6">
+            <SavedFacilities
+              surveys={surveyList}
+              currentId={survey?.id}
+              onOpen={handleOpenSurvey}
+              onRefresh={refreshSurveyList}
+            />
+          </div>
           <SignatureSection
             signatures={survey?.signatures || {}}
             onChange={handleUpdateSignatures}
