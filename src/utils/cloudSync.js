@@ -361,14 +361,82 @@ export async function listSurveys() {
     console.warn('Could not list surveys:', error.message);
     return [];
   }
-  return (data || []).map((r) => ({
+  const surveys = data || [];
+
+  // Item counts, so two facilities with no name entered yet can still be told
+  // apart in the Saved Facilities list instead of both reading "Unnamed facility".
+  const counts = {};
+  if (surveys.length) {
+    const { data: itemRows, error: countErr } = await supabase
+      .from('survey_items')
+      .select('survey_id')
+      .in('survey_id', surveys.map((r) => r.id));
+    if (!countErr) {
+      for (const row of itemRows || []) {
+        counts[row.survey_id] = (counts[row.survey_id] || 0) + 1;
+      }
+    }
+  }
+
+  return surveys.map((r) => ({
     id: r.id,
     title: r.title,
     facilityName: r.facility_name || 'Unnamed facility',
+    itemCount: counts[r.id] || 0,
     status: r.status || 'draft',
     submittedAt: r.submitted_at,
     updatedAt: r.updated_at
   }));
+}
+
+/**
+ * Permanently deletes a survey and everything under it (snags, photos).
+ *
+ * Every row is archived by the database's own trigger before it goes
+ * (DATA_SAFETY.md), and photo files are never removed from Storage, so this
+ * is recoverable server-side even though the app gives no undo. Rows are
+ * deleted in batches of 5 -- the database refuses a single statement that
+ * removes more than that from survey_items/survey_photos, on purpose, after
+ * a wholesale delete destroyed real data twice in this project's history.
+ */
+export async function deleteSurveyPermanently(surveyId) {
+  if (!isCloudConfigured) return { deleted: false };
+
+  const chunk = (arr, size) => {
+    const out = [];
+    for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
+    return out;
+  };
+
+  const { data: photoRows, error: photoListErr } = await supabase
+    .from('survey_photos')
+    .select('id')
+    .eq('survey_id', surveyId);
+  if (photoListErr) throw photoListErr;
+
+  const { data: itemRows, error: itemListErr } = await supabase
+    .from('survey_items')
+    .select('id')
+    .eq('survey_id', surveyId);
+  if (itemListErr) throw itemListErr;
+
+  for (const group of chunk((photoRows || []).map((r) => r.id), 5)) {
+    const { error } = await supabase.from('survey_photos').delete().in('id', group);
+    if (error) throw error;
+  }
+  for (const group of chunk((itemRows || []).map((r) => r.id), 5)) {
+    const { error } = await supabase.from('survey_items').delete().in('id', group);
+    if (error) throw error;
+  }
+
+  const { error: surveyErr } = await supabase.from('condition_surveys').delete().eq('id', surveyId);
+  if (surveyErr) throw surveyErr;
+
+  return {
+    deleted: true,
+    itemsDeleted: (itemRows || []).length,
+    photosDeleted: (photoRows || []).length
+  };
 }
 
 /** Latest survey id on the server, so a fresh device knows what to open. */

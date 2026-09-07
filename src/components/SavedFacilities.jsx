@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { FileText, FileSpreadsheet, FolderOpen, CheckCircle2, Loader2 } from 'lucide-react';
+import { FileText, FileSpreadsheet, FolderOpen, CheckCircle2, Loader2, Trash2 } from 'lucide-react';
 import { pullSurvey, hydratePhotos } from '../utils/cloudSync';
 import { generateSurveyPDF } from '../utils/pdfGenerator';
 import { generateSurveyExcel } from '../utils/excelGenerator';
@@ -13,8 +13,16 @@ import { formatMoney } from '../utils/currency';
  * Photo bytes are fetched first -- the generators read from dataUrl, and a
  * facility synced from another device carries only storage paths until then.
  */
-export default function SavedFacilities({ surveys = [], currentId, onOpen, onRefresh }) {
+export default function SavedFacilities({ surveys = [], currentId, onOpen, onDelete, onRefresh }) {
   const [busy, setBusy] = useState(null);
+
+  // A facility with no name entered yet still needs to be told apart from
+  // another one with no name -- item count is the next best identifier.
+  const describe = (s) => {
+    if (s.facilityName && s.facilityName !== 'Unnamed facility') return s.facilityName;
+    const n = s.itemCount || 0;
+    return `Unnamed facility (${n} snag${n === 1 ? '' : 's'})`;
+  };
 
   const download = async (surveyId, kind) => {
     setBusy(`${surveyId}:${kind}`);
@@ -30,6 +38,16 @@ export default function SavedFacilities({ surveys = [], currentId, onOpen, onRef
     } catch (err) {
       console.error('Report failed:', err);
       alert('Could not build the report: ' + (err.message || err));
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const remove = async (s) => {
+    if (!onDelete) return;
+    setBusy(`${s.id}:delete`);
+    try {
+      await onDelete(s.id, describe(s));
     } finally {
       setBusy(null);
     }
@@ -70,7 +88,7 @@ export default function SavedFacilities({ surveys = [], currentId, onOpen, onRef
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="font-bold text-slate-900 text-sm truncate">
-                    {s.facilityName}
+                    {describe(s)}
                   </span>
                   {s.status === 'submitted' ? (
                     <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 inline-flex items-center gap-1">
@@ -126,6 +144,19 @@ export default function SavedFacilities({ surveys = [], currentId, onOpen, onRef
                     : <FileSpreadsheet className="w-3.5 h-3.5" />}
                   Excel
                 </button>
+                {onDelete && (
+                  <button
+                    type="button"
+                    disabled={busy !== null}
+                    onClick={() => remove(s)}
+                    title="Permanently delete this facility"
+                    className="px-2.5 py-1.5 rounded-lg bg-red-50 hover:bg-red-100 disabled:opacity-50 text-red-600 text-xs font-bold inline-flex items-center gap-1 border border-red-200"
+                  >
+                    {busy === `${s.id}:delete`
+                      ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      : <Trash2 className="w-3.5 h-3.5" />}
+                  </button>
+                )}
               </div>
             </li>
           );

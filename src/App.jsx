@@ -12,7 +12,8 @@ import {
   saveSurveyOffline,
   loadCurrentSurveyOffline,
   subscribeToSurveyChanges,
-  markSurveySynced
+  markSurveySynced,
+  deleteSurveyOffline
 } from './utils/storage';
 import { generateSurveyExcel } from './utils/excelGenerator';
 import { saveText } from './utils/fileSaver';
@@ -22,7 +23,8 @@ import {
   fetchLatestSurveyId,
   collectKnownPhotos,
   subscribeToCloudChanges,
-  listSurveys
+  listSurveys,
+  deleteSurveyPermanently
 } from './utils/cloudSync';
 import { isCloudConfigured } from './utils/supabaseClient';
 import { initNetworkMonitor, onNetworkChange, isOnline } from './utils/network';
@@ -483,6 +485,41 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
     }
   };
 
+  /**
+   * Permanently deletes a saved facility (all its snags and photos) from the
+   * server and this device. Every row is archived by the database first
+   * (DATA_SAFETY.md), so it is recoverable from Supabase even though there is
+   * no undo in the app itself.
+   */
+  const handleDeleteSurvey = async (surveyId, label) => {
+    if (!confirm(`Permanently delete "${label}"?\n\nAll its snags and photos will be removed. This cannot be undone from the app.`)) {
+      return;
+    }
+    try {
+      setSyncState('syncing');
+      if (isCloudConfigured) {
+        await deleteSurveyPermanently(surveyId);
+      }
+      await deleteSurveyOffline(surveyId);
+
+      // Deleted the one currently open: it no longer exists anywhere, so
+      // start a fresh blank facility rather than keep editing a ghost.
+      if (surveyId === survey?.id) {
+        const fresh = createNewSurvey();
+        skipCloudPushRef.current = true;
+        setSurvey(fresh);
+        await saveSurveyOffline(fresh, { pendingSync: false });
+        setActiveTab('facility');
+      }
+
+      await refreshSurveyList();
+      setSyncState('idle');
+    } catch (err) {
+      alert('Could not delete that facility: ' + err.message);
+      setSyncState('offline');
+    }
+  };
+
   // Handle Tab Switch to Report
   const handleTabChange = (tabId) => {
     if (tabId === 'report') {
@@ -665,7 +702,10 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
               )}
               {surveyList.map((s2) => (
                 <option key={s2.id} value={s2.id}>
-                  {s2.facilityName}{s2.status === 'submitted' ? '  ✓' : '  (draft)'}
+                  {s2.facilityName === 'Unnamed facility'
+                    ? `Unnamed facility (${s2.itemCount || 0} snag${s2.itemCount === 1 ? '' : 's'})`
+                    : s2.facilityName}
+                  {s2.status === 'submitted' ? '  ✓' : '  (draft)'}
                 </option>
               ))}
             </select>
@@ -719,6 +759,7 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
               surveys={surveyList}
               currentId={survey?.id}
               onOpen={handleOpenSurvey}
+              onDelete={handleDeleteSurvey}
               onRefresh={refreshSurveyList}
             />
           </div>
