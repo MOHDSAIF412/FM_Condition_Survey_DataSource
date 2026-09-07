@@ -1,9 +1,23 @@
 # PROJECT CONTEXT
 
-*Last updated: 2026-09-07, end of session. Written by inspecting the actual
-source tree and the live Supabase database — not from memory of the
-conversation. If a later session finds this file disagrees with the code, the
-code is correct; update this file to match.*
+*Last updated: 2026-09-07, end of session. Written and re-verified by
+inspecting the actual source tree, `git log`, and the live Supabase database —
+not from memory of the conversation. If a later session finds this file
+disagrees with the code, the code is correct; update this file to match.*
+
+*Current HEAD at time of writing: `ad3d134`. If `git log -1` shows something
+different, treat §8/§11 below as a starting point, not the final word — diff
+forward from `ad3d134` to see what changed since.*
+
+## 0. Quick Status (read this first)
+
+- **Live and working**, both web and app, as of this commit.
+- **The one open question**: is the "item disappears after ~1 second" fix
+  (commit `18662ce`) actually confirmed gone on the user's phone? Ask before
+  doing anything else — see §11.
+- **Nothing is broken right now** that this session knows of. §3 lists things
+  that are *unverified*, not things known to be *failing*.
+- Working tree is clean, nothing uncommitted, nothing stashed.
 
 ## 1. Project Purpose
 
@@ -106,7 +120,30 @@ In the order they were requested, condensed:
     the database-level archive/restore/mass-delete-block system.
 16. Two bugs: a second uploaded photo, and a newly added snag on mobile, both
     visually appeared then vanished within ~1 second.
-17. This file.
+17. This file, first version.
+18. Re-review this file against the actual project and fill any gaps —
+    the version you're reading now is the result.
+
+## 4a. Files Changed, Most Recent Commits First
+
+Quick-scan table for "what did the last session actually touch". Full
+reasoning for each is in the commit message (`git show <hash>`) and in §8.
+
+Verified against `git diff-tree --name-status` for each commit (not assumed).
+
+| Commit | Files touched | What changed |
+|---|---|---|
+| `ad3d134` (HEAD) | `CLAUDE.md` | This file — first version. |
+| `18662ce` | `src/App.jsx` | Fixed item-disappears-after-1-second race (see §0, §11). |
+| `5f9c71a` | `DATA_SAFETY.md` (local repo). DB side: 3 Supabase migrations applied directly — archive trigger, mass-delete block, `restore_deleted_items()`. No other local files. | DB-level delete archive, mass-delete block, `restore_deleted_items()`. |
+| `ee33222` | `src/App.jsx`, `src/components/Header.jsx`, `src/data/sampleSurvey.js` (**deleted**) | Removed demo-data seeding permanently; recovered orphaned photos in prod DB. |
+| `4fc603c` | `src/App.jsx`, `src/components/FacilityInfo.jsx`, `src/components/SavedFacilities.jsx` (**new**) | Facility Name clear-bug fix; Saved Facilities panel with PDF/Excel download per facility. |
+| `aae7759` | `src/App.jsx`, `src/components/AssetItemCard.jsx`, `src/components/ReportModal.jsx`, `src/utils/cloudSync.js` | Replaced destructive delete+reinsert sync with upsert+tombstones; added `hydratePhotos()`; Submit & Start New Facility. |
+| `84db0d3` | `src/utils/geolocation.js` (**new**), `src/utils/network.js` (**new**), `src/utils/photoCapture.js` (**new**), `src/utils/syncQueue.js` (**new**), `src/utils/storage.js`, `src/utils/cloudSync.js`, `src/utils/excelGenerator.js`, `src/utils/pdfGenerator.js`, `src/types/survey.js`, `src/App.jsx`, `src/components/AssetItemCard.jsx`, `src/components/FacilityInfo.jsx`, `src/components/Header.jsx`, `src/components/ReportModal.jsx`, `src/data/sampleSurvey.js`, `android/app/src/main/AndroidManifest.xml`, `android/app/capacitor.build.gradle`, `android/capacitor.settings.gradle`, `package.json`, `package-lock.json` | Native GPS/Camera/Network wired in; offline sync queue; reference-code field removed. This is the commit that needed a new APK (native permissions changed). |
+| `f23206f` | `api/ota.js` (**new**), `scripts/build-ota.mjs` (**new**), `scripts/ship.mjs` (**new**), `capacitor.config.json`, `src/main.jsx`, `src/utils/otaUpdates.js` (**new**) | OTA update pipeline. |
+
+Earlier commits (initial build through the first cloud-sync/branding pass) —
+see `git log --oneline` for the full list; §8 narrates them.
 
 ## 5. Important Files
 
@@ -441,23 +478,50 @@ see git commit messages for specifics of each):
 
 ## 11. NEXT SESSION START HERE
 
-1. **Ask the user**: has the "item disappears after ~1 second" bug (commit
-   `18662ce`, shipped via OTA) actually gone away on their phone? If not,
-   get exact repro steps — that fix was reasoned through but not confirmed.
-2. **Ask the user**: have they run the native GPS and Camera flows on a real
-   Android device yet? These were built and reasoned through carefully but
-   never touched actual hardware in this project so far.
-3. Before writing any Supabase query for testing/debugging, use
-   `.env.uitest` / `npm run dev -- --mode uitest` so it's impossible to
-   accidentally write to production data — this project has lost real data
-   to exploratory testing against prod before.
-4. If asked to change anything in `cloudSync.js`, read the file's own
-   comments first — they explain *why* each piece of defensive logic exists,
-   almost all of it in response to a real data-loss incident.
-5. Check `git log --oneline` and `DATA_SAFETY.md` before doing any delete-related
-   work — there's a database-level safety net now; understand it before
-   working around or against it.
-6. Routine changes ship via `npm run ship "message"` (OTA, no APK). Only
+**Exact next task, in order:**
+
+1. `git log -1` and `git status`. If HEAD is still `ad3d134` and the tree is
+   clean, everything below is current. If not, something happened outside
+   this doc — read the newer commit messages before doing anything else.
+2. **Open the conversation with this question**: *"Did the item you added
+   (photo or snag) stop disappearing after a second? And have you tried GPS /
+   the camera on the phone yet?"* Don't wait passively for the user to bring
+   it up — ask directly, first message. Their answer branches the work:
+   - **"Still disappears"** → get exact repro (which screen, photo or snag,
+     online or offline, how many devices open at once) and re-open
+     `src/App.jsx`'s two `subscribeTo*` handlers (search for
+     `hasUnpushedEditsRef`) — the guard added in `18662ce` may have a gap
+     the reasoning missed. `.env.uitest` for any exploratory testing (see
+     step 4).
+   - **"Fixed, but GPS/camera not tried yet"** → that's the actual open item.
+     Walk the user through installing the APK already built this session
+     (native permissions for GPS/Camera were added in `84db0d3` — if they're
+     on an older APK, GPS/Camera will not work at all, regardless of any
+     code fix) and running Test 1 from the original spec they gave: capture
+     GPS, take 2+ photos, confirm none disappear, confirm the app doesn't
+     return to the wrong screen after the camera closes.
+   - **"Both fine"** → nothing urgent. Ask what they want next; there is no
+     other known open bug (§3 lists unverified items, not known failures).
+3. Whatever the answer, **do not** start refactoring `cloudSync.js` or the
+   sync guards speculatively. Every past incident in this project came from
+   a "clean-up" of that file done without a concrete, reproduced failure in
+   hand. Fix what's actually reported, verify it the same way this session
+   did (reproduce the exact broken scenario, confirm the fix stops it,
+   check the live DB before and after), then stop.
+4. Before writing **any** Supabase query or running the dev server for
+   testing, use `.env.uitest` / `npm run dev -- --mode uitest` — this
+   disables cloud sync entirely so it is *physically impossible* to write to
+   production data by accident. This project has lost real data to
+   exploratory testing against prod more than once. Only point at the real
+   `.env.local` when the user has explicitly asked to test against live data.
+5. If asked to change anything in `cloudSync.js`, read the file's own inline
+   comments first — nearly every defensive check in it exists because of a
+   specific, named past incident. Removing one without knowing which
+   incident it prevents is how they come back.
+6. Check `DATA_SAFETY.md` before any delete-related work — there is a
+   database-level safety net now (archive + mass-delete block +
+   `restore_deleted_items()`); understand it before working around it.
+7. Routine changes ship via `npm run ship "message"` (OTA, no APK). Only
    native-layer changes (new Capacitor plugin, Android permission, app icon,
    `capacitor.config.json`) need a new APK build — see `ANDROID.md` for the
    JDK toolchain gotchas (Android Studio's bundled JDK does not work for
