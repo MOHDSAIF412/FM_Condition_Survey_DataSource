@@ -1,20 +1,24 @@
 # PROJECT CONTEXT
 
-*Last updated: 2026-09-07, end of session. Written and re-verified by
-inspecting the actual source tree, `git log`, and the live Supabase database —
-not from memory of the conversation. If a later session finds this file
-disagrees with the code, the code is correct; update this file to match.*
+*Last updated: 2026-09-07, end of the second session that day. Written and
+re-verified by inspecting the actual source tree, `git log`, and the live
+Supabase database — not from memory of the conversation. If a later session
+finds this file disagrees with the code, the code is correct; update this file
+to match.*
 
-*Current HEAD at time of writing: `ad3d134`. If `git log -1` shows something
+*Current HEAD at time of writing: `6280706`. If `git log -1` shows something
 different, treat §8/§11 below as a starting point, not the final word — diff
-forward from `ad3d134` to see what changed since.*
+forward from `6280706` to see what changed since.*
 
 ## 0. Quick Status (read this first)
 
 - **Live and working**, both web and app, as of this commit.
-- **The one open question**: is the "item disappears after ~1 second" fix
-  (commit `18662ce`) actually confirmed gone on the user's phone? Ask before
-  doing anything else — see §11.
+- The "item disappears after ~1 second" bug (`18662ce`) is **confirmed fixed by
+  the user on their phone**. That question is closed; do not re-ask it.
+- The user is actively surveying a real facility, **"Adec"**, from the phone.
+- **A rebuilt APK was installed on the user's phone this session (16:55).** It
+  is the first APK they have run that actually contains the GPS and camera
+  plugins. See §12 — this is the single most important operational fact here.
 - **Nothing is broken right now** that this session knows of. §3 lists things
   that are *unverified*, not things known to be *failing*.
 - Working tree is clean, nothing uncommitted, nothing stashed.
@@ -45,8 +49,15 @@ Working and live:
 - Web: **https://fm-condition-survey-data-source.vercel.app**
 - GitHub: **https://github.com/MOHDSAIF412/FM_Condition_Survey_DataSource**
   (public repo — see §6 for what that means for the data it contains)
-- Supabase project `yymyqygpyxbndifrgjvo` (org **SHEVER-CAFM**), live data:
-  as of this session, 2 surveys, 4 snags, 6 photos.
+- Supabase project `yymyqygpyxbndifrgjvo` (org **SHEVER-CAFM**), live data as
+  of the end of this session — verified by query, not assumed:
+  - `survey_sample_commercial_tower` — facility **"Adec"**, submitted,
+    revision 180, **3 snags, 1 photo**. This is the user's real working
+    survey. Its id is a leftover from the deleted demo-data era; the *content*
+    is genuine user data. Do not "clean up" this id — renaming a survey id
+    means rewriting every child row's foreign key.
+  - `survey_1788770031800` — blank name, draft, revision 8, **0 snags,
+    0 photos**. An empty leftover; harmless.
 - OTA update pipeline is live and has shipped several fixes with zero APK
   reinstalls.
 - Cloud sync (phone ⇄ web ⇄ Supabase) is live and — as of this session's
@@ -60,13 +71,15 @@ Working and live:
 ## 3. Current Problems / Bugs
 
 **Not yet verified on a real phone** (only simulated in a browser — see §10):
-- Native camera capture end-to-end
-- Native GPS capture end-to-end
-- A genuine offline → airplane-mode-off → auto-sync cycle
-- Whether the "item disappears within ~1 second of adding" bug (fixed in the
-  final commit of this session, `18662ce`) is actually gone on-device. It was
-  reproduced and fixed at the logic level and shipped, but not confirmed by
-  the user yet.
+- Native camera capture end-to-end. **Now genuinely testable for the first
+  time**, since the APK installed at 16:55 is the first one containing the
+  camera plugin (§12).
+- Native GPS capture end-to-end. Same — first testable now.
+- A genuine offline → airplane-mode-off → auto-sync cycle.
+
+**Closed this session** (was the top open question, now answered):
+- The "item disappears within ~1 second of adding" bug (`18662ce`) — user
+  confirmed on-device that it is fixed. Do not re-open or re-ask.
 
 **Known but not addressed (raise with the user before touching):**
 - `test_verify.js` at the project root imports
@@ -121,8 +134,19 @@ In the order they were requested, condensed:
 16. Two bugs: a second uploaded photo, and a newly added snag on mobile, both
     visually appeared then vanished within ~1 second.
 17. This file, first version.
-18. Re-review this file against the actual project and fill any gaps —
-    the version you're reading now is the result.
+18. Re-review this file against the actual project and fill any gaps.
+19. Excel report was not showing photos, while the PDF from the same facility
+    showed them fine.
+20. "Mobile shows 3 snags, laptop shows 1." — turned out **not** to be a sync
+    bug at all; see §13.
+21. An option to **delete** a saved facility, and the ability to reopen a
+    submitted facility later to add more snags.
+22. Text overlapping on the phone; the app must adapt to big and small
+    screens; and it must **open on the first page** (Facility Info), not
+    wherever it was last left.
+23. Second overlap report, with a photo of the phone: the app was drawing
+    underneath the Android status bar and navigation bar, so the tabs
+    mistapped. This is §14 — the most subtle bug of the session.
 
 ## 4a. Files Changed, Most Recent Commits First
 
@@ -133,7 +157,13 @@ Verified against `git diff-tree --name-status` for each commit (not assumed).
 
 | Commit | Files touched | What changed |
 |---|---|---|
-| `ad3d134` (HEAD) | `CLAUDE.md` | This file — first version. |
+| `6280706` (HEAD) | `src/App.jsx`, `src/components/Header.jsx`, `src/components/Navigation.jsx`, `src/index.css` | Safe-area insets so the app clears the Android system bars (§14). |
+| `18aabdb` | `src/App.jsx`, `src/utils/photoCapture.js` | Open on Facility Info unless returning from the camera (§15). |
+| `1b95167` | `src/App.jsx`, `src/components/Header.jsx`, `src/utils/geolocation.js`, `src/utils/photoCapture.js` | Header/facility-bar overlap at phone widths; plain-English message when a native plugin is missing from the APK. |
+| `564499f` | `src/App.jsx`, `src/components/SavedFacilities.jsx`, `src/utils/cloudSync.js` | Delete a saved facility (batched ≤5 rows); label unnamed facilities by snag count. |
+| `4e9cc68` | `src/utils/excelGenerator.js` | Excel silently dropped photos when cropping failed; added the same fallback the PDF already had. |
+| `c03d036` | `CLAUDE.md` | Re-verified this file against the project. |
+| `ad3d134` | `CLAUDE.md` | This file — first version. |
 | `18662ce` | `src/App.jsx` | Fixed item-disappears-after-1-second race (see §0, §11). |
 | `5f9c71a` | `DATA_SAFETY.md` (local repo). DB side: 3 Supabase migrations applied directly — archive trigger, mass-delete block, `restore_deleted_items()`. No other local files. | DB-level delete archive, mass-delete block, `restore_deleted_items()`. |
 | `ee33222` | `src/App.jsx`, `src/components/Header.jsx`, `src/data/sampleSurvey.js` (**deleted**) | Removed demo-data seeding permanently; recovered orphaned photos in prod DB. |
@@ -315,10 +345,18 @@ as the web app, so one `git push` updates web and app together.
 
 **Layout/navigation:** 5 tabs — Facility Info, Survey Items, Score & CapEx,
 Sign-Off, Report. Desktop: top tab bar. Mobile: bottom nav bar (safe-area
-aware). Tab panels stay **mounted** (`hidden` attribute, not
+aware — genuinely so since `6280706`; before that the safe-area class existed
+but was dead, see §14). Tab panels stay **mounted** (`hidden` attribute, not
 conditional-render) so switching is instant and doesn't re-render 1000+ DOM
 nodes — this was a deliberate perf fix, don't revert to conditional
 mounting/unmounting.
+
+**Screen sizes:** verified with no overflow and no overlap at 320, 360, 390,
+430 and 768 px across all four tabs. 320px is the floor to test against — at
+that width the header title, bottom-nav labels and facility name all rely on
+truncation, and the "Submit & Start New Facility" button switches to the
+shorter "Submit & New". The one element wider than the viewport is the report
+preview table, which is inside `overflow-x-auto` and scrolls on purpose.
 
 **Typography/spacing:** legibility was explicitly raised as an issue once
 (text too small); tiny `text-[9px]`/`text-[10px]` labels were bumped up a
@@ -407,7 +445,29 @@ document root causes in detail):
     hadn't finished writing everything yet. Added an "unpushed local edits"
     guard (skip any incoming pull while there's a pending push) plus a
     monotonic guard (never adopt a pull with fewer snags/photos than what's
-    already on screen).
+    already on screen). **User has since confirmed this fixed on-device.**
+15. Excel reports silently lost photos while the PDF kept them. Both call
+    `hydratePhotos()`, so the bytes were present — but Excel's
+    `coverCropToRatio()` had no fallback: any decode failure was swallowed by
+    a `catch` and the photo was simply skipped, whereas the PDF's helper falls
+    back to the raw image. Excel now falls back the same way (uncropped,
+    contain-fit) instead of dropping the picture.
+16. Delete a saved facility, from the Saved Facilities list. Deletes photos
+    then snags in **batches of 5** to respect the mass-delete-block trigger
+    (§6), then the survey row; the DB archives every row first, so it stays
+    recoverable via `restore_deleted_items()` even though the app offers no
+    undo. Also clears the local IndexedDB copy, and if the deleted facility
+    was the one open, starts a fresh blank one rather than editing a ghost.
+17. Facilities with no name entered were all labelled "Unnamed facility" and
+    were impossible to tell apart — the direct cause of the confusion in §13.
+    `listSurveys()` now also returns a snag count and the list shows
+    "Unnamed facility (3 snags)".
+18. Phone-width layout: the header title wrapped under the Reports button and
+    the facility name was crushed to a single letter. Title truncates, the
+    actions block is `shrink-0`, the Reports button drops to "Reports" below
+    `sm`, and the facility name takes its own row with the submit button
+    wrapping below it.
+19. Android system bars (§14) and the opening tab (§15).
 
 ## 9. Do Not Change
 
@@ -434,6 +494,19 @@ document root causes in detail):
 - **`.env.uitest`** — keep this pointing at blank Supabase credentials. It
   exists specifically so exploratory dev-server testing can never write to
   production data.
+- **`pt-1`, never `py-1`, on the mobile bottom nav** (`Navigation.jsx`). A
+  `pb`/`py` *utility* overrides `.safe-area-pb` from the components layer,
+  because Tailwind emits utilities after components. That one class silently
+  cancelled the safe-area padding and put the tabs under the Android
+  navigation bar — the bug looked like a CSS-support problem for months. Same
+  trap applies to `.safe-area-pt` on the header and `.safe-area-content-pb` on
+  `<main>`: never add a competing padding utility on the same side.
+- **Read `var(--safe-area-inset-*)` before `env(safe-area-inset-*)`** (§14).
+  Reversing the order breaks Android, where `env()` returns 0.
+- **The capture-in-flight flag** in `photoCapture.js` (§15). Removing it makes
+  the app either open on the wrong screen every launch, or lose the surveyor's
+  place when Android kills the app during a photo — it is what separates those
+  two cases.
 
 ## 10. Testing
 
@@ -464,44 +537,58 @@ see git commit messages for specifics of each):
   publishes, endpoint correctly reports update-available vs up-to-date,
   bundle downloads and its SHA-256 matches the manifest.
 
+**Tested and verified in the second session of 2026-09-07:**
+- Live Supabase queried directly (read-only) to establish ground truth for the
+  "3 vs 1 snags" report — two distinct survey rows, not a sync fault (§13).
+- Opening tab: with `fm_active_tab` set to `signatures`, a normal launch opens
+  on Facility Info; a simulated capture-kill restores Sign-Off; the launch
+  after that returns to Facility Info (flag consumed, not sticky). All three
+  branches exercised in the browser.
+- Screen sizes 320/360/390/430/768 px × 4 tabs: zero elements overflowing the
+  viewport, `documentElement.scrollWidth` never exceeds the viewport.
+- Safe areas: injected the exact custom properties Capacitor sets natively
+  (44px top, 48px bottom) and measured — header content starts at y=44, nav
+  padding-bottom resolves to 52px, and the tab buttons end at 792px against a
+  system bar starting at 796px, i.e. genuinely clear of it. This is also how
+  the dead `py-1` override was caught: padding-bottom measured 4px, not 52px.
+- Live deployment confirmed after shipping: the safe-area CSS is present in
+  the deployed stylesheet and the OTA manifest published a new bundle.
+
 **NOT yet tested — needs a physical Android device:**
 - Native Camera capture (permission prompt, actual photo, app surviving
   Android backgrounding/killing the Activity during capture).
 - Native GPS capture (permission prompt, actual coordinates, accuracy).
 - A real offline → reconnect cycle (airplane mode toggle), not just the
   simulated/unit-level queue and idempotency tests.
-- The "item disappears after ~1 second" fix (commit `18662ce`) — fixed at
-  the logic level and reasoned through carefully, but not yet confirmed by
-  the user on-device.
 - Photo capture UI on a real device end-to-end (does it stay on the
   Facility/Survey Items screen after taking a photo, as required).
+- The safe-area fix (`6280706`) — measured correct in the browser with
+  Capacitor's real injected values, but not yet confirmed by eye on the phone.
 
 ## 11. NEXT SESSION START HERE
 
 **Exact next task, in order:**
 
-1. `git log -1` and `git status`. If HEAD is still `ad3d134` and the tree is
+1. `git log -1` and `git status`. If HEAD is still `6280706` and the tree is
    clean, everything below is current. If not, something happened outside
    this doc — read the newer commit messages before doing anything else.
-2. **Open the conversation with this question**: *"Did the item you added
-   (photo or snag) stop disappearing after a second? And have you tried GPS /
-   the camera on the phone yet?"* Don't wait passively for the user to bring
-   it up — ask directly, first message. Their answer branches the work:
-   - **"Still disappears"** → get exact repro (which screen, photo or snag,
-     online or offline, how many devices open at once) and re-open
-     `src/App.jsx`'s two `subscribeTo*` handlers (search for
-     `hasUnpushedEditsRef`) — the guard added in `18662ce` may have a gap
-     the reasoning missed. `.env.uitest` for any exploratory testing (see
-     step 4).
-   - **"Fixed, but GPS/camera not tried yet"** → that's the actual open item.
-     Walk the user through installing the APK already built this session
-     (native permissions for GPS/Camera were added in `84db0d3` — if they're
-     on an older APK, GPS/Camera will not work at all, regardless of any
-     code fix) and running Test 1 from the original spec they gave: capture
-     GPS, take 2+ photos, confirm none disappear, confirm the app doesn't
-     return to the wrong screen after the camera closes.
-   - **"Both fine"** → nothing urgent. Ask what they want next; there is no
-     other known open bug (§3 lists unverified items, not known failures).
+2. **Open by asking whether GPS and the camera work on the phone now.** The
+   user installed the first plugin-carrying APK at the end of the last
+   session (§12) but had not yet tested either. That is the only open item.
+   Phrase it plainly, e.g. *"Did GPS and the camera work on the phone after
+   you installed the new APK?"*
+   - **"They work"** → nothing urgent is outstanding. Offer the remaining
+     unverified item — a genuine airplane-mode offline → reconnect cycle —
+     or ask what they want next.
+   - **"GPS/camera still fail"** → first establish **which APK is actually
+     installed**, before touching any code. If the error mentions a plugin
+     not being implemented, they are still on an old APK and no amount of
+     shipping will help — rebuild and send one (§12). If they are on the new
+     APK, then it is a real permission or device issue: get the exact
+     on-screen message, which `geolocation.js`/`photoCapture.js` now write in
+     plain English rather than raw plugin text.
+   - **"Something looks wrong on the phone screen"** → see §14 before
+     touching any layout CSS.
 3. Whatever the answer, **do not** start refactoring `cloudSync.js` or the
    sync guards speculatively. Every past incident in this project came from
    a "clean-up" of that file done without a concrete, reproduced failure in
@@ -526,4 +613,103 @@ see git commit messages for specifics of each):
    `capacitor.config.json`) need a new APK build — see `ANDROID.md` for the
    JDK toolchain gotchas (Android Studio's bundled JDK does not work for
    command-line builds; JDK 17 + JDK 21 side-by-side is the working
-   combination, details in that file).
+   combination, details in that file), and §12 here for the exact commands
+   that actually work on this machine.
+
+## 12. Building the APK (and when it is the only fix)
+
+**`npm run ship` can never fix GPS or the camera.** OTA replaces the web
+bundle only; the native plugins are compiled into the APK. The user spent this
+session on an APK built *before* the plugins existed, so every update appeared
+to install fine and GPS stayed broken regardless. If a native capability
+fails, establish which APK is installed before changing any code.
+
+`npm run android:build` **fails under Git Bash** (`gradlew.bat` is not on the
+PATH), and Gradle needs two environment variables that are not set globally on
+this machine — `local.properties` is gitignored and absent. What actually
+works:
+
+```bash
+export JAVA_HOME="C:/Program Files/Eclipse Adoptium/jdk-21.0.12.101-hotspot"
+export ANDROID_HOME="C:/Users/SAIF412/AppData/Local/Android/Sdk"
+npx vite build && npx cap sync android
+cd android && ./gradlew.bat assembleDebug
+```
+
+Output: `android/app/build/outputs/apk/debug/app-debug.apk` (~15 MB). Confirm
+`cap sync` lists all 6 plugins — camera, filesystem, geolocation, network,
+share, updater — then send the file to the user with SendUserFile. It is a
+debug build, so Android warns about unknown sources; that is expected.
+
+## 13. "The phone and the laptop show different data"
+
+Reported this session as "mobile shows 3 snags, laptop shows 1". It was **not
+a sync bug.** A direct read-only query showed two genuinely different survey
+rows, each device continuing its own.
+
+Each device remembers its own current survey id locally; nothing reconciles
+them automatically, and switching is manual via **Saved Facilities → Open**.
+Both rows had blank facility names, so the UI labelled both "Unnamed facility"
+and they looked like one facility failing to sync.
+
+**So: query the database before concluding anything.**
+
+```sql
+select survey_id, count(*) from survey_items group by survey_id;
+```
+
+If the counts match two distinct rows, this is a labelling/identification
+problem, not data loss — do not "fix" the sync layer. §17 in §8 added snag
+counts to the list labels specifically so this is visible next time.
+
+## 14. Android system bars (the safe-area trap)
+
+Symptom: the status bar (clock, battery) sits on top of the app header, and
+the Android navigation buttons sit on top of the bottom tabs, so tabs mistap.
+
+Three things combine to cause it, and **all three must stay fixed**:
+
+1. `targetSdkVersion = 36`. On Android 15+ the system *forces* edge-to-edge;
+   the app cannot opt out, so it is always drawn behind the system bars.
+2. **`env(safe-area-inset-*)` returns 0 on Android WebView below version 140**
+   (chromium issue 40699457). Any CSS relying on `env()` alone silently does
+   nothing there. Capacitor's built-in `SystemBars` plugin works around this
+   by measuring the real insets natively and setting them as custom
+   properties: `--safe-area-inset-top/right/bottom/left`. Always read the
+   variable first, `env()` only as the fallback for iOS and the browser:
+   `var(--safe-area-inset-top, env(safe-area-inset-top, 0px))`.
+3. A Tailwind layer conflict. `.safe-area-pb` lives in `@layer components`; a
+   `py-1`/`pb-*` **utility** on the same element overrides it, because
+   utilities are emitted after components. The bottom nav carried `py-1`, so
+   its safe-area padding had never actually applied. Use `pt-1` there.
+
+This needs **no APK rebuild** — `SystemBars` is part of `@capacitor/android`
+and is already in the installed APK, so the fix ships over the air.
+
+To verify without a phone, inject what Capacitor would send and measure:
+
+```js
+document.documentElement.style.setProperty('--safe-area-inset-top','44px');
+document.documentElement.style.setProperty('--safe-area-inset-bottom','48px');
+```
+
+Then confirm the header's content starts at y=44 and the last tab button's
+bottom edge is above `viewportHeight - 48`.
+
+## 15. Which screen the app opens on
+
+The app opens on **Facility Info**, except when it is returning from the
+camera — then it restores the tab the surveyor was on.
+
+Both halves are requirements and they pull against each other. Restoring the
+tab on every launch (the old behaviour) meant the app opened wherever it was
+last left, which the user rejected. Never restoring it means Android killing
+the Activity mid-capture dumps the surveyor back to Facility Info, which is
+the original bug `84db0d3` was written to fix.
+
+`photoCapture.js` distinguishes them with a `fm_capture_in_flight` flag set
+immediately before the native camera/gallery call and cleared in a `finally`.
+If the process is killed, the `finally` never runs and the flag survives —
+which is exactly the signal. `consumeCaptureReturn()` reads it **and clears
+it**, so a flag orphaned by a kill cannot hijack every later launch; it also
+ignores flags older than 10 minutes as a second guard.
