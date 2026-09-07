@@ -2,6 +2,7 @@ import ExcelJS from 'exceljs';
 import { PRIORITY_LEVELS, DEPARTMENTS, calculateSurveyStats } from '../types/survey.js';
 import { OCS_LOGO_BASE64 } from '../assets/logoDataUrl.js';
 import { saveBlob } from './fileSaver.js';
+import { formatMoney, EXCEL_MONEY_FORMAT } from './currency.js';
 
 /**
  * Converts image data (including SVG data URLs) to a clean JPEG base64 string via an offscreen
@@ -355,7 +356,7 @@ export async function generateSurveyExcel(survey, selectedFacility = 'ALL') {
     { label: 'TOTAL SNAGS AUDITED', val: stats.total, color: 'FF0F172A', sub: 'Cataloged building elements' },
     { label: 'TOTAL DEFECT PHOTOS', val: stats.totalPhotos, color: 'FF0284C7', sub: 'Attached photographic evidence' },
     { label: 'URGENT HAZARDS (P1)', val: stats.priorityCounts[1], color: 'FFDC2626', sub: 'Immediate life safety' },
-    { label: 'REMEDIAL CAPEX BUDGET', val: `$${stats.totalCost.toLocaleString()}`, color: 'FF0F172A', sub: 'Estimated remediation expenditure' }
+    { label: 'REMEDIAL CAPEX BUDGET', val: formatMoney(stats.totalCost), color: 'FF0F172A', sub: 'Estimated remediation expenditure' }
   ];
 
   let kpiRow = 6;
@@ -426,7 +427,7 @@ export async function generateSurveyExcel(survey, selectedFacility = 'ALL') {
   deptTitle.alignment = { horizontal: 'center', vertical: 'middle' };
   wsDept.getRow(2).height = 28;
 
-  const deptHeaders = ['Department / Trade', 'Defect Count', 'Remedial Budget ($)', 'CapEx Share (%)'];
+  const deptHeaders = ['Department / Trade', 'Defect Count', 'Remedial Budget (AED)', 'CapEx Share (%)'];
   const deptHeaderRow = wsDept.getRow(4);
   deptHeaderRow.values = ['', ...deptHeaders];
   deptHeaderRow.font = { name: 'Arial', size: 9, bold: true, color: { argb: 'FFFFFFFF' } };
@@ -453,7 +454,7 @@ export async function generateSurveyExcel(survey, selectedFacility = 'ALL') {
     ];
     row.font = { name: 'Arial', size: 9 };
     wsDept.getCell(`C${dRowIdx}`).alignment = { horizontal: 'center' };
-    wsDept.getCell(`D${dRowIdx}`).numFmt = '"$"#,##0';
+    wsDept.getCell(`D${dRowIdx}`).numFmt = EXCEL_MONEY_FORMAT;
     wsDept.getCell(`E${dRowIdx}`).numFmt = '0.0%';
     wsDept.getCell(`E${dRowIdx}`).alignment = { horizontal: 'center' };
     dRowIdx++;
@@ -476,7 +477,7 @@ export async function generateSurveyExcel(survey, selectedFacility = 'ALL') {
     c.border = { top: { style: 'thin' }, bottom: { style: 'double' } };
   });
   wsDept.getCell(`C${dRowIdx}`).alignment = { horizontal: 'center' };
-  wsDept.getCell(`D${dRowIdx}`).numFmt = '"$"#,##0';
+  wsDept.getCell(`D${dRowIdx}`).numFmt = EXCEL_MONEY_FORMAT;
   wsDept.getCell(`E${dRowIdx}`).numFmt = '100.0%';
   wsDept.getCell(`E${dRowIdx}`).alignment = { horizontal: 'center' };
 
@@ -498,7 +499,7 @@ export async function generateSurveyExcel(survey, selectedFacility = 'ALL') {
   // F: Priority
   // G: Observed Defects & Notes
   // H: Quantity
-  // I: Est. Cost ($)
+  // I: Est. Cost (AED)
   // ==========================================
 
   const wsSnags = workbook.addWorksheet('Snag Register', {
@@ -519,7 +520,7 @@ export async function generateSurveyExcel(survey, selectedFacility = 'ALL') {
     { width: 14 }, // F: Priority
     { width: 48 }, // G: Observed Defects & Notes
     { width: 10 }, // H: Quantity
-    { width: 18 }  // I: Est. Cost ($)
+    { width: 18 }  // I: Est. Cost (AED)
   ];
 
   // Header banner
@@ -543,7 +544,7 @@ export async function generateSurveyExcel(survey, selectedFacility = 'ALL') {
     'Priority',
     'Observed Defects & Notes',
     'Quantity',
-    'Est. Cost ($)'
+    'Est. Cost (AED)'
   ];
 
   const headerRow = wsSnags.getRow(3);
@@ -564,7 +565,7 @@ export async function generateSurveyExcel(survey, selectedFacility = 'ALL') {
   // Facility Section Header Row
   wsSnags.mergeCells(`A${snagRowIdx}:I${snagRowIdx}`);
   const facBannerCell = wsSnags.getCell(`A${snagRowIdx}`);
-  facBannerCell.value = `🏢 FACILITY: ${facName.toUpperCase()} (${itemsToReport.length} Audited Snags  •  $${stats.totalCost.toLocaleString()} Total Remedial CapEx)`;
+  facBannerCell.value = `🏢 FACILITY: ${facName.toUpperCase()} (${itemsToReport.length} Audited Snags  •  ${formatMoney(stats.totalCost)} Total Remedial CapEx)`;
   facBannerCell.font = { name: 'Arial', size: 10, bold: true, color: { argb: 'FFFFFFFF' } };
   facBannerCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: facilityHeaderBg } };
   facBannerCell.alignment = { vertical: 'middle', indent: 1 };
@@ -619,7 +620,7 @@ export async function generateSurveyExcel(survey, selectedFacility = 'ALL') {
       wsSnags.getCell(`G${snagRowIdx}`).alignment = { vertical: 'middle', wrapText: true };
       wsSnags.getCell(`H${snagRowIdx}`).alignment = { horizontal: 'center', vertical: 'middle' };
       wsSnags.getCell(`I${snagRowIdx}`).alignment = { horizontal: 'right', vertical: 'middle' };
-      wsSnags.getCell(`I${snagRowIdx}`).numFmt = '"$"#,##0';
+      wsSnags.getCell(`I${snagRowIdx}`).numFmt = EXCEL_MONEY_FORMAT;
       wsSnags.getCell(`I${snagRowIdx}`).font = { bold: true };
 
       // Embed photo thumbnail in Col B
@@ -752,7 +753,7 @@ export async function generateSurveyExcel(survey, selectedFacility = 'ALL') {
 
         wsPhotos.getCell(`C${currentRow + 6}`).value = 'Remedial Estimate:';
         wsPhotos.getCell(`C${currentRow + 6}`).font = { name: 'Arial', size: 9, bold: true, color: { argb: 'FF64748B' } };
-        wsPhotos.getCell(`D${currentRow + 6}`).value = `$${(parseFloat(item.estimatedCost) || 0).toLocaleString()}`;
+        wsPhotos.getCell(`D${currentRow + 6}`).value = formatMoney(item.estimatedCost);
         wsPhotos.getCell(`D${currentRow + 6}`).font = { name: 'Arial', size: 10, bold: true };
 
         // Embed full photo

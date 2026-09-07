@@ -2,6 +2,7 @@ import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 import { PRIORITY_LEVELS, DEPARTMENTS, calculateSurveyStats } from '../types/survey';
 import { OCS_LOGO_TRIMMED, OCS_LOGO_WHITE, OCS_LOGO_TRIMMED_RATIO } from '../assets/logoTrimmed';
+import { formatMoney } from './currency';
 
 /* jsPDF's addImage stretches the bitmap to whatever box you give it -- it does
    not preserve aspect. The cover was drawn 32x15mm (ratio 2.133) against a true
@@ -242,7 +243,7 @@ export async function generateSurveyPDF(survey, selectedFacility = 'ALL') {
   drawKpiCard(20, curY, 'AUDITED SNAGS', stats.total, 'Snag Elements', [40, 65, 124]);
   drawKpiCard(20 + kpiWidth + 3, curY, 'ATTACHED PHOTOS', stats.totalPhotos, 'Defect Evidence', [2, 132, 199]);
   drawKpiCard(20 + (kpiWidth + 3) * 2, curY, 'URGENT HAZARDS', stats.priorityCounts[1], 'Priority 1 Life Safety', [220, 38, 38]);
-  drawKpiCard(20 + (kpiWidth + 3) * 3, curY, 'REMEDIAL CAPEX', `$${stats.totalCost.toLocaleString()}`, 'Estimated Budget', [40, 65, 124]);
+  drawKpiCard(20 + (kpiWidth + 3) * 3, curY, 'REMEDIAL CAPEX', formatMoney(stats.totalCost), 'Estimated Budget', [40, 65, 124]);
 
   // Scope notes block
   curY += 34;
@@ -326,7 +327,7 @@ export async function generateSurveyPDF(survey, selectedFacility = 'ALL') {
     return [
       dept.name,
       dStat.count,
-      `$${dStat.cost.toLocaleString()}`,
+      formatMoney(dStat.cost),
       `${pct}%`
     ];
   });
@@ -334,13 +335,13 @@ export async function generateSurveyPDF(survey, selectedFacility = 'ALL') {
   deptTableRows.push([
     'TOTAL (All Departments Combined)',
     stats.total,
-    `$${stats.totalCost.toLocaleString()}`,
+    formatMoney(stats.totalCost),
     '100.0%'
   ]);
 
   doc.autoTable({
     startY: currentY + 4,
-    head: [['Maintenance Department / Trade', 'Defect Count', 'Remedial Budget ($)', 'CapEx Share (%)']],
+    head: [['Maintenance Department / Trade', 'Defect Count', 'Remedial Budget (AED)', 'CapEx Share (%)']],
     body: deptTableRows,
     theme: 'grid',
     headStyles: { fillColor: [40, 65, 124], textColor: [255, 255, 255], fontSize: 8.5, fontStyle: 'bold' },
@@ -423,7 +424,7 @@ export async function generateSurveyPDF(survey, selectedFacility = 'ALL') {
       deptName,
       `P${item.priority}`,
       item.defectDescription || 'No significant defect identified.',
-      `$${(parseFloat(item.estimatedCost) || 0).toLocaleString()}`
+      formatMoney(item.estimatedCost)
     ];
   });
 
@@ -567,7 +568,7 @@ export async function generateSurveyPDF(survey, selectedFacility = 'ALL') {
         // Action & Cost
         doc.setFont('helvetica', 'bold');
         doc.setTextColor(15, 23, 42);
-        doc.text(`Remedial Estimate: $${(parseFloat(item.estimatedCost) || 0).toLocaleString()}`, infoX, photoY + 63);
+        doc.text(`Remedial Estimate: ${formatMoney(item.estimatedCost)}`, infoX, photoY + 63);
 
         photoY += 73;
       }

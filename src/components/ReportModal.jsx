@@ -26,6 +26,7 @@ import confetti from 'canvas-confetti';
 import { PRIORITY_LEVELS, DEPARTMENTS, calculateSurveyStats } from '../types/survey';
 import { generateSurveyPDF } from '../utils/pdfGenerator';
 import { generateSurveyExcel } from '../utils/excelGenerator';
+import { formatMoney } from '../utils/currency';
 
 export default function ReportModal({ survey = {}, onClose }) {
   const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
@@ -304,7 +305,7 @@ export default function ReportModal({ survey = {}, onClose }) {
             <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm text-center">
               <span className="text-[11px] font-bold text-slate-400 uppercase">Remediation CapEx</span>
               <div className="text-2xl sm:text-3xl font-extrabold text-slate-900 my-1 truncate">
-                ${(stats?.totalCost || 0).toLocaleString()}
+                {formatMoney(stats?.totalCost)}
               </div>
               <span className="text-[12px] text-slate-500 font-medium">Preliminary Budget</span>
             </div>
@@ -341,7 +342,7 @@ export default function ReportModal({ survey = {}, onClose }) {
                           </span>
                         </td>
                         <td className="p-2.5 text-center font-semibold text-slate-700">{dStat.count}</td>
-                        <td className="p-2.5 text-right font-bold text-slate-900">${dStat.cost.toLocaleString()}</td>
+                        <td className="p-2.5 text-right font-bold text-slate-900">{formatMoney(dStat.cost)}</td>
                         <td className="p-2.5 text-center font-semibold text-slate-500">{pct}%</td>
                       </tr>
                     );
@@ -413,7 +414,7 @@ export default function ReportModal({ survey = {}, onClose }) {
                         {item.quantity || 1}
                       </td>
                       <td className="p-3 text-right font-bold text-slate-900">
-                        ${(parseFloat(item.estimatedCost) || 0).toLocaleString()}
+                        {formatMoney(item.estimatedCost)}
                       </td>
                     </tr>
                   );
@@ -470,7 +471,7 @@ export default function ReportModal({ survey = {}, onClose }) {
 
                     <div className="text-right">
                       <span className="text-xs font-bold text-slate-700 block">
-                        Est. Cost: ${(parseFloat(item.estimatedCost) || 0).toLocaleString()}
+                        Est. Cost: {formatMoney(item.estimatedCost)}
                       </span>
                       <span className="text-[12px] font-semibold text-sky-600">
                         {item.photos.length} {item.photos.length === 1 ? 'Photo attached' : 'Photos attached'}

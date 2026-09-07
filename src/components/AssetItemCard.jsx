@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { PRIORITY_LEVELS, DEPARTMENTS } from '../types/survey';
 import { compressImage } from '../utils/imageCompressor';
+import { formatMoney } from '../utils/currency';
 
 const PHOTO_PRESET_TAGS = [
   'Defect Close-up',
@@ -202,7 +203,7 @@ function AssetItemCard({
 
           {item.estimatedCost > 0 && (
             <span className="text-xs font-bold text-slate-700 hidden sm:inline-block">
-              ${parseFloat(item.estimatedCost).toLocaleString()}
+              {formatMoney(item.estimatedCost)}
             </span>
           )}
 
@@ -369,7 +370,7 @@ function AssetItemCard({
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-[12px] font-bold uppercase text-slate-600 mb-1">
-                Estimated Remediation Cost ($)
+                Estimated Remediation Cost (AED)
               </label>
               <div className="relative">
                 <input

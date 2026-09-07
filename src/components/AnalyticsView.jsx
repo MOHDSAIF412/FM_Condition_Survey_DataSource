@@ -13,6 +13,7 @@ import {
   MapPin
 } from 'lucide-react';
 import { PRIORITY_LEVELS, calculateSurveyStats, DEPARTMENTS } from '../types/survey';
+import { formatMoney } from '../utils/currency';
 
 export default function AnalyticsView({ items = [], onOpenReport }) {
   const stats = calculateSurveyStats(items || []);
@@ -111,7 +112,7 @@ export default function AnalyticsView({ items = [], onOpenReport }) {
           <span className="text-xs font-bold text-slate-500 uppercase">Remediation CapEx</span>
           <div className="my-2">
             <span className="text-2xl sm:text-3xl font-extrabold text-slate-900 truncate">
-              ${(stats?.totalCost || 0).toLocaleString()}
+              {formatMoney(stats?.totalCost)}
             </span>
           </div>
           <span className="text-[12px] text-slate-500 font-medium">Estimated budget</span>
@@ -140,7 +141,7 @@ export default function AnalyticsView({ items = [], onOpenReport }) {
                       {(itemDept.name || 'FM').split('&')[0]}
                     </span>
                   </div>
-                  <span className="font-bold text-rose-600">${parseFloat(item.estimatedCost || 0).toLocaleString()}</span>
+                  <span className="font-bold text-rose-600">{formatMoney(item.estimatedCost)}</span>
                 </div>
               );
             })}
@@ -173,7 +174,7 @@ export default function AnalyticsView({ items = [], onOpenReport }) {
                 </div>
                 <div className="text-right">
                   <span className="font-extrabold text-slate-900 text-sm">
-                    ${(dept.cost || 0).toLocaleString()}
+                    {formatMoney(dept.cost)}
                   </span>
                   <span className="text-slate-400 ml-2 text-[12px]">({pct}%)</span>
                 </div>
@@ -240,7 +241,7 @@ export default function AnalyticsView({ items = [], onOpenReport }) {
                       <span className="text-slate-400 ml-1 text-[12px]">({loc.count} items)</span>
                     </div>
                     <div className="text-right">
-                      <span className="font-bold text-slate-800">${(loc.cost || 0).toLocaleString()}</span>
+                      <span className="font-bold text-slate-800">{formatMoney(loc.cost)}</span>
                       <span className="text-slate-400 ml-1 text-[11px]">({pct}%)</span>
                     </div>
                   </div>
