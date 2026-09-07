@@ -628,7 +628,12 @@ export async function generateSurveyExcel(survey, selectedFacility = 'ALL') {
           const cellW = colWidthToPx(THUMB_COL_WIDTH);
           const cellH = rowHeightToPx(THUMB_ROW_HEIGHT_PTS);
           // Crop the bitmap to the cell's own ratio so it fills it exactly.
-          const cropped = await coverCropToRatio(photos[0].dataUrl, cellW / cellH, cellW * 2);
+          let cropped = null;
+          try {
+            cropped = await coverCropToRatio(photos[0].dataUrl, cellW / cellH, cellW * 2);
+          } catch (cropErr) {
+            console.warn('Thumbnail crop failed, falling back to uncropped embed:', cropErr);
+          }
           if (cropped && cropped.base64) {
             const imageId = workbook.addImage({
               base64: cropped.base64,
@@ -642,6 +647,24 @@ export async function generateSurveyExcel(survey, selectedFacility = 'ALL') {
               heightPx: cellH,
               fit: 'cover'
             });
+          } else {
+            // Cropping failed (decode error, huge image, etc) -- fall back to the
+            // uncropped photo, contain-fit, rather than dropping it silently.
+            const safe = await getSafeJpegImage(photos[0].dataUrl);
+            if (safe && safe.base64) {
+              const imageId = workbook.addImage({ base64: safe.base64, extension: 'jpeg' });
+              placeImageInBox(wsSnags, imageId, safe, {
+                col: 1,
+                row: snagRowIdx - 1,
+                widthPx: cellW,
+                heightPx: cellH,
+                fit: 'contain'
+              });
+            } else {
+              wsSnags.getCell(`B${snagRowIdx}`).value = 'Photo unavailable';
+              wsSnags.getCell(`B${snagRowIdx}`).font = { italic: true, color: { argb: 'FF94A3B8' } };
+              wsSnags.getCell(`B${snagRowIdx}`).alignment = { horizontal: 'center', vertical: 'middle' };
+            }
           }
         } catch (imgErr) {
           console.warn('Failed embedding thumbnail into Excel:', imgErr);
@@ -760,7 +783,12 @@ export async function generateSurveyExcel(survey, selectedFacility = 'ALL') {
           try {
             const cellW = colWidthToPx(PHOTO_COL_WIDTH);
             const cellH = PHOTO_BOX_HEIGHT_PX;
-            const cropped = await coverCropToRatio(photo.dataUrl, cellW / cellH, cellW * 2);
+            let cropped = null;
+            try {
+              cropped = await coverCropToRatio(photo.dataUrl, cellW / cellH, cellW * 2);
+            } catch (cropErr) {
+              console.warn('Photo Log crop failed, falling back to uncropped embed:', cropErr);
+            }
             if (cropped && cropped.base64) {
               const imageId = workbook.addImage({
                 base64: cropped.base64,
@@ -775,8 +803,24 @@ export async function generateSurveyExcel(survey, selectedFacility = 'ALL') {
                 fit: 'cover'
               });
             } else {
-              photoBox.value = 'Photo unavailable';
-              photoBox.font = { italic: true, color: { argb: 'FF94A3B8' } };
+              // Cropping failed -- fall back to the uncropped photo, contain-fit,
+              // rather than dropping it silently (this used to leave Excel with
+              // no photos at all while the PDF, which has this same fallback,
+              // came out fine).
+              const safe = await getSafeJpegImage(photo.dataUrl);
+              if (safe && safe.base64) {
+                const imageId = workbook.addImage({ base64: safe.base64, extension: 'jpeg' });
+                placeImageInBox(wsPhotos, imageId, safe, {
+                  col: 1,
+                  row: currentRow - 1,
+                  widthPx: cellW,
+                  heightPx: cellH,
+                  fit: 'contain'
+                });
+              } else {
+                photoBox.value = 'Photo unavailable';
+                photoBox.font = { italic: true, color: { argb: 'FF94A3B8' } };
+              }
             }
           } catch (pErr) {
             console.warn('Failed embedding full photo into Excel Photo Log:', pErr);
