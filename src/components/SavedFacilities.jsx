@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { FileText, FileSpreadsheet, FolderOpen, CheckCircle2, Loader2, Trash2 } from 'lucide-react';
+import { FileText, FileSpreadsheet, FolderOpen, CheckCircle2, Loader2, Trash2, CloudOff } from 'lucide-react';
 import { pullSurvey, hydratePhotos } from '../utils/cloudSync';
+import { listAllSurveysOffline } from '../utils/storage';
 import { generateSurveyPDF } from '../utils/pdfGenerator';
 import { generateSurveyExcel } from '../utils/excelGenerator';
 import { formatMoney } from '../utils/currency';
@@ -27,7 +28,21 @@ export default function SavedFacilities({ surveys = [], currentId, onOpen, onDel
   const download = async (surveyId, kind) => {
     setBusy(`${surveyId}:${kind}`);
     try {
-      const survey = await pullSurvey(surveyId, {});
+      let survey = null;
+      try {
+        survey = await pullSurvey(surveyId, {});
+      } catch (err) {
+        console.info('Server copy unavailable, using the one on this device:', err?.message);
+      }
+
+      // Not on the server yet (submitted with no signal, or still uploading).
+      // The device holds the full copy including photo bytes, so the report can
+      // still be produced here rather than refusing.
+      if (!survey) {
+        const localCopy = (await listAllSurveysOffline()).find((s) => s && s.id === surveyId);
+        if (localCopy) survey = localCopy;
+      }
+
       if (!survey) {
         alert('That facility could not be loaded. Check your connection and try again.');
         return;
@@ -102,6 +117,14 @@ export default function SavedFacilities({ surveys = [], currentId, onOpen, onDel
                   {isCurrent && (
                     <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-ocs-100 text-ocs-700 border border-ocs-200">
                       Open now
+                    </span>
+                  )}
+                  {s.pendingSync && (
+                    <span
+                      title="Saved on this device. It uploads automatically when there is a connection."
+                      className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 text-amber-800 border border-amber-300 inline-flex items-center gap-1"
+                    >
+                      <CloudOff className="w-3 h-3" /> Waiting to upload
                     </span>
                   )}
                 </div>

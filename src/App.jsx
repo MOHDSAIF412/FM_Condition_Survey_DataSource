@@ -13,7 +13,8 @@ import {
   loadCurrentSurveyOffline,
   subscribeToSurveyChanges,
   markSurveySynced,
-  deleteSurveyOffline
+  deleteSurveyOffline,
+  listAllSurveysOffline
 } from './utils/storage';
 import { generateSurveyExcel } from './utils/excelGenerator';
 import { saveText } from './utils/fileSaver';
@@ -105,13 +106,24 @@ export default function App() {
         setSyncState('offline');
         return;
       }
-      // Back online: flush whatever was recorded with no signal.
-      if (isCloudConfigured && surveyRef.current) {
+      // Back online: flush whatever was recorded with no signal -- both the
+      // survey on screen and any facility submitted offline, which is no
+      // longer the one on screen (see flushPendingSurveys).
+      if (isCloudConfigured) {
         setSyncState('syncing');
-        pushAndSettle().catch((err) => {
-          console.info('Reconnect sync deferred:', err.message);
-          setSyncState('offline');
-        });
+        (async () => {
+          try {
+            if (surveyRef.current) await pushAndSettle();
+          } catch (err) {
+            console.info('Reconnect sync deferred:', err.message);
+            setSyncState('offline');
+          }
+          try {
+            await flushPendingSurveys();
+          } catch (err) {
+            console.info('Pending upload deferred:', err.message);
+          }
+        })();
       }
     });
   }, []);
@@ -194,6 +206,59 @@ export default function App() {
     await markSurveySynced(surveyRef.current.id);
     setSyncState('synced');
     return pushResult;
+  }
+
+  /**
+   * Uploads every survey still holding unsent work -- not only the one on screen.
+   *
+   * ROOT CAUSE of "I submitted a facility with no signal and it never appeared
+   * on the laptop": submitting immediately opens a fresh blank survey, so by
+   * the time the connection came back `surveyRef.current` was that empty one.
+   * The reconnect handler pushed it, reported "synced", and the facility the
+   * surveyor had actually submitted sat in IndexedDB marked pendingSync
+   * forever. Nothing ever looked for it again, so its snags and photos never
+   * reached the database and could not be downloaded anywhere else.
+   *
+   * Each survey is pushed independently: one that fails must not stop the rest,
+   * and anything still unsent keeps its pendingSync flag so the next
+   * connection retries it.
+   */
+  async function flushPendingSurveys() {
+    if (!isCloudConfigured || !isOnline()) return { flushed: 0, failed: 0 };
+
+    let stored = [];
+    try {
+      stored = await listAllSurveysOffline();
+    } catch (err) {
+      console.warn('[sync] could not read local surveys:', err?.message);
+      return { flushed: 0, failed: 0 };
+    }
+
+    let flushed = 0;
+    let failed = 0;
+    for (const local of stored) {
+      if (!local || !local.id || !local.pendingSync) continue;
+      if (local.id === surveyRef.current?.id) continue;   // pushAndSettle owns this one
+      // An untouched blank survey is not worth a round trip.
+      if (!local.submittedAt && !(local.items || []).length) continue;
+
+      try {
+        const res = await pushSurvey(local);
+        if (res && res.pushed) {
+          await markSurveySynced(local.id);
+          flushed++;
+        }
+      } catch (err) {
+        failed++;
+        console.info('[sync] still pending, will retry on the next connection:', local.id, err.message);
+      }
+    }
+
+    if (flushed) {
+      console.info(`[sync] uploaded ${flushed} facility(ies) recorded offline`);
+      await refreshSurveyList();
+    }
+    return { flushed, failed };
   }
 
   // Load from IndexedDB on initial launch
@@ -476,12 +541,63 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
 
   const [surveyList, setSurveyList] = useState([]);
 
+  /**
+   * The facility list = what the server has, plus anything still only on this
+   * device.
+   *
+   * Reading the server alone meant a facility submitted with no signal simply
+   * did not appear anywhere after submitting, which reads as "my work
+   * vanished". Local copies are merged in and flagged so the surveyor can see
+   * it is saved and waiting to upload.
+   */
   const refreshSurveyList = async () => {
-    if (!isCloudConfigured) return;
-    try { setSurveyList(await listSurveys()); } catch { /* offline */ }
+    let remote = [];
+    if (isCloudConfigured) {
+      try { remote = await listSurveys(); } catch { /* offline: local only */ }
+    }
+
+    let local = [];
+    try { local = await listAllSurveysOffline(); } catch { /* ignore */ }
+
+    const merged = new Map(remote.map((s) => [s.id, { ...s, pendingSync: false }]));
+    for (const l of local) {
+      if (!l || !l.id) continue;
+      // Blank, never-submitted scratch surveys are noise in this list.
+      if (!l.submittedAt && !(l.items || []).length) continue;
+
+      const existing = merged.get(l.id);
+      if (existing) {
+        // On the server already, but this device still has unsent edits.
+        if (l.pendingSync) merged.set(l.id, { ...existing, pendingSync: true });
+        continue;
+      }
+      merged.set(l.id, {
+        id: l.id,
+        title: l.title,
+        facilityName: l.facility?.facilityName || l.facility?.buildingName || 'Unnamed facility',
+        itemCount: (l.items || []).length,
+        status: l.status || 'draft',
+        submittedAt: l.submittedAt || null,
+        updatedAt: l.updatedAt || new Date().toISOString(),
+        pendingSync: !!l.pendingSync,
+        localOnly: true
+      });
+    }
+
+    setSurveyList(
+      [...merged.values()].sort(
+        (a, b) => new Date(b.submittedAt || b.updatedAt || 0) - new Date(a.submittedAt || a.updatedAt || 0)
+      )
+    );
   };
 
-  useEffect(() => { if (isLoaded) refreshSurveyList(); }, [isLoaded]);
+  // On launch, also upload anything submitted during an earlier offline
+  // session -- the app may have been closed before the connection came back.
+  useEffect(() => {
+    if (!isLoaded) return;
+    refreshSurveyList();
+    flushPendingSurveys().catch(() => { /* retried on the next connection */ });
+  }, [isLoaded]);
 
   /** Opens a previously submitted facility so its report can be generated. */
   const handleOpenSurvey = async (surveyId) => {
