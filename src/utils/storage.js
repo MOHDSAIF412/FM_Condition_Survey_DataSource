@@ -13,7 +13,22 @@ const SYNC_CHANNEL = 'fm_survey_sync';
  * that was opened earlier, and the new asset is gone.
  */
 const TAB_ID = 'tab_' + Math.random().toString(36).slice(2) + Date.now().toString(36);
-let lastKnownRevision = 0;
+
+/**
+ * The revision this tab last saw, **per survey**.
+ *
+ * This used to be a single number shared by every survey, which silently broke
+ * saving. The counter tracked whichever survey was last touched, so opening a
+ * facility whose stored revision was higher than that number looked like
+ * "another tab saved something newer" -- a conflict. The save was refused, the
+ * caller's edits were dropped, and because the stored revision never moved, it
+ * was refused again on every later save too. The facility became permanently
+ * unsaveable and the work was gone on the next launch.
+ *
+ * Keyed by survey id, a comparison only ever happens against the same survey,
+ * which is what the cross-tab guard actually meant.
+ */
+const lastKnownRevisions = new Map();
 
 let syncChannel = null;
 function getSyncChannel() {
@@ -130,15 +145,23 @@ export async function saveSurveyOffline(survey, options = {}) {
 
       existingReq.onsuccess = () => {
         const existing = existingReq.result;
+        const seen = lastKnownRevisions.has(survey.id)
+          ? lastKnownRevisions.get(survey.id)
+          : null;
 
         // Another tab saved something newer than what this tab last saw.
         // Overwriting would destroy their work, so refuse and report back.
-        if (existing && (existing.revision || 0) > lastKnownRevision) {
+        //
+        // `seen === null` means this tab has never read or written THIS survey
+        // (it was just opened from the facility list, say). That is not a
+        // conflict -- there is nothing of ours to lose -- so adopt whatever is
+        // stored and carry on from there.
+        if (existing && seen !== null && (existing.revision || 0) > seen) {
           resolve({ conflict: true, stored: existing });
           return;
         }
 
-        const nextRevision = Math.max(existing?.revision || 0, lastKnownRevision) + 1;
+        const nextRevision = Math.max(existing?.revision || 0, seen || 0) + 1;
         const dataToSave = {
           ...survey,
           revision: nextRevision,
@@ -148,7 +171,7 @@ export async function saveSurveyOffline(survey, options = {}) {
         };
         const req = store.put(dataToSave);
         req.onsuccess = () => {
-          lastKnownRevision = nextRevision;
+          lastKnownRevisions.set(survey.id, nextRevision);
           broadcastChange(dataToSave);
           // Also save active ID to localStorage for quick restore
           try {
@@ -186,14 +209,14 @@ export async function loadCurrentSurveyOffline(defaultId = 'active_survey') {
       const req = store.get(activeId);
       req.onsuccess = () => {
         if (req.result) {
-          lastKnownRevision = req.result.revision || 0;
+          lastKnownRevisions.set(req.result.id, req.result.revision || 0);
           resolve(req.result);
         } else {
           // Check if there is any survey in the store
           const allReq = store.getAll();
           allReq.onsuccess = () => {
             if (allReq.result && allReq.result.length > 0) {
-              lastKnownRevision = allReq.result[0].revision || 0;
+              lastKnownRevisions.set(allReq.result[0].id, allReq.result[0].revision || 0);
               resolve(allReq.result[0]);
             } else {
               // Try fallback localStorage
