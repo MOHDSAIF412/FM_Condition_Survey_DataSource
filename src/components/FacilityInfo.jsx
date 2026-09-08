@@ -6,11 +6,12 @@ import {
   Navigation as NavIcon,
   ExternalLink,
   Compass,
-  CheckCircle2
+  CheckCircle2,
+  FilePlus
 } from 'lucide-react';
 import { captureLocation, GPS_STATUS } from '../utils/geolocation';
 
-export default function FacilityInfo({ facility = {}, onChange, onNext }) {
+export default function FacilityInfo({ facility = {}, onChange, onNext, onNewFacility }) {
   const [isGettingGps, setIsGettingGps] = useState(false);
   const [gpsError, setGpsError] = useState('');
   const [gpsStatus, setGpsStatus] = useState(GPS_STATUS.IDLE);
@@ -85,13 +86,32 @@ export default function FacilityInfo({ facility = {}, onChange, onNext }) {
     <div className="max-w-4xl mx-auto space-y-6 pb-8">
       {/* Introduction Card */}
       <div className="bg-gradient-to-r from-sky-900 to-slate-900 rounded-2xl p-5 sm:p-6 text-white shadow-md">
-        <div className="flex items-start space-x-4">
-          <div className="p-3 bg-white/10 rounded-xl">
-            <Building className="w-8 h-8 text-sky-400" />
+        <div className="flex items-start justify-between gap-4 flex-wrap">
+          <div className="flex items-start space-x-4 min-w-0">
+            <div className="p-3 bg-white/10 rounded-xl shrink-0">
+              <Building className="w-8 h-8 text-sky-400" />
+            </div>
+            <div className="min-w-0">
+              <h2 className="text-xl font-bold">Facility & Site Information</h2>
+              <p className="text-sky-200/80 text-xs mt-0.5 truncate">
+                {facility.facilityName || facility.buildingName
+                  ? `Working on: ${facility.facilityName || facility.buildingName}`
+                  : 'No facility name yet — enter one below, or start a new facility.'}
+              </p>
+            </div>
           </div>
-          <div>
-            <h2 className="text-xl font-bold">Facility & Site Information</h2>
-          </div>
+
+          {onNewFacility && (
+            <button
+              type="button"
+              onClick={onNewFacility}
+              className="px-4 py-2.5 rounded-xl bg-flame-500 hover:bg-flame-600 active:scale-[0.98] text-white font-bold text-sm shadow-card inline-flex items-center gap-2 shrink-0 transition-[background-color,transform] duration-150"
+              title="Begin a new facility. The current one stays saved in your facility list."
+            >
+              <FilePlus className="w-4 h-4" />
+              New Facility
+            </button>
+          )}
         </div>
       </div>
 

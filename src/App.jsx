@@ -735,6 +735,51 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
     }
   };
 
+  /**
+   * Begins a new facility from the Facility tab, keeping the current one.
+   *
+   * Distinct from "Submit & Start New Facility": that one marks the facility
+   * finished. This is for starting the next site without declaring the
+   * previous one complete -- the surveyor's own words: "give me the option to
+   * create a new facility and continue with that". Every snag added afterwards
+   * belongs to the new facility, because it carries a brand new id.
+   */
+  const handleNewFacility = async () => {
+    const current = surveyRef.current;
+    const currentName = current?.facility?.facilityName || current?.facility?.buildingName;
+    const currentHasWork = Boolean(currentName) || (current?.items || []).some(
+      (i) => (i.defectDescription || '').trim() || (i.location || '').trim() || (i.photos || []).length
+    );
+
+    // Already sitting on an untouched blank one -- nothing to do but say so.
+    if (!currentHasWork) {
+      alert('This is already a new, empty facility. Enter its name below to begin.');
+      setActiveTab('facility');
+      return;
+    }
+
+    const keptAs = currentName || 'The current facility';
+    if (!confirm(`Start a new facility?\n\n${keptAs} stays saved and is listed under Saved Facilities on the Sign-Off tab. Snags you add from now on go to the new facility.`)) {
+      return;
+    }
+
+    // Make sure the one being left behind is written down before switching.
+    try {
+      await saveSurveyOffline(current, { pendingSync: true });
+    } catch (err) {
+      console.error('Could not save the current facility before switching:', err);
+      alert('Could not save the current facility, so nothing has been changed.');
+      return;
+    }
+
+    const fresh = createNewSurvey();
+    skipCloudPushRef.current = true;   // an empty facility is not worth a server row yet
+    setSurvey(fresh);
+    await saveSurveyOffline(fresh, { pendingSync: false });
+    await refreshSurveyList();
+    setActiveTab('facility');
+  };
+
   // Backup export as JSON
   const handleExportJSON = async () => {
     const safeTitle = (survey.facility?.buildingName || 'survey').replace(/\s+/g, '_').toLowerCase();
@@ -931,6 +976,7 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
             facility={survey?.facility || {}}
             onChange={handleUpdateFacility}
             onNext={() => setActiveTab('items')}
+            onNewFacility={handleNewFacility}
           />
         </TabPanel>
 
