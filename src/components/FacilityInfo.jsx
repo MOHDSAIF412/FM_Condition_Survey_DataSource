@@ -92,11 +92,18 @@ export default function FacilityInfo({ facility = {}, onChange, onNext, onNewFac
               <Building className="w-8 h-8 text-sky-400" />
             </div>
             <div className="min-w-0">
-              <h2 className="text-xl font-bold">Facility & Site Information</h2>
+              <div className="flex items-center gap-2 flex-wrap">
+                <h2 className="text-xl font-bold">Facility & Site Information</h2>
+                {facility.facilityCode && (
+                  <span className="px-2 py-0.5 rounded-md bg-sky-400/20 text-sky-200 text-[11px] font-bold tracking-wide border border-sky-400/30">
+                    {facility.facilityCode}
+                  </span>
+                )}
+              </div>
               <p className="text-sky-200/80 text-xs mt-0.5 truncate">
                 {facility.facilityName || facility.buildingName
                   ? `Working on: ${facility.facilityName || facility.buildingName}`
-                  : 'No facility name yet — enter one below, or start a new facility.'}
+                  : 'Enter this facility’s name below, then Proceed to Survey Items.'}
               </p>
             </div>
           </div>

@@ -364,7 +364,7 @@ export default function App() {
         } else {
           // Nothing stored yet: start a genuinely empty inspection so the
           // surveyor must choose the facility rather than inherit a demo one.
-          const fresh = createNewSurvey();
+          const fresh = createNewSurvey(1);
           setSurvey(fresh);
           await saveSurveyOffline(fresh);
         }
@@ -584,8 +584,9 @@ It stays available in the facility list for reports.`)) {
       }
     }
 
-    // Fresh blank facility, with its own new id so nothing is overwritten.
-    const next = createNewSurvey();
+    // Fresh blank facility, with its own new id so nothing is overwritten,
+    // and its own reference number so it is identifiable straight away.
+    const next = createNewSurvey(await nextFacilityNumber());
     skipCloudPushRef.current = true;
     setSurvey(next);
     await saveSurveyOffline(next, { pendingSync: false });
@@ -631,7 +632,8 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
       merged.set(l.id, {
         id: l.id,
         title: l.title,
-        facilityName: l.facility?.facilityName || l.facility?.buildingName || 'Unnamed facility',
+        facility: l.facility || {},
+        facilityName: l.facility?.facilityName || l.facility?.buildingName || '',
         itemCount: (l.items || []).length,
         status: l.status || 'draft',
         submittedAt: l.submittedAt || null,
@@ -701,7 +703,7 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
       // Deleted the one currently open: it no longer exists anywhere, so
       // start a fresh blank facility rather than keep editing a ghost.
       if (surveyId === survey?.id) {
-        const fresh = createNewSurvey();
+        const fresh = createNewSurvey(await nextFacilityNumber());
         skipCloudPushRef.current = true;
         setSurvey(fresh);
         await saveSurveyOffline(fresh, { pendingSync: false });
@@ -728,12 +730,44 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
   // Reset / Clear
   const handleReset = async () => {
     if (confirm('Start a fresh blank condition survey?')) {
-      const fresh = createNewSurvey();
+      const fresh = createNewSurvey(await nextFacilityNumber());
       setSurvey(fresh);
       await saveSurveyOffline(fresh);
       setActiveTab('facility');
     }
   };
+
+  /**
+   * The next facility number, continuing from every facility this device knows
+   * about -- the ones on screen in the list and the ones stored locally.
+   *
+   * Falls back to counting facilities when older records carry no number, so a
+   * survey started before numbering existed does not force the count back to 1.
+   */
+  async function nextFacilityNumber() {
+    // Keyed by survey id: the same facility appears in both the server list and
+    // local storage, and counting it twice made the sequence skip (1, 3, 5...).
+    const byId = new Map();
+
+    for (const s of surveyList) {
+      if (s && s.id) byId.set(s.id, s.facility || {});
+    }
+    try {
+      for (const s of await listAllSurveysOffline()) {
+        if (s && s.id && !byId.has(s.id)) byId.set(s.id, s.facility || {});
+      }
+    } catch { /* local read failed; the list alone still gives a sensible number */ }
+
+    let highest = 0;
+    for (const facility of byId.values()) {
+      const n = Number(facility?.facilityNumber);
+      if (n && !Number.isNaN(n) && n > highest) highest = n;
+    }
+
+    // `byId.size` keeps numbering sensible for records made before numbering
+    // existed, which carry no number at all.
+    return Math.max(highest, byId.size) + 1;
+  }
 
   /**
    * Begins a new facility from the Facility tab, keeping the current one.
@@ -772,7 +806,7 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
       return;
     }
 
-    const fresh = createNewSurvey();
+    const fresh = createNewSurvey(await nextFacilityNumber());
     skipCloudPushRef.current = true;   // an empty facility is not worth a server row yet
     setSurvey(fresh);
     await saveSurveyOffline(fresh, { pendingSync: false });
@@ -943,9 +977,8 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
               )}
               {surveyList.map((s2) => (
                 <option key={s2.id} value={s2.id}>
-                  {s2.facilityName === 'Unnamed facility'
-                    ? `Unnamed facility (${s2.itemCount || 0} snag${s2.itemCount === 1 ? '' : 's'})`
-                    : s2.facilityName}
+                  {[s2.facility?.facilityCode, s2.facilityName].filter(Boolean).join(' · ')
+                    || `Unnamed facility (${s2.itemCount || 0} snag${s2.itemCount === 1 ? '' : 's'})`}
                   {s2.status === 'submitted' ? '  ✓' : '  (draft)'}
                 </option>
               ))}

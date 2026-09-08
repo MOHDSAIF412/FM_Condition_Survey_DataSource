@@ -355,7 +355,7 @@ export async function listSurveys() {
   if (!isCloudConfigured) return [];
   const { data, error } = await supabase
     .from('condition_surveys')
-    .select('id, title, facility_name, status, submitted_at, updated_at, revision')
+    .select('id, title, facility, facility_name, status, submitted_at, updated_at, revision')
     .order('updated_at', { ascending: false });
   if (error) {
     console.warn('Could not list surveys:', error.message);
@@ -381,7 +381,8 @@ export async function listSurveys() {
   return surveys.map((r) => ({
     id: r.id,
     title: r.title,
-    facilityName: r.facility_name || 'Unnamed facility',
+    facility: r.facility || {},
+    facilityName: r.facility_name || (r.facility && r.facility.facilityName) || '',
     itemCount: counts[r.id] || 0,
     status: r.status || 'draft',
     submittedAt: r.submitted_at,

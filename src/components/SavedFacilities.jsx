@@ -5,6 +5,7 @@ import { listAllSurveysOffline } from '../utils/storage';
 import { generateSurveyPDF } from '../utils/pdfGenerator';
 import { generateSurveyExcel } from '../utils/excelGenerator';
 import { formatMoney } from '../utils/currency';
+import { facilityCode } from '../types/survey';
 
 /**
  * Every facility that has been saved, with a report download per facility.
@@ -35,10 +36,17 @@ export default function SavedFacilities({ surveys = [], currentId, onOpen, onDel
     }
   };
 
-  // A facility with no name entered yet still needs to be told apart from
-  // another one with no name -- item count is the next best identifier.
+  /**
+   * Every facility carries a reference (FAC-001) from the moment it is created,
+   * so one with no name typed yet is still identifiable -- and two of them are
+   * still tellable apart, which "Unnamed facility" never managed.
+   */
   const describe = (s) => {
-    if (s.facilityName && s.facilityName !== 'Unnamed facility') return s.facilityName;
+    const code = s.facility?.facilityCode || facilityCode(s.facility?.facilityNumber);
+    const name = s.facilityName && s.facilityName !== 'Unnamed facility' ? s.facilityName : '';
+    if (code && name) return `${code} · ${name}`;
+    if (code) return code;
+    if (name) return name;
     const n = s.itemCount || 0;
     return `Unnamed facility (${n} snag${n === 1 ? '' : 's'})`;
   };
@@ -142,9 +150,12 @@ export default function SavedFacilities({ surveys = [], currentId, onOpen, onDel
       <ul className="divide-y divide-slate-100">
         {surveys.map((s) => {
           const isCurrent = s.id === currentId;
+          // On a phone the name shares the row with four buttons and gets
+          // truncated to a few letters, so it takes the full width there and
+          // the buttons wrap underneath.
           return (
-            <li key={s.id} className="px-5 py-3 flex items-center justify-between gap-3 flex-wrap">
-              <div className="min-w-0 flex-1">
+            <li key={s.id} className="px-5 py-3 flex items-center justify-between gap-x-3 gap-y-2 flex-wrap">
+              <div className="min-w-0 w-full sm:w-auto sm:flex-1">
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="font-bold text-slate-900 text-sm truncate">
                     {describe(s)}

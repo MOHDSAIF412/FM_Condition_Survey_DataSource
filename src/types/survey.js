@@ -155,11 +155,33 @@ export function createDefaultAsset(location = '', department = 'HVAC') {
   };
 }
 
-export function createNewSurvey() {
+/**
+ * Formats a facility's sequence number as its reference, e.g. 4 -> "FAC-004".
+ *
+ * Every facility gets one the moment it is created, so it can always be named
+ * and told apart in a list. Before this, a facility with no name typed yet
+ * showed as "Unnamed facility" -- and several at once were indistinguishable.
+ */
+export function facilityCode(number) {
+  const n = Number(number);
+  if (!n || Number.isNaN(n)) return '';
+  return `FAC-${String(n).padStart(3, '0')}`;
+}
+
+/**
+ * @param {number} [facilityNumber] sequence number for this facility. The
+ *        caller works it out from the facilities already known, so numbering
+ *        continues rather than restarting.
+ */
+export function createNewSurvey(facilityNumber) {
   return {
     id: 'survey_' + Date.now(),
     title: 'Facility Condition Assessment',
     facility: {
+      // Kept inside `facility`, which is already stored as a whole on the
+      // server, so this needs no database change.
+      facilityNumber: facilityNumber || 1,
+      facilityCode: facilityCode(facilityNumber || 1),
       facilityName: '',
       buildingName: '',
       address: '',
