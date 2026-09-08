@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { FileText, FileSpreadsheet, FolderOpen, CheckCircle2, Loader2, Trash2, CloudOff } from 'lucide-react';
+import { FileText, FileSpreadsheet, FolderOpen, CheckCircle2, Loader2, Trash2, CloudOff, RefreshCw } from 'lucide-react';
 import { pullSurvey, hydratePhotos } from '../utils/cloudSync';
 import { listAllSurveysOffline } from '../utils/storage';
 import { generateSurveyPDF } from '../utils/pdfGenerator';
@@ -14,8 +14,26 @@ import { formatMoney } from '../utils/currency';
  * Photo bytes are fetched first -- the generators read from dataUrl, and a
  * facility synced from another device carries only storage paths until then.
  */
-export default function SavedFacilities({ surveys = [], currentId, onOpen, onDelete, onRefresh }) {
+export default function SavedFacilities({ surveys = [], currentId, onOpen, onDelete, onRefresh, onSyncNow }) {
   const [busy, setBusy] = useState(null);
+  const [syncing, setSyncing] = useState(false);
+  const [syncResult, setSyncResult] = useState('');
+
+  const waiting = surveys.filter((s) => s.pendingSync).length;
+
+  const syncNow = async () => {
+    if (!onSyncNow) return;
+    setSyncing(true);
+    setSyncResult('');
+    try {
+      const res = await onSyncNow();
+      setSyncResult(res?.message || 'Done.');
+    } catch (err) {
+      setSyncResult('Could not sync: ' + (err.message || err));
+    } finally {
+      setSyncing(false);
+    }
+  };
 
   // A facility with no name entered yet still needs to be told apart from
   // another one with no name -- item count is the next best identifier.
@@ -86,14 +104,40 @@ export default function SavedFacilities({ surveys = [], currentId, onOpen, onDel
         <h3 className="text-sm font-bold uppercase tracking-wider text-slate-500">
           Saved Facilities ({surveys.length})
         </h3>
-        <button
-          type="button"
-          onClick={onRefresh}
-          className="text-xs font-semibold text-ocs-600 hover:text-ocs-700"
-        >
-          Refresh
-        </button>
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            type="button"
+            onClick={onRefresh}
+            className="text-xs font-semibold text-ocs-600 hover:text-ocs-700"
+          >
+            Refresh
+          </button>
+          {onSyncNow && (
+            <button
+              type="button"
+              onClick={syncNow}
+              disabled={syncing}
+              title="Upload anything saved on this device that has not reached the server yet"
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold inline-flex items-center gap-1.5 transition-colors disabled:opacity-60 ${
+                waiting > 0
+                  ? 'bg-flame-500 hover:bg-flame-600 text-white'
+                  : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+              }`}
+            >
+              {syncing
+                ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                : <RefreshCw className="w-3.5 h-3.5" />}
+              {syncing ? 'Syncing…' : waiting > 0 ? `Sync now (${waiting})` : 'Sync now'}
+            </button>
+          )}
+        </div>
       </div>
+
+      {syncResult && (
+        <div className="px-5 py-2 bg-slate-50 border-b border-slate-200 text-[12px] text-slate-700">
+          {syncResult}
+        </div>
+      )}
 
       <ul className="divide-y divide-slate-100">
         {surveys.map((s) => {

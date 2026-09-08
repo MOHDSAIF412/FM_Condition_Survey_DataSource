@@ -236,30 +236,87 @@ export default function App() {
 
     let flushed = 0;
     let failed = 0;
+    const problems = [];
     for (const local of stored) {
       if (!local || !local.id || !local.pendingSync) continue;
       if (local.id === surveyRef.current?.id) continue;   // pushAndSettle owns this one
       // An untouched blank survey is not worth a round trip.
       if (!local.submittedAt && !(local.items || []).length) continue;
 
+      const label = local.facility?.facilityName || local.facility?.buildingName || local.id;
       try {
-        const res = await pushSurvey(local);
+        let res = await pushSurvey(local);
+
+        // The server moved on while this device had no signal, so the push was
+        // refused to avoid overwriting work this client never saw. Left alone
+        // it stays "waiting to upload" forever -- which is exactly what a
+        // surveyor reported. Re-base onto the revision the server actually
+        // holds and push again: the push is an upsert with explicit tombstones,
+        // so merging in this device's work cannot delete anything already there.
+        if (res && res.conflict && res.reason === 'stale' && res.serverRevision !== undefined) {
+          console.info(`[sync] "${label}" was behind the server; re-basing and retrying`);
+          res = await pushSurvey({ ...local, cloudRevision: res.serverRevision });
+        }
+
         if (res && res.pushed) {
           await markSurveySynced(local.id);
           flushed++;
+        } else if (res && res.conflict) {
+          // 'destructive': this device holds far less than the server. Refusing
+          // is correct -- uploading would look like a mass deletion.
+          failed++;
+          problems.push(`${label}: server has more data than this device, left untouched`);
         }
       } catch (err) {
         failed++;
+        problems.push(`${label}: ${err.message}`);
         console.info('[sync] still pending, will retry on the next connection:', local.id, err.message);
       }
     }
 
     if (flushed) {
       console.info(`[sync] uploaded ${flushed} facility(ies) recorded offline`);
-      await refreshSurveyList();
     }
-    return { flushed, failed };
+    if (flushed || failed) await refreshSurveyList();
+    return { flushed, failed, problems };
   }
+
+  /**
+   * Pushes the facility on screen, then every other one still waiting.
+   *
+   * Both halves are needed. `flushPendingSurveys` deliberately skips the open
+   * survey (pushAndSettle owns it), so on a launch where the open survey is
+   * itself unsent -- reopening the app after submitting with no signal ---
+   * nothing would upload it. Running both is what makes "open the app on
+   * wifi and everything catches up" actually true.
+   */
+  const syncEverything = async () => {
+    if (!isCloudConfigured) return { message: 'Cloud sync is not configured on this build.' };
+    if (!isOnline()) return { message: 'Still offline. Your work is saved and will upload automatically.' };
+
+    setSyncState('syncing');
+    let pushedCurrent = false;
+    try {
+      if (surveyRef.current) {
+        const res = await pushAndSettle();
+        pushedCurrent = Boolean(res && res.pushed);
+      }
+    } catch (err) {
+      console.info('Sync of the open facility deferred:', err.message);
+    }
+
+    const { flushed, failed, problems } = await flushPendingSurveys();
+    await refreshSurveyList();
+    setSyncState(failed ? 'offline' : 'synced');
+
+    if (failed) return { message: `${flushed} uploaded, ${failed} could not: ${problems.join('; ')}` };
+    if (flushed) return { message: `${flushed} facility(ies) uploaded.` };
+    if (pushedCurrent) return { message: 'Up to date. Everything is on the server.' };
+    return { message: 'Nothing waiting — everything is already uploaded.' };
+  };
+
+  /** The button in Saved Facilities. */
+  const handleSyncNow = syncEverything;
 
   // Load from IndexedDB on initial launch
   useEffect(() => {
@@ -591,12 +648,19 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
     );
   };
 
-  // On launch, also upload anything submitted during an earlier offline
-  // session -- the app may have been closed before the connection came back.
+  // On launch, upload anything left unsent by an earlier offline session --
+  // the app may well have been closed before the connection came back. This
+  // covers the survey on screen too, which is the common case straight after
+  // submitting with no signal.
   useEffect(() => {
     if (!isLoaded) return;
     refreshSurveyList();
-    flushPendingSurveys().catch(() => { /* retried on the next connection */ });
+    // Let the initial load settle before pushing, so this does not race the
+    // startup pull that may still be adopting the server's copy.
+    const t = setTimeout(() => {
+      syncEverything().catch(() => { /* retried on the next connection */ });
+    }, 2500);
+    return () => clearTimeout(t);
   }, [isLoaded]);
 
   /** Opens a previously submitted facility so its report can be generated. */
@@ -894,6 +958,7 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
               onOpen={handleOpenSurvey}
               onDelete={handleDeleteSurvey}
               onRefresh={refreshSurveyList}
+              onSyncNow={handleSyncNow}
             />
           </div>
           <SignatureSection
