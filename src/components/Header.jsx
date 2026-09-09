@@ -1,27 +1,32 @@
 import React, { useState } from 'react';
-import { 
-  Building2, 
-  Download, 
-  Upload, 
-  RotateCcw, 
-  FileText, 
-  CheckCircle2, 
-  Smartphone, 
+import {
+  Building2,
+  Download,
+  Upload,
+  RotateCcw,
+  FileText,
+  CheckCircle2,
+  Smartphone,
   FileCheck,
   ChevronDown,
+  Users,
+  LogOut,
 } from 'lucide-react';
 
-export default function Header({ 
-  survey, 
-  onReset, 
-  onOpenReport, 
-  onExportJSON, 
+export default function Header({
+  survey,
+  onReset,
+  onOpenReport,
+  onExportJSON,
   onImportJSON,
   onExportExcel,
   lastSaved,
   syncState = 'off',
   online = true,
-  pendingCount = 0
+  pendingCount = 0,
+  currentUser = null,
+  onOpenUsers,
+  onSignOut
 }) {
   // Connectivity wins over sync state: if there is no connection, saying
   // "Synced" would be a lie even when the last push did succeed.
@@ -148,6 +153,36 @@ export default function Header({
                     <RotateCcw className="w-4 h-4" />
                     <span>Start Fresh / Clear Survey</span>
                   </button>
+
+                  {currentUser && (
+                    <>
+                      <div className="border-t border-slate-700/60 my-1" />
+                      <div className="px-3.5 py-1.5">
+                        <p className="text-[11px] text-slate-400 truncate">{currentUser.email}</p>
+                        <p className="text-[11px] text-slate-500 capitalize">{currentUser.role || 'user'}</p>
+                      </div>
+
+                      {currentUser.role === 'admin' && onOpenUsers && (
+                        <button
+                          onClick={() => { setShowMenu(false); onOpenUsers(); }}
+                          className="w-full text-left px-3.5 py-2 text-xs hover:bg-slate-700 flex items-center space-x-2"
+                        >
+                          <Users className="w-4 h-4 text-slate-400" />
+                          <span>Manage Users</span>
+                        </button>
+                      )}
+
+                      {onSignOut && (
+                        <button
+                          onClick={() => { setShowMenu(false); onSignOut(); }}
+                          className="w-full text-left px-3.5 py-2 text-xs hover:bg-rose-950/40 text-rose-400 flex items-center space-x-2"
+                        >
+                          <LogOut className="w-4 h-4" />
+                          <span>Sign Out</span>
+                        </button>
+                      )}
+                    </>
+                  )}
                 </div>
               </>
             )}

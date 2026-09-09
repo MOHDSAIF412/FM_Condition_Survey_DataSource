@@ -8,6 +8,7 @@ import SignatureSection from './components/SignatureSection';
 import ReportModal from './components/ReportModal';
 import SavedFacilities from './components/SavedFacilities';
 import ProjectDashboard from './components/ProjectDashboard';
+import UserManagement from './components/UserManagement';
 import Breadcrumb from './components/Breadcrumb';
 import ReportDashboard from './components/ReportDashboard';
 import { createNewSurvey, calculateSurveyStats } from './types/survey';
@@ -59,7 +60,7 @@ function TabPanel({ active, children }) {
   );
 }
 
-export default function App() {
+export default function App({ currentUser = null, onSignOut } = {}) {
   // A blank survey, never the demo one. Seeding sampleSurveyData meant every
   // new inspection opened with "Old Grandstand" already in the facility field.
   const [survey, setSurvey] = useState(() => createNewSurvey());
@@ -1069,6 +1070,9 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
         syncState={syncState}
         online={online}
         pendingCount={pendingPhotoCount}
+        currentUser={currentUser}
+        onOpenUsers={() => setView('users')}
+        onSignOut={onSignOut}
       />
 
       {/* Navigation belongs to a chosen facility: the five tabs all act on one
@@ -1095,6 +1099,27 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
             onRefresh={refreshProjects}
           />
         </main>
+      )}
+
+      {/* Admin-only. The server enforces this regardless of whether this view
+          is reachable -- it only decides whether the option is offered. */}
+      {view === 'users' && currentUser?.role === 'admin' && (
+        <>
+          <div className="bg-white border-b border-slate-200">
+            <div className="max-w-6xl mx-auto px-3 sm:px-6 py-2">
+              <button
+                type="button"
+                onClick={() => setView('projects')}
+                className="text-[12px] font-semibold text-ocs-600 hover:text-ocs-700"
+              >
+                &larr; Back to Projects
+              </button>
+            </div>
+          </div>
+          <main className="flex-1 max-w-6xl w-full mx-auto px-3 sm:px-6 pt-4 sm:pt-6 safe-area-content-pb md:pb-8">
+            <UserManagement myId={currentUser.id} />
+          </main>
+        </>
       )}
 
       {/* Facilities inside the chosen project. */}

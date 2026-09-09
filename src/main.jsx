@@ -1,6 +1,6 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
-import App from './App';
+import AuthGate from './components/AuthGate';
 import './index.css';
 
 import ErrorBoundary from './components/ErrorBoundary';
@@ -9,7 +9,7 @@ import { initOtaUpdates } from './utils/otaUpdates';
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <ErrorBoundary>
-      <App />
+      <AuthGate />
     </ErrorBoundary>
   </React.StrictMode>
 );
