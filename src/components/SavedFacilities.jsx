@@ -51,24 +51,51 @@ export default function SavedFacilities({ surveys = [], currentId, onOpen, onDel
     return `Unnamed facility (${n} snag${n === 1 ? '' : 's'})`;
   };
 
+  /**
+   * The server copy where there is one, otherwise this device's.
+   *
+   * A facility submitted with no signal is not on the server yet, but the
+   * device holds it in full -- photo bytes included -- so its report can still
+   * be produced rather than refused.
+   */
+  const loadSurvey = async (surveyId) => {
+    try {
+      const remote = await pullSurvey(surveyId, {});
+      if (remote) return remote;
+    } catch (err) {
+      console.info('Server copy unavailable, using the one on this device:', err?.message);
+    }
+    return (await listAllSurveysOffline()).find((s) => s && s.id === surveyId) || null;
+  };
+
+  /** One workbook containing every saved facility. */
+  const downloadAll = async () => {
+    setBusy('all:excel');
+    setSyncResult('');
+    try {
+      const loaded = [];
+      for (const s of surveys) {
+        const full = await loadSurvey(s.id);
+        if (full && (full.items || []).length) loaded.push(await hydratePhotos(full));
+      }
+      if (!loaded.length) {
+        alert('None of the saved facilities have snags to report yet.');
+        return;
+      }
+      await generateSurveyExcel(loaded, 'ALL');
+      setSyncResult(`Combined Excel created for ${loaded.length} facilities.`);
+    } catch (err) {
+      console.error('Combined report failed:', err);
+      alert('Could not build the combined report: ' + (err.message || err));
+    } finally {
+      setBusy(null);
+    }
+  };
+
   const download = async (surveyId, kind) => {
     setBusy(`${surveyId}:${kind}`);
     try {
-      let survey = null;
-      try {
-        survey = await pullSurvey(surveyId, {});
-      } catch (err) {
-        console.info('Server copy unavailable, using the one on this device:', err?.message);
-      }
-
-      // Not on the server yet (submitted with no signal, or still uploading).
-      // The device holds the full copy including photo bytes, so the report can
-      // still be produced here rather than refusing.
-      if (!survey) {
-        const localCopy = (await listAllSurveysOffline()).find((s) => s && s.id === surveyId);
-        if (localCopy) survey = localCopy;
-      }
-
+      const survey = await loadSurvey(surveyId);
       if (!survey) {
         alert('That facility could not be loaded. Check your connection and try again.');
         return;
@@ -108,11 +135,13 @@ export default function SavedFacilities({ surveys = [], currentId, onOpen, onDel
 
   return (
     <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
-      <div className="px-5 py-3 border-b border-slate-200 flex items-center justify-between gap-2">
-        <h3 className="text-sm font-bold uppercase tracking-wider text-slate-500">
+      {/* Stacked on a phone: three action buttons beside the heading squeezed
+          the title onto two lines and pushed the last one off the edge. */}
+      <div className="px-5 py-3 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+        <h3 className="text-sm font-bold uppercase tracking-wider text-slate-500 whitespace-nowrap">
           Saved Facilities ({surveys.length})
         </h3>
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex items-center gap-2 flex-wrap sm:justify-end">
           <button
             type="button"
             onClick={onRefresh}
@@ -120,6 +149,20 @@ export default function SavedFacilities({ surveys = [], currentId, onOpen, onDel
           >
             Refresh
           </button>
+          {surveys.length > 1 && (
+            <button
+              type="button"
+              disabled={busy !== null}
+              onClick={downloadAll}
+              title="One Excel workbook containing every saved facility"
+              className="px-3 py-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-600 disabled:opacity-60 text-white text-xs font-bold inline-flex items-center gap-1.5"
+            >
+              {busy === 'all:excel'
+                ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                : <FileSpreadsheet className="w-3.5 h-3.5" />}
+              {busy === 'all:excel' ? 'Building…' : `All in one Excel (${surveys.length})`}
+            </button>
+          )}
           {onSyncNow && (
             <button
               type="button"

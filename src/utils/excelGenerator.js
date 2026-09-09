@@ -199,15 +199,31 @@ function placeImageInBox(ws, imageId, img, box) {
  * Generates an audit-ready multi-sheet Microsoft Excel (.xlsx) Report
  * Organized Facility-wise with embedded defect photos, clean columns, and no redundant metadata.
  */
-export async function generateSurveyExcel(survey, selectedFacility = 'ALL') {
-  // Filter items if a specific facility / location is selected
-  const allItems = survey.items || [];
-  const itemsToReport = selectedFacility === 'ALL'
-    ? allItems
-    : allItems.filter((i) => (i.location || 'General') === selectedFacility);
+export async function generateSurveyExcel(input, selectedFacility = 'ALL') {
+  // Accepts one survey or many. Passing several produces a single combined
+  // workbook: shared summary and CapEx totals, with the Snag Register split
+  // into a section per facility.
+  const surveys = (Array.isArray(input) ? input : [input]).filter(Boolean);
+  const isCombined = surveys.length > 1;
+
+  // Items stay grouped by their facility so the register can head each block
+  // with the facility it belongs to, rather than merging everything into one
+  // undifferentiated list.
+  const groups = surveys.map((s) => {
+    const all = s.items || [];
+    return {
+      facility: s.facility || {},
+      items: selectedFacility === 'ALL'
+        ? all
+        : all.filter((i) => (i.location || 'General') === selectedFacility)
+    };
+  });
+
+  const itemsToReport = groups.flatMap((g) => g.items);
 
   const stats = calculateSurveyStats(itemsToReport);
-  const facility = survey.facility || {};
+  const primarySurvey = surveys[0] || {};
+  const facility = groups[0]?.facility || {};
   const googleLoc = facility.googleLocation || {};
 
   const workbook = new ExcelJS.Workbook();
@@ -294,7 +310,19 @@ export async function generateSurveyExcel(survey, selectedFacility = 'ALL') {
   wsExec.getCell('B5').value = '1. FACILITY & SITE SPECIFICATIONS';
   wsExec.getCell('B5').font = { name: 'Arial', size: 11, bold: true, color: { argb: primaryNavy } };
 
-  const metaFields = [
+  const metaFields = isCombined ? [
+    ['Report Type', `Combined report covering ${groups.length} facilities`],
+    ...groups.map((g, idx) => {
+      const f = g.facility || {};
+      const label = [f.facilityCode, f.facilityName || f.buildingName].filter(Boolean).join(' · ')
+        || `Facility ${idx + 1}`;
+      const cost = calculateSurveyStats(g.items || []).totalCost;
+      return [label, `${(g.items || []).length} snags  •  ${formatMoney(cost)}`];
+    }),
+    ['Total Snags', String(itemsToReport.length)],
+    ['Report Scope', selectedFacility === 'ALL' ? 'All locations across every facility listed' : `Locations matching ${selectedFacility}`]
+  ] : [
+    ['Facility Reference', facility.facilityCode || 'N/A'],
     ['Facility / Complex Name', facility.facilityName || facility.buildingName || 'N/A'],
     ['Primary Building Title', facility.buildingName || 'N/A'],
     ['Site Physical Address', facility.address || 'N/A'],
@@ -333,8 +361,8 @@ export async function generateSurveyExcel(survey, selectedFacility = 'ALL') {
     ['Client / Property Owner', facility.clientName || 'N/A'],
     ['Facility Manager', facility.facilityManager || 'N/A'],
     ['Inspection Survey Date', facility.surveyDate || new Date().toISOString().split('T')[0]],
-    ['Surveyor Sign-Off', survey.signatures?.surveyor?.signatureData ? 'Certified & Signed' : 'Pending Signature'],
-    ['Client Sign-Off', survey.signatures?.client?.signatureData ? 'Certified & Signed' : 'Pending Signature']
+    ['Surveyor Sign-Off', primarySurvey.signatures?.surveyor?.signatureData ? 'Certified & Signed' : 'Pending Signature'],
+    ['Client Sign-Off', primarySurvey.signatures?.client?.signatureData ? 'Certified & Signed' : 'Pending Signature']
   ];
 
   stakeFields.forEach(([lbl, val]) => {
@@ -509,20 +537,50 @@ export async function generateSurveyExcel(survey, selectedFacility = 'ALL') {
   const THUMB_ROW_HEIGHT_PTS = 84;     // ~112 px
   const THUMB_PADDING_PX = 6;
 
+  /**
+   * One column per photo, sized to the snag carrying the most.
+   *
+   * Only `photos[0]` used to be embedded, so a snag photographed three times
+   * showed one picture here while the PDF showed all three -- evidence quietly
+   * missing from the client's spreadsheet. Capped so a single snag with dozens
+   * of photos cannot produce an unreadable sheet.
+   */
+  const MAX_PHOTO_COLUMNS = 8;
+  const photoColumnCount = Math.min(
+    MAX_PHOTO_COLUMNS,
+    Math.max(1, ...itemsToReport.map((i) => (i.photos || []).length), 1)
+  );
+
+  // 1-based column indices, since everything shifts with the photo count.
+  const COL = {
+    num: 1,
+    photo: (k) => 2 + k,              // k is 0-based
+    location: 2 + photoColumnCount,
+    name: 3 + photoColumnCount,
+    dept: 4 + photoColumnCount,
+    priority: 5 + photoColumnCount,
+    defect: 6 + photoColumnCount,
+    qty: 7 + photoColumnCount,
+    cost: 8 + photoColumnCount
+  };
+  const lastCol = COL.cost;
+
   wsSnags.columns = [
-    { width: 8 },  // A: Snag #
-    { width: THUMB_COL_WIDTH }, // B: Evidence Photo Thumbnail
-    { width: 32 }, // C: Facility / Location
-    { width: 34 }, // D: Snag / Component Name
-    { width: 24 }, // E: Department / Trade
-    { width: 14 }, // F: Priority
-    { width: 48 }, // G: Observed Defects & Notes
-    { width: 10 }, // H: Quantity
-    { width: 18 }  // I: Est. Cost (AED)
+    { width: 8 },                                                  // Snag #
+    ...Array.from({ length: photoColumnCount }, () => ({ width: THUMB_COL_WIDTH })),
+    { width: 32 }, // Snag Location / Room
+    { width: 34 }, // Snag / Component Name
+    { width: 24 }, // Department / Trade
+    { width: 14 }, // Priority
+    { width: 48 }, // Observed Defects & Notes
+    { width: 10 }, // Quantity
+    { width: 18 }  // Est. Cost (AED)
   ];
 
+  const letterFor = (n) => wsSnags.getColumn(n).letter;
+
   // Header banner
-  wsSnags.mergeCells('A1:I1');
+  wsSnags.mergeCells(`A1:${letterFor(lastCol)}1`);
   const snagBanner = wsSnags.getCell('A1');
   snagBanner.value = selectedFacility === 'ALL'
     ? 'FACILITY-WISE SNAG CONDITION & DEFECT SCHEDULE'
@@ -535,7 +593,8 @@ export async function generateSurveyExcel(survey, selectedFacility = 'ALL') {
   // Clean Table Headers
   const snagHeaders = [
     'Snag #',
-    'Evidence Photo',
+    ...Array.from({ length: photoColumnCount }, (_, k) =>
+      photoColumnCount === 1 ? 'Evidence Photo' : `Evidence Photo ${k + 1}`),
     'Snag Location / Room',
     'Snag / Component Name',
     'Department / Trade',
@@ -550,97 +609,111 @@ export async function generateSurveyExcel(survey, selectedFacility = 'ALL') {
   headerRow.font = { name: 'Arial', size: 9.5, bold: true, color: { argb: 'FFFFFFFF' } };
   headerRow.height = 24;
 
-  const colLetters = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I'];
-  colLetters.forEach((col) => {
-    const c = wsSnags.getCell(`${col}3`);
+  for (let n = 1; n <= lastCol; n++) {
+    const c = headerRow.getCell(n);
     c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: headerBlue } };
     c.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
-  });
+  }
 
   let snagRowIdx = 4;
-  const facName = facility.facilityName || facility.buildingName || 'Commercial Facility';
 
-  // Facility Section Header Row
-  wsSnags.mergeCells(`A${snagRowIdx}:I${snagRowIdx}`);
-  const facBannerCell = wsSnags.getCell(`A${snagRowIdx}`);
-  facBannerCell.value = `🏢 FACILITY: ${facName.toUpperCase()} (${itemsToReport.length} Audited Snags  •  ${formatMoney(stats.totalCost)} Total Remedial CapEx)`;
-  facBannerCell.font = { name: 'Arial', size: 10, bold: true, color: { argb: 'FFFFFFFF' } };
-  facBannerCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: facilityHeaderBg } };
-  facBannerCell.alignment = { vertical: 'middle', indent: 1 };
-  wsSnags.getRow(snagRowIdx).height = 26;
-  snagRowIdx++;
+  // One section per facility. A single-survey report produces exactly one
+  // section, so this reads the same as before for the common case.
+  for (const group of groups) {
+    const groupFacility = group.facility || {};
+    const groupItems = group.items || [];
+    if (isCombined && !groupItems.length) continue;   // nothing to show for it
 
-  // Populate snag rows and embed thumbnails
-  for (let i = 0; i < itemsToReport.length; i++) {
-    const item = itemsToReport[i];
-    const dept = DEPARTMENTS[item.department] || DEPARTMENTS.GENERAL;
-    const photos = item.photos || [];
+    const facName = groupFacility.facilityName || groupFacility.buildingName || 'Commercial Facility';
+    const facRef = groupFacility.facilityCode ? groupFacility.facilityCode + ' \u2014 ' : '';
+    const groupStats = calculateSurveyStats(groupItems);
 
-    const row = wsSnags.getRow(snagRowIdx);
-    row.values = [
-      i + 1,
-      '', // Placeholder for embedded thumbnail in Col B
-      item.location || 'General Site Area',
-      snagLabel(item, i),
-      dept.name,
-      `P${item.priority}`,
-      item.defectDescription || 'No defect observed.',
-      item.quantity || 1,
-      parseFloat(item.estimatedCost) || 0
-    ];
+    // Facility Section Header Row
+    wsSnags.mergeCells(`A${snagRowIdx}:${letterFor(lastCol)}${snagRowIdx}`);
+    const facBannerCell = wsSnags.getCell(`A${snagRowIdx}`);
+    facBannerCell.value = `\u{1F3E2} FACILITY: ${facRef}${facName.toUpperCase()} (${groupItems.length} Audited Snags  \u2022  ${formatMoney(groupStats.totalCost)} Total Remedial CapEx)`;
+    facBannerCell.font = { name: 'Arial', size: 10, bold: true, color: { argb: 'FFFFFFFF' } };
+    facBannerCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: facilityHeaderBg } };
+    facBannerCell.alignment = { vertical: 'middle', indent: 1 };
+    wsSnags.getRow(snagRowIdx).height = 26;
+    snagRowIdx++;
 
-    row.font = { name: 'Arial', size: 9 };
+    // Populate snag rows and embed every photo
+    for (let i = 0; i < groupItems.length; i++) {
+      const item = groupItems[i];
+      const dept = DEPARTMENTS[item.department] || DEPARTMENTS.GENERAL;
+      const photos = item.photos || [];
+
+      const row = wsSnags.getRow(snagRowIdx);
+      row.getCell(COL.num).value = i + 1;
+      row.getCell(COL.location).value = item.location || 'General Site Area';
+      row.getCell(COL.name).value = snagLabel(item, i);
+      row.getCell(COL.dept).value = dept.name;
+      row.getCell(COL.priority).value = `P${item.priority}`;
+      row.getCell(COL.defect).value = item.defectDescription || 'No defect observed.';
+      row.getCell(COL.qty).value = item.quantity || 1;
+      row.getCell(COL.cost).value = parseFloat(item.estimatedCost) || 0;
+
+      row.font = { name: 'Arial', size: 9 };
       row.height = THUMB_ROW_HEIGHT_PTS; // Photo box height
 
-      // Draw the thumbnail box so the photo sits inside a clean framed cell
-      const thumbCell = wsSnags.getCell(`B${snagRowIdx}`);
-      thumbCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFFFFF' } };
-      thumbCell.border = {
-        top: { style: 'thin', color: { argb: 'FFCBD5E1' } },
-        left: { style: 'thin', color: { argb: 'FFCBD5E1' } },
-        bottom: { style: 'thin', color: { argb: 'FFCBD5E1' } },
-        right: { style: 'thin', color: { argb: 'FFCBD5E1' } }
-      };
-      thumbCell.alignment = { horizontal: 'center', vertical: 'middle' };
-
-      wsSnags.getCell(`A${snagRowIdx}`).alignment = { horizontal: 'center', vertical: 'middle' };
-      wsSnags.getCell(`A${snagRowIdx}`).font = { bold: true };
-      wsSnags.getCell(`C${snagRowIdx}`).alignment = { vertical: 'middle' };
-      wsSnags.getCell(`C${snagRowIdx}`).font = { bold: true };
-      wsSnags.getCell(`D${snagRowIdx}`).alignment = { vertical: 'middle' };
-      wsSnags.getCell(`D${snagRowIdx}`).font = { bold: true };
-      wsSnags.getCell(`E${snagRowIdx}`).alignment = { vertical: 'middle' };
-      wsSnags.getCell(`F${snagRowIdx}`).alignment = { horizontal: 'center', vertical: 'middle' };
-      wsSnags.getCell(`F${snagRowIdx}`).font = {
+      row.getCell(COL.num).alignment = { horizontal: 'center', vertical: 'middle' };
+      row.getCell(COL.num).font = { bold: true };
+      row.getCell(COL.location).alignment = { vertical: 'middle' };
+      row.getCell(COL.location).font = { bold: true };
+      row.getCell(COL.name).alignment = { vertical: 'middle', wrapText: true };
+      row.getCell(COL.name).font = { bold: true };
+      row.getCell(COL.dept).alignment = { vertical: 'middle' };
+      row.getCell(COL.priority).alignment = { horizontal: 'center', vertical: 'middle' };
+      row.getCell(COL.priority).font = {
         bold: true,
         color: { argb: item.priority === 1 ? 'FFDC2626' : item.priority === 2 ? 'FFF97316' : 'FF0F172A' }
       };
-      wsSnags.getCell(`G${snagRowIdx}`).alignment = { vertical: 'middle', wrapText: true };
-      wsSnags.getCell(`H${snagRowIdx}`).alignment = { horizontal: 'center', vertical: 'middle' };
-      wsSnags.getCell(`I${snagRowIdx}`).alignment = { horizontal: 'right', vertical: 'middle' };
-      wsSnags.getCell(`I${snagRowIdx}`).numFmt = EXCEL_MONEY_FORMAT;
-      wsSnags.getCell(`I${snagRowIdx}`).font = { bold: true };
+      row.getCell(COL.defect).alignment = { vertical: 'middle', wrapText: true };
+      row.getCell(COL.qty).alignment = { horizontal: 'center', vertical: 'middle' };
+      row.getCell(COL.cost).alignment = { horizontal: 'right', vertical: 'middle' };
+      row.getCell(COL.cost).numFmt = EXCEL_MONEY_FORMAT;
+      row.getCell(COL.cost).font = { bold: true };
 
-      // Embed photo thumbnail in Col B
-      if (photos.length > 0 && photos[0].dataUrl) {
+      const cellW = colWidthToPx(THUMB_COL_WIDTH);
+      const cellH = rowHeightToPx(THUMB_ROW_HEIGHT_PTS);
+
+      for (let k = 0; k < photoColumnCount; k++) {
+        const colIndex = COL.photo(k);
+        const cell = row.getCell(colIndex);
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFFFFF' } };
+        cell.border = {
+          top: { style: 'thin', color: { argb: 'FFCBD5E1' } },
+          left: { style: 'thin', color: { argb: 'FFCBD5E1' } },
+          bottom: { style: 'thin', color: { argb: 'FFCBD5E1' } },
+          right: { style: 'thin', color: { argb: 'FFCBD5E1' } }
+        };
+        cell.alignment = { horizontal: 'center', vertical: 'middle' };
+
+        const photo = photos[k];
+        if (!photo || !photo.dataUrl) {
+          // Only label the first box, so a snag with one photo does not read
+          // as a row of "No photo" cells.
+          if (k === 0 && !photos.length) {
+            cell.value = 'No photo';
+            cell.font = { italic: true, color: { argb: 'FF94A3B8' } };
+          }
+          continue;
+        }
+
         try {
-          const cellW = colWidthToPx(THUMB_COL_WIDTH);
-          const cellH = rowHeightToPx(THUMB_ROW_HEIGHT_PTS);
           // Crop the bitmap to the cell's own ratio so it fills it exactly.
           let cropped = null;
           try {
-            cropped = await coverCropToRatio(photos[0].dataUrl, cellW / cellH, cellW * 2);
+            cropped = await coverCropToRatio(photo.dataUrl, cellW / cellH, cellW * 2);
           } catch (cropErr) {
             console.warn('Thumbnail crop failed, falling back to uncropped embed:', cropErr);
           }
-          if (cropped && cropped.base64) {
-            const imageId = workbook.addImage({
-              base64: cropped.base64,
-              extension: 'jpeg'
-            });
 
+          if (cropped && cropped.base64) {
+            const imageId = workbook.addImage({ base64: cropped.base64, extension: 'jpeg' });
             placeImageInBox(wsSnags, imageId, cropped, {
-              col: 1, // column B (0-based)
+              col: colIndex - 1,          // placeImageInBox takes a 0-based column
               row: snagRowIdx - 1,
               widthPx: cellW,
               heightPx: cellH,
@@ -649,40 +722,39 @@ export async function generateSurveyExcel(survey, selectedFacility = 'ALL') {
           } else {
             // Cropping failed (decode error, huge image, etc) -- fall back to the
             // uncropped photo, contain-fit, rather than dropping it silently.
-            const safe = await getSafeJpegImage(photos[0].dataUrl);
+            const safe = await getSafeJpegImage(photo.dataUrl);
             if (safe && safe.base64) {
               const imageId = workbook.addImage({ base64: safe.base64, extension: 'jpeg' });
               placeImageInBox(wsSnags, imageId, safe, {
-                col: 1,
+                col: colIndex - 1,
                 row: snagRowIdx - 1,
                 widthPx: cellW,
                 heightPx: cellH,
                 fit: 'contain'
               });
             } else {
-              wsSnags.getCell(`B${snagRowIdx}`).value = 'Photo unavailable';
-              wsSnags.getCell(`B${snagRowIdx}`).font = { italic: true, color: { argb: 'FF94A3B8' } };
-              wsSnags.getCell(`B${snagRowIdx}`).alignment = { horizontal: 'center', vertical: 'middle' };
+              cell.value = 'Photo unavailable';
+              cell.font = { italic: true, color: { argb: 'FF94A3B8' } };
             }
           }
         } catch (imgErr) {
           console.warn('Failed embedding thumbnail into Excel:', imgErr);
         }
-      } else {
-        wsSnags.getCell(`B${snagRowIdx}`).value = 'No photo';
-        wsSnags.getCell(`B${snagRowIdx}`).font = { italic: true, color: { argb: 'FF94A3B8' } };
-        wsSnags.getCell(`B${snagRowIdx}`).alignment = { horizontal: 'center', vertical: 'middle' };
       }
 
       snagRowIdx++;
     }
 
+    snagRowIdx++;   // blank spacer between facilities
+  }
 
   // Trigger Excel file download in browser
   const facilitySuffix = selectedFacility !== 'ALL' ? `_${selectedFacility.replace(/[^a-z0-9]/gi, '_')}` : '';
-  const safeTitle = (facility.facilityName || facility.buildingName || 'FM_Condition_Survey')
-    .replace(/[^a-z0-9]/gi, '_')
-    .toLowerCase();
+  const safeTitle = isCombined
+    ? `all_facilities_${surveys.length}`
+    : (facility.facilityName || facility.buildingName || 'FM_Condition_Survey')
+        .replace(/[^a-z0-9]/gi, '_')
+        .toLowerCase();
   
   const buffer = await workbook.xlsx.writeBuffer();
   
