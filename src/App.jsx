@@ -1143,7 +1143,7 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
           </div>
 
           <main className="flex-1 max-w-6xl w-full mx-auto px-3 sm:px-6 pt-4 sm:pt-6 safe-area-content-pb md:pb-8">
-            <div className="max-w-4xl mx-auto space-y-6">
+            <div className="space-y-6">
               <div className="bg-gradient-to-r from-ocs-800 to-slate-900 rounded-2xl p-5 sm:p-6 text-white shadow-md">
                 <div className="flex items-start justify-between gap-4 flex-wrap">
                   <div className="min-w-0">
