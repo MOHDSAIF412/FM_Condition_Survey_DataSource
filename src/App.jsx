@@ -800,27 +800,20 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
     }
   };
 
-  /** True when the survey already open belongs to this project. */
-  function loadedFacilityBelongsTo(project) {
-    const current = surveyRef.current;
-    if (!current || !project) return false;
-    return current.projectId === project.id;
-  }
-
   useEffect(() => {
     let cancelled = false;
     (async () => {
       const list = await refreshProjects();
       if (cancelled) return;
 
-      // Drop straight back into the project last used, so reopening the app
-      // mid-survey does not mean walking the hierarchy again.
+      // Remember which project was last used, so opening it manually is one
+      // tap, but do NOT jump straight into it. Auto-advancing past the
+      // project screen on every launch was the opposite of the point of
+      // having one: the app must always start by asking "which project?",
+      // never assume the answer from last time.
       const savedId = getActiveProjectId();
       const restored = savedId ? list.find((p) => p.id === savedId) : null;
-      if (restored) {
-        setActiveProject(restored);
-        setView(loadedFacilityBelongsTo(restored) ? 'survey' : 'facilities');
-      }
+      if (restored) setActiveProject(restored);
     })();
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
