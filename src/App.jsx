@@ -7,6 +7,8 @@ import AnalyticsView from './components/AnalyticsView';
 import SignatureSection from './components/SignatureSection';
 import ReportModal from './components/ReportModal';
 import SavedFacilities from './components/SavedFacilities';
+import ProjectDashboard from './components/ProjectDashboard';
+import Breadcrumb from './components/Breadcrumb';
 import { createNewSurvey, calculateSurveyStats } from './types/survey';
 import {
   saveSurveyOffline,
@@ -30,6 +32,14 @@ import {
 import { isCloudConfigured } from './utils/supabaseClient';
 import { initNetworkMonitor, onNetworkChange, isOnline } from './utils/network';
 import { PHOTO_SYNC, consumeCaptureReturn } from './utils/photoCapture';
+import {
+  listProjects,
+  createProject as createProjectRecord,
+  assignFacilityToProject,
+  getActiveProjectId,
+  setActiveProjectId,
+  cachedProjects
+} from './utils/projects';
 
 /**
  * Keeps a tab's subtree mounted and toggles visibility with CSS.
@@ -70,6 +80,24 @@ export default function App() {
   useEffect(() => {
     try { localStorage.setItem('fm_active_tab', activeTab); } catch { /* private mode */ }
   }, [activeTab]);
+  /**
+   * Where in Project > Facility > Module the user is.
+   *
+   * A plain view state rather than a router: the app is wrapped in Capacitor
+   * and has never had URL routing, so introducing history and deep links here
+   * would add a whole class of problems for no gain on a device.
+   *
+   *   'projects'   pick or create a project
+   *   'facilities' pick or create a facility inside that project
+   *   'survey'     the existing five tabs, always for one chosen facility
+   */
+  const [view, setView] = useState('projects');
+  const [projects, setProjects] = useState(() => cachedProjects());
+  const [projectsLoading, setProjectsLoading] = useState(false);
+  const [activeProject, setActiveProject] = useState(null);
+  const activeProjectRef = useRef(null);
+  activeProjectRef.current = activeProject;
+
   const [showReportModal, setShowReportModal] = useState(false);
   const [lastSavedTime, setLastSavedTime] = useState('');
   const [isLoaded, setIsLoaded] = useState(false);
@@ -585,8 +613,10 @@ It stays available in the facility list for reports.`)) {
     }
 
     // Fresh blank facility, with its own new id so nothing is overwritten,
-    // and its own reference number so it is identifiable straight away.
+    // its own reference number so it is identifiable straight away, and the
+    // open project so it cannot be recorded under the wrong one.
     const next = createNewSurvey(await nextFacilityNumber());
+    next.projectId = activeProjectRef.current?.id || null;
     skipCloudPushRef.current = true;
     setSurvey(next);
     await saveSurveyOffline(next, { pendingSync: false });
@@ -672,9 +702,17 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
       setSyncState('syncing');
       const loaded = await pullSurvey(surveyId, {});
       if (loaded) {
+        // A facility recorded before projects existed has no project. Adopt it
+        // into the one being worked in rather than leaving it unreachable.
+        const project = activeProjectRef.current;
+        if (project && !loaded.projectId) {
+          loaded.projectId = project.id;
+          assignFacilityToProject(loaded.id, project.id).catch(() => { /* retried on next push */ });
+        }
         markAsExternalChange();
         setSurvey(loaded);
         await saveSurveyOffline(loaded, { pendingSync: false });
+        setView('survey');
       }
       setSyncState('synced');
     } catch (err) {
@@ -704,6 +742,7 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
       // start a fresh blank facility rather than keep editing a ghost.
       if (surveyId === survey?.id) {
         const fresh = createNewSurvey(await nextFacilityNumber());
+        fresh.projectId = activeProjectRef.current?.id || null;
         skipCloudPushRef.current = true;
         setSurvey(fresh);
         await saveSurveyOffline(fresh, { pendingSync: false });
@@ -731,11 +770,112 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
   const handleReset = async () => {
     if (confirm('Start a fresh blank condition survey?')) {
       const fresh = createNewSurvey(await nextFacilityNumber());
+      fresh.projectId = activeProjectRef.current?.id || null;
       setSurvey(fresh);
       await saveSurveyOffline(fresh);
       setActiveTab('facility');
     }
   };
+
+  /* ------------------------------------------------------- projects ----- */
+
+  /**
+   * Loads the project list and restores the one last worked in.
+   *
+   * The list is cached, so with no signal the picker still shows the projects
+   * this device has seen rather than an empty screen.
+   */
+  const refreshProjects = async () => {
+    setProjectsLoading(true);
+    try {
+      const list = await listProjects();
+      setProjects(list);
+      return list;
+    } catch (err) {
+      console.warn('[projects] could not load:', err.message);
+      return cachedProjects();
+    } finally {
+      setProjectsLoading(false);
+    }
+  };
+
+  /** True when the survey already open belongs to this project. */
+  function loadedFacilityBelongsTo(project) {
+    const current = surveyRef.current;
+    if (!current || !project) return false;
+    return current.projectId === project.id;
+  }
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const list = await refreshProjects();
+      if (cancelled) return;
+
+      // Drop straight back into the project last used, so reopening the app
+      // mid-survey does not mean walking the hierarchy again.
+      const savedId = getActiveProjectId();
+      const restored = savedId ? list.find((p) => p.id === savedId) : null;
+      if (restored) {
+        setActiveProject(restored);
+        setView(loadedFacilityBelongsTo(restored) ? 'survey' : 'facilities');
+      }
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isLoaded]);
+
+  const handleOpenProject = (project) => {
+    setActiveProject(project);
+    setActiveProjectId(project.id);
+    setView('facilities');
+    refreshSurveyList();
+  };
+
+  const handleBackToProjects = () => {
+    setView('projects');
+    refreshProjects();
+  };
+
+  const handleCreateProject = async (details) => {
+    const created = await createProjectRecord(details);
+    setProjects((prev) => [{ ...created, facilityCount: 0 }, ...prev]);
+    handleOpenProject(created);
+    return created;
+  };
+
+  /** Starts a facility inside the open project and goes to its details. */
+  const handleAddFacilityToProject = async () => {
+    const project = activeProjectRef.current;
+    if (!project) {
+      alert('Please select a project first.');
+      setView('projects');
+      return;
+    }
+
+    const current = surveyRef.current;
+    const currentIsBlankInThisProject =
+      current && current.projectId === project.id &&
+      !(current.facility?.facilityName || current.facility?.buildingName) &&
+      !(current.items || []).some((i) => (i.defectDescription || '').trim() || (i.location || '').trim());
+
+    // Reuse an untouched blank facility instead of stacking up empty ones.
+    if (!currentIsBlankInThisProject) {
+      const fresh = createNewSurvey(await nextFacilityNumber());
+      fresh.projectId = project.id;
+      skipCloudPushRef.current = true;  // nothing worth a server row until it has content
+      setSurvey(fresh);
+      await saveSurveyOffline(fresh, { pendingSync: false });
+    }
+
+    setActiveTab('facility');
+    setView('survey');
+  };
+
+  /** Facilities belonging to the open project, and nothing else. */
+  const facilitiesInProject = activeProject
+    ? surveyList.filter((s) => s.projectId === activeProject.id)
+    : [];
 
   /**
    * The next facility number, continuing from every facility this device knows
@@ -807,6 +947,7 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
     }
 
     const fresh = createNewSurvey(await nextFacilityNumber());
+    fresh.projectId = activeProjectRef.current?.id || null;
     skipCloudPushRef.current = true;   // an empty facility is not worth a server row yet
     setSurvey(fresh);
     await saveSurveyOffline(fresh, { pendingSync: false });
@@ -936,17 +1077,99 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
         pendingCount={pendingPhotoCount}
       />
 
-      {/* Navigation (Desktop Tabs & Mobile Sticky Bottom Bar) */}
-      <Navigation
-        activeTab={activeTab}
-        setActiveTab={handleTabChange}
-        itemsCount={(survey?.items || []).length}
-        urgentCount={urgentCount}
-      />
+      {/* Navigation belongs to a chosen facility: the five tabs all act on one
+          survey, so showing them before a facility is picked would offer
+          modules with nothing behind them. */}
+      {view === 'survey' && (
+        <Navigation
+          activeTab={activeTab}
+          setActiveTab={handleTabChange}
+          itemsCount={(survey?.items || []).length}
+          urgentCount={urgentCount}
+        />
+      )}
+
+      {/* Project picker: nothing project-specific is reachable until one is chosen. */}
+      {view === 'projects' && (
+        <main className="flex-1 max-w-6xl w-full mx-auto px-3 sm:px-6 pt-4 sm:pt-6 safe-area-content-pb md:pb-8">
+          <ProjectDashboard
+            projects={projects}
+            loading={projectsLoading}
+            online={online}
+            onOpenProject={handleOpenProject}
+            onCreateProject={handleCreateProject}
+            onRefresh={refreshProjects}
+          />
+        </main>
+      )}
+
+      {/* Facilities inside the chosen project. */}
+      {view === 'facilities' && activeProject && (
+        <>
+          <div className="bg-white border-b border-slate-200">
+            <div className="max-w-6xl mx-auto px-3 sm:px-6 py-2">
+              <Breadcrumb
+                project={activeProject}
+                onHome={handleBackToProjects}
+                onProject={() => setView('facilities')}
+              />
+            </div>
+          </div>
+
+          <main className="flex-1 max-w-6xl w-full mx-auto px-3 sm:px-6 pt-4 sm:pt-6 safe-area-content-pb md:pb-8">
+            <div className="max-w-4xl mx-auto space-y-6">
+              <div className="bg-gradient-to-r from-ocs-800 to-slate-900 rounded-2xl p-5 sm:p-6 text-white shadow-md">
+                <div className="flex items-start justify-between gap-4 flex-wrap">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="px-2 py-0.5 rounded-md bg-sky-400/20 text-sky-200 text-[11px] font-bold border border-sky-400/30">
+                        {activeProject.projectNumber}
+                      </span>
+                      <h2 className="text-xl font-bold truncate">{activeProject.name}</h2>
+                    </div>
+                    <p className="text-sky-200/80 text-xs mt-1">
+                      {facilitiesInProject.length}
+                      {facilitiesInProject.length === 1 ? ' facility' : ' facilities'} in this project
+                      {activeProject.client ? ` · ${activeProject.client}` : ''}
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={handleAddFacilityToProject}
+                    className="px-4 py-2.5 rounded-xl bg-flame-500 hover:bg-flame-600 active:scale-[0.98] text-white font-bold text-sm shadow-card inline-flex items-center gap-2 shrink-0 transition-[background-color,transform] duration-150"
+                  >
+                    + Add Facility
+                  </button>
+                </div>
+              </div>
+
+              {!facilitiesInProject.length && (
+                <div className="bg-white rounded-2xl p-6 border border-slate-200 text-center">
+                  <h3 className="font-bold text-slate-700 text-sm">No facilities in this project yet</h3>
+                  <p className="text-xs text-slate-500 mt-1">
+                    Use <span className="font-semibold">+ Add Facility</span> to start the first one.
+                  </p>
+                </div>
+              )}
+
+              <SavedFacilities
+                surveys={facilitiesInProject}
+                currentId={survey?.id}
+                onOpen={handleOpenSurvey}
+                onDelete={handleDeleteSurvey}
+                onRefresh={refreshSurveyList}
+                onSyncNow={handleSyncNow}
+              />
+            </div>
+          </main>
+        </>
+      )}
 
       {/* Main Content Area */}
       {/* Facility bar: which facility is open, switch to another, and submit
           this one when it is finished. */}
+      {view === 'survey' && (
       <div className="bg-white border-b border-slate-200">
         <div className="max-w-6xl mx-auto px-3 sm:px-6 py-2 flex items-center gap-3 flex-wrap">
           <div className="flex items-center gap-2 min-w-0 w-full sm:w-auto sm:flex-1">
@@ -995,7 +1218,25 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
             <span className="hidden sm:inline">Submit &amp; Start New Facility</span>
           </button>
         </div>
+
+        {activeProject && (
+          <div className="max-w-6xl mx-auto px-3 sm:px-6 pb-2">
+            <Breadcrumb
+              project={activeProject}
+              facility={survey?.facility}
+              moduleName={
+                activeTab === 'facility' ? 'Facility Info'
+                : activeTab === 'items' ? 'Survey'
+                : activeTab === 'analytics' ? 'Score & CapEx'
+                : activeTab === 'signatures' ? 'Sign-Off' : null
+              }
+              onHome={handleBackToProjects}
+              onProject={() => setView('facilities')}
+            />
+          </div>
+        )}
       </div>
+      )}
 
       {/* Tab panels stay MOUNTED and are hidden with CSS rather than unmounted.
           Conditional rendering meant every tab tap tore down and rebuilt the
@@ -1003,6 +1244,7 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
           at 50 assets, which is what made switching feel slow. Keeping them
           mounted makes a switch a style change instead of a rebuild, and it
           also preserves each tab's scroll position and in-progress input. */}
+      {view === 'survey' && (
       <main className="flex-1 max-w-6xl w-full mx-auto px-3 sm:px-6 pt-4 sm:pt-6 safe-area-content-pb md:pb-8">
         <TabPanel active={activeTab === 'facility'}>
           <FacilityInfo
@@ -1048,6 +1290,7 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
           />
         </TabPanel>
       </main>
+      )}
 
       {/* Audit Report Modal & PDF Generation Engine */}
       {showReportModal && (

@@ -141,7 +141,12 @@ export async function pushSurvey(survey) {
   }
 
   const nextRevision = serverRevision + 1;
-  const { error: surveyErr } = await supabase.from('condition_surveys').upsert({
+
+  // `project_id` is included only when this client knows it. An upsert updates
+  // exactly the columns it is given, so omitting it leaves the server's link
+  // alone -- a device still running an older bundle cannot blank a facility's
+  // project by pushing an edit.
+  const surveyRow = {
     id: survey.id,
     title: survey.title || null,
     facility: survey.facility || {},
@@ -152,7 +157,10 @@ export async function pushSurvey(survey) {
     submitted_at: survey.submittedAt || null,
     facility_name: (survey.facility && (survey.facility.facilityName || survey.facility.buildingName)) || null,
     updated_at: new Date().toISOString()
-  });
+  };
+  if (survey.projectId) surveyRow.project_id = survey.projectId;
+
+  const { error: surveyErr } = await supabase.from('condition_surveys').upsert(surveyRow);
   if (surveyErr) throw surveyErr;
 
   const items = survey.items || [];
@@ -321,6 +329,7 @@ export async function pullSurvey(surveyId, knownPhotos = {}) {
 
   return {
     id: row.id,
+    projectId: row.project_id || null,
     title: row.title || 'Facility Condition Assessment',
     facility: row.facility || {},
     signatures: row.signatures || {},
@@ -355,7 +364,7 @@ export async function listSurveys() {
   if (!isCloudConfigured) return [];
   const { data, error } = await supabase
     .from('condition_surveys')
-    .select('id, title, facility, facility_name, status, submitted_at, updated_at, revision')
+    .select('id, title, facility, facility_name, status, submitted_at, updated_at, revision, project_id')
     .order('updated_at', { ascending: false });
   if (error) {
     console.warn('Could not list surveys:', error.message);
@@ -381,6 +390,7 @@ export async function listSurveys() {
   return surveys.map((r) => ({
     id: r.id,
     title: r.title,
+    projectId: r.project_id || null,
     facility: r.facility || {},
     facilityName: r.facility_name || (r.facility && r.facility.facilityName) || '',
     itemCount: counts[r.id] || 0,
