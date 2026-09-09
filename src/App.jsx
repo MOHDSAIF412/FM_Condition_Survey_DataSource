@@ -9,6 +9,7 @@ import ReportModal from './components/ReportModal';
 import SavedFacilities from './components/SavedFacilities';
 import ProjectDashboard from './components/ProjectDashboard';
 import UserManagement from './components/UserManagement';
+import ChangePasswordModal from './components/ChangePasswordModal';
 import Breadcrumb from './components/Breadcrumb';
 import ReportDashboard from './components/ReportDashboard';
 import { createNewSurvey, calculateSurveyStats } from './types/survey';
@@ -101,6 +102,7 @@ export default function App({ currentUser = null, onSignOut } = {}) {
   activeProjectRef.current = activeProject;
 
   const [showReportModal, setShowReportModal] = useState(false);
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [lastSavedTime, setLastSavedTime] = useState('');
   const [isLoaded, setIsLoaded] = useState(false);
   const saveTimeoutRef = useRef(null);
@@ -1072,8 +1074,13 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
         pendingCount={pendingPhotoCount}
         currentUser={currentUser}
         onOpenUsers={() => setView('users')}
+        onChangePassword={() => setShowPasswordModal(true)}
         onSignOut={onSignOut}
       />
+
+      {showPasswordModal && (
+        <ChangePasswordModal onClose={() => setShowPasswordModal(false)} />
+      )}
 
       {/* Navigation belongs to a chosen facility: the five tabs all act on one
           survey, so showing them before a facility is picked would offer

@@ -40,6 +40,17 @@ export async function signIn(email, password) {
   return data.session;
 }
 
+/** Changes the signed-in user's own password. Supabase re-derives the hash;
+ *  the old password is never sent or stored anywhere in this app. */
+export async function changePassword(newPassword) {
+  if (!isCloudConfigured) throw new Error('Cloud sync is not configured on this build.');
+  const password = (newPassword || '').trim();
+  if (password.length < 8) throw new Error('Password must be at least 8 characters.');
+
+  const { error } = await supabase.auth.updateUser({ password });
+  if (error) throw new Error(error.message || 'Could not change the password.');
+}
+
 export async function signOut() {
   if (!isCloudConfigured) return;
   await supabase.auth.signOut();

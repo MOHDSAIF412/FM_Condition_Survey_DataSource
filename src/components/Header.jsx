@@ -11,6 +11,7 @@ import {
   ChevronDown,
   Users,
   LogOut,
+  KeyRound,
 } from 'lucide-react';
 
 export default function Header({
@@ -26,6 +27,7 @@ export default function Header({
   pendingCount = 0,
   currentUser = null,
   onOpenUsers,
+  onChangePassword,
   onSignOut
 }) {
   // Connectivity wins over sync state: if there is no connection, saying
@@ -169,6 +171,16 @@ export default function Header({
                         >
                           <Users className="w-4 h-4 text-slate-400" />
                           <span>Manage Users</span>
+                        </button>
+                      )}
+
+                      {onChangePassword && (
+                        <button
+                          onClick={() => { setShowMenu(false); onChangePassword(); }}
+                          className="w-full text-left px-3.5 py-2 text-xs hover:bg-slate-700 flex items-center space-x-2"
+                        >
+                          <KeyRound className="w-4 h-4 text-slate-400" />
+                          <span>Change Password</span>
                         </button>
                       )}
 
