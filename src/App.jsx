@@ -9,6 +9,7 @@ import ReportModal from './components/ReportModal';
 import SavedFacilities from './components/SavedFacilities';
 import ProjectDashboard from './components/ProjectDashboard';
 import Breadcrumb from './components/Breadcrumb';
+import ReportDashboard from './components/ReportDashboard';
 import { createNewSurvey, calculateSurveyStats } from './types/survey';
 import {
   saveSurveyOffline,
@@ -1134,13 +1135,22 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
                     </p>
                   </div>
 
-                  <button
-                    type="button"
-                    onClick={handleAddFacilityToProject}
-                    className="px-4 py-2.5 rounded-xl bg-flame-500 hover:bg-flame-600 active:scale-[0.98] text-white font-bold text-sm shadow-card inline-flex items-center gap-2 shrink-0 transition-[background-color,transform] duration-150"
-                  >
-                    + Add Facility
-                  </button>
+                  <div className="flex items-center gap-2 shrink-0 flex-wrap">
+                    <button
+                      type="button"
+                      onClick={() => setView('reports')}
+                      className="px-4 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white font-bold text-sm inline-flex items-center gap-2 border border-white/20"
+                    >
+                      Reports
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleAddFacilityToProject}
+                      className="px-4 py-2.5 rounded-xl bg-flame-500 hover:bg-flame-600 active:scale-[0.98] text-white font-bold text-sm shadow-card inline-flex items-center gap-2 transition-[background-color,transform] duration-150"
+                    >
+                      + Add Facility
+                    </button>
+                  </div>
                 </div>
               </div>
 
@@ -1162,6 +1172,29 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
                 onSyncNow={handleSyncNow}
               />
             </div>
+          </main>
+        </>
+      )}
+
+      {/* Report dashboard: pick a project, tick facilities, generate. */}
+      {view === 'reports' && (
+        <>
+          <div className="bg-white border-b border-slate-200">
+            <div className="max-w-6xl mx-auto px-3 sm:px-6 py-2">
+              <Breadcrumb
+                project={activeProject}
+                moduleName="Reports"
+                onHome={handleBackToProjects}
+                onProject={() => setView('facilities')}
+              />
+            </div>
+          </div>
+          <main className="flex-1 max-w-6xl w-full mx-auto px-3 sm:px-6 pt-4 sm:pt-6 safe-area-content-pb md:pb-8">
+            <ReportDashboard
+              projects={projects}
+              surveys={surveyList}
+              initialProjectId={activeProject?.id || null}
+            />
           </main>
         </>
       )}
