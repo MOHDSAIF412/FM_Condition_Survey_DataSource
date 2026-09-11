@@ -68,18 +68,16 @@ export default function ProjectDashboard({
 
   return (
     <div className="max-w-6xl mx-auto space-y-6 pb-10">
-      {/* Hero */}
-      <div className="relative overflow-hidden bg-gradient-to-br from-ocs-800 via-ocs-800 to-slate-900 rounded-3xl p-6 sm:p-8 text-white shadow-lg">
-        <Briefcase className="absolute -right-6 -bottom-8 w-48 h-48 text-white/5 rotate-12 pointer-events-none" />
-
+      {/* Hero -- a plain sky gradient, deliberately no photo/illustration */}
+      <div className="relative overflow-hidden bg-gradient-to-br from-sky-400 via-sky-300 to-blue-200 rounded-3xl p-6 sm:p-8 shadow-lg">
         <div className="relative flex items-start justify-between gap-4 flex-wrap">
           <div className="flex items-start gap-4 min-w-0">
-            <div className="p-3.5 bg-white/10 rounded-2xl shrink-0">
-              <Briefcase className="w-9 h-9 text-sky-300" />
+            <div className="p-3.5 bg-white/25 backdrop-blur-sm rounded-2xl shrink-0">
+              <Briefcase className="w-9 h-9 text-white" />
             </div>
             <div className="min-w-0">
-              <h2 className="text-2xl sm:text-3xl font-bold tracking-tight">Projects</h2>
-              <p className="text-sky-200/80 text-sm mt-1">
+              <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900">Projects</h2>
+              <p className="text-slate-800/70 text-sm mt-1">
                 Choose a project to work in, or start a new one.
               </p>
             </div>
@@ -90,26 +88,26 @@ export default function ProjectDashboard({
             onClick={() => { setShowForm((v) => !v); setError(''); }}
             className="px-5 py-3 rounded-xl bg-flame-500 hover:bg-flame-600 active:scale-[0.98] text-white font-bold text-sm shadow-card inline-flex items-center gap-2 shrink-0 transition-[background-color,transform] duration-150"
           >
-            <FolderPlus className="w-4.5 h-4.5" />
+            <FolderPlus className="w-4 h-4" />
             {showForm ? 'Cancel' : 'Create Project'}
           </button>
         </div>
 
         {/* Quick stats -- gives the page something to look at even with one project */}
         <div className="relative grid grid-cols-2 gap-3 mt-6 max-w-md">
-          <div className="bg-white/10 rounded-2xl px-4 py-3 backdrop-blur-sm border border-white/10">
-            <div className="flex items-center gap-2 text-sky-300">
+          <div className="bg-gradient-to-br from-indigo-500 to-violet-500 rounded-2xl px-4 py-3.5 shadow-md">
+            <div className="flex items-center gap-2 text-white/80">
               <FolderKanban className="w-4 h-4" />
               <span className="text-[11px] font-bold uppercase tracking-wider">Projects</span>
             </div>
-            <p className="text-2xl font-bold mt-1">{totals.projects}</p>
+            <p className="text-2xl font-bold mt-1 text-white">{totals.projects}</p>
           </div>
-          <div className="bg-white/10 rounded-2xl px-4 py-3 backdrop-blur-sm border border-white/10">
-            <div className="flex items-center gap-2 text-sky-300">
+          <div className="bg-gradient-to-br from-teal-500 to-emerald-500 rounded-2xl px-4 py-3.5 shadow-md">
+            <div className="flex items-center gap-2 text-white/80">
               <Layers className="w-4 h-4" />
               <span className="text-[11px] font-bold uppercase tracking-wider">Facilities</span>
             </div>
-            <p className="text-2xl font-bold mt-1">{totals.facilities}</p>
+            <p className="text-2xl font-bold mt-1 text-white">{totals.facilities}</p>
           </div>
         </div>
       </div>

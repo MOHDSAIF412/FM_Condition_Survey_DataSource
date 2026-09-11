@@ -8,6 +8,7 @@ import SignatureSection from './components/SignatureSection';
 import ReportModal from './components/ReportModal';
 import SavedFacilities from './components/SavedFacilities';
 import ProjectDashboard from './components/ProjectDashboard';
+import Sidebar from './components/Sidebar';
 import UserManagement from './components/UserManagement';
 import ChangePasswordModal from './components/ChangePasswordModal';
 import Breadcrumb from './components/Breadcrumb';
@@ -185,6 +186,23 @@ export default function App({ currentUser = null, onSignOut } = {}) {
   }
 
   /**
+   * A facility is worth sending to the server once it has anything a person
+   * actually entered -- a name, or a snag with a location/defect/photo -- or
+   * once it already exists there (has a cloudRevision), so a legitimate later
+   * edit is never blocked. A brand-new facility with nothing typed into it
+   * yet is neither.
+   */
+  function surveyIsWorthSyncing(s) {
+    if (!s) return false;
+    if (s.cloudRevision !== undefined) return true;
+    const hasName = Boolean((s.facility?.facilityName || s.facility?.buildingName || '').trim());
+    const hasSnagContent = (s.items || []).some(
+      (i) => (i.defectDescription || '').trim() || (i.location || '').trim() || (i.photos || []).length
+    );
+    return hasName || hasSnagContent;
+  }
+
+  /**
    * Pushes the current survey and settles everything that must follow a push.
    *
    * Both callers -- the debounced autosave and the back-online handler -- have
@@ -197,6 +215,20 @@ export default function App({ currentUser = null, onSignOut } = {}) {
    * "worked offline, then reconnected" survey behaving like any other.
    */
   async function pushAndSettle() {
+    // ROOT CAUSE of empty facilities appearing in the saved list: creating a
+    // fresh blank facility sets `skipCloudPushRef` to suppress the very next
+    // push, but that flag is only checked by the debounced autosave effect
+    // below. pushAndSettle is also called directly by the reconnect handler,
+    // which never looked at the flag at all -- so a network reconnect firing
+    // around the same moment a blank facility was created bypassed the guard
+    // entirely and uploaded it. A one-shot ref racing across two independent
+    // effects is exactly the kind of thing that gets bypassed; checking the
+    // survey's actual content instead means every caller is safe by
+    // construction, not by remembering to check a flag.
+    if (!surveyIsWorthSyncing(surveyRef.current)) {
+      return { skipped: true, reason: 'empty' };
+    }
+
     const pushResult = await pushSurvey(surveyRef.current);
     applyPhotoSyncResult(pushResult);
 
@@ -1059,7 +1091,19 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
   const urgentCount = stats?.priorityCounts?.[1] || 0;
 
   return (
-    <div className="min-h-screen bg-slate-100 flex flex-col font-sans">
+    <div className="min-h-screen bg-slate-100 flex font-sans">
+      <Sidebar
+        view={view}
+        canOpenUsers={currentUser?.role === 'admin'}
+        onNavigate={(target) => {
+          if (target === 'facilities') {
+            setView(activeProject ? 'facilities' : 'projects');
+          } else {
+            setView(target);
+          }
+        }}
+      />
+      <div className="min-h-screen flex-1 flex flex-col min-w-0">
       {/* Top Header */}
       <Header
         survey={survey || {}}
@@ -1357,6 +1401,7 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
           onClose={() => setShowReportModal(false)}
         />
       )}
+      </div>
     </div>
   );
 }
