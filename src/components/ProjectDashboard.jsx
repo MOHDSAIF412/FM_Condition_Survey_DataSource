@@ -8,7 +8,9 @@ import {
   MapPin,
   AlertCircle,
   FolderKanban,
-  Layers
+  Layers,
+  ClipboardList,
+  RefreshCw
 } from 'lucide-react';
 
 // A small fixed palette cycled by index, so cards read as distinct projects
@@ -94,20 +96,24 @@ export default function ProjectDashboard({
         </div>
 
         {/* Quick stats -- gives the page something to look at even with one project */}
-        <div className="relative grid grid-cols-2 gap-3 mt-6 max-w-md">
-          <div className="bg-gradient-to-br from-indigo-500 to-violet-500 rounded-2xl px-4 py-3.5 shadow-md">
-            <div className="flex items-center gap-2 text-white/80">
-              <FolderKanban className="w-4 h-4" />
-              <span className="text-[11px] font-bold uppercase tracking-wider">Projects</span>
-            </div>
-            <p className="text-2xl font-bold mt-1 text-white">{totals.projects}</p>
+        <div className="relative grid grid-cols-2 gap-4 mt-6 max-w-xl">
+          <div className="bg-gradient-to-br from-indigo-500 to-violet-500 rounded-2xl p-4 shadow-md flex items-center gap-3.5">
+            <span className="p-2.5 rounded-xl bg-white/20 shrink-0">
+              <FolderKanban className="w-5 h-5 text-white" />
+            </span>
+            <span className="min-w-0">
+              <span className="block text-[11px] font-bold uppercase tracking-wider text-white/80">Projects</span>
+              <span className="block text-2xl font-bold text-white leading-tight">{totals.projects}</span>
+            </span>
           </div>
-          <div className="bg-gradient-to-br from-teal-500 to-emerald-500 rounded-2xl px-4 py-3.5 shadow-md">
-            <div className="flex items-center gap-2 text-white/80">
-              <Layers className="w-4 h-4" />
-              <span className="text-[11px] font-bold uppercase tracking-wider">Facilities</span>
-            </div>
-            <p className="text-2xl font-bold mt-1 text-white">{totals.facilities}</p>
+          <div className="bg-gradient-to-br from-teal-500 to-emerald-500 rounded-2xl p-4 shadow-md flex items-center gap-3.5">
+            <span className="p-2.5 rounded-xl bg-white/20 shrink-0">
+              <Layers className="w-5 h-5 text-white" />
+            </span>
+            <span className="min-w-0">
+              <span className="block text-[11px] font-bold uppercase tracking-wider text-white/80">Facilities</span>
+              <span className="block text-2xl font-bold text-white leading-tight">{totals.facilities}</span>
+            </span>
           </div>
         </div>
       </div>
@@ -195,15 +201,17 @@ export default function ProjectDashboard({
         </form>
       )}
 
-      <div className="flex items-center justify-between">
-        <h3 className="text-sm font-bold uppercase tracking-wider text-slate-500">
+      <div className="flex items-center justify-between border-b border-slate-200">
+        <h3 className="text-base font-bold text-slate-800 inline-flex items-center gap-2 pb-2.5 border-b-2 border-ocs-600 -mb-px">
+          <ClipboardList className="w-4 h-4 text-ocs-600" />
           All Projects ({projects.length})
         </h3>
         <button
           type="button"
           onClick={onRefresh}
-          className="text-xs font-semibold text-ocs-600 hover:text-ocs-700"
+          className="text-sm font-semibold text-ocs-600 hover:text-ocs-700 inline-flex items-center gap-1.5 pb-2.5"
         >
+          <RefreshCw className="w-4 h-4" />
           Refresh
         </button>
       </div>
@@ -221,7 +229,7 @@ export default function ProjectDashboard({
           </p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           {projects.map((p, idx) => {
             const accent = ACCENTS[idx % ACCENTS.length];
             return (
@@ -233,32 +241,37 @@ export default function ProjectDashboard({
               >
                 <div className={`h-1.5 ${accent.bar}`} />
                 <div className="p-5">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className={`p-2.5 rounded-xl ${accent.icon}`}>
-                      <Building2 className="w-5 h-5" />
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <span className={`inline-block px-2.5 py-1 rounded-md text-[11px] font-bold border ${accent.chip}`}>
+                        {p.projectNumber}
+                      </span>
+                      <h4 className="font-bold text-slate-900 text-lg mt-2 leading-snug truncate">
+                        {p.name}
+                      </h4>
                     </div>
-                    <ChevronRight className="w-5 h-5 text-slate-300 group-hover:text-slate-500 group-hover:translate-x-0.5 transition-all shrink-0 mt-1.5" />
+                    <span className="w-9 h-9 rounded-full bg-sky-50 text-ocs-600 flex items-center justify-center shrink-0 group-hover:bg-sky-100 transition-colors">
+                      <ChevronRight className="w-5 h-5 group-hover:translate-x-0.5 transition-transform" />
+                    </span>
                   </div>
 
-                  <span className={`inline-block mt-3 px-2 py-0.5 rounded-md text-[11px] font-bold border ${accent.chip}`}>
-                    {p.projectNumber}
-                  </span>
-                  <h4 className="font-bold text-slate-900 text-base mt-1.5 leading-snug truncate">
-                    {p.name}
-                  </h4>
-
-                  <div className="flex items-center gap-3 mt-3 text-[12px] text-slate-500 flex-wrap">
-                    {p.client && <span className="font-medium">{p.client}</span>}
+                  <div className="flex items-center gap-3 mt-3 text-[13px] text-slate-500 flex-wrap">
+                    {p.client && (
+                      <span className="inline-flex items-center gap-1.5">
+                        <MapPin className="w-3.5 h-3.5 text-ocs-600" /> {p.client}
+                      </span>
+                    )}
+                    {p.client && p.location && <span className="text-slate-300">|</span>}
                     {p.location && (
-                      <span className="inline-flex items-center gap-1">
-                        <MapPin className="w-3 h-3" /> {p.location}
+                      <span className="inline-flex items-center gap-1.5">
+                        <Building2 className="w-3.5 h-3.5 text-ocs-600" /> {p.location}
                       </span>
                     )}
                   </div>
 
-                  <div className="mt-4 pt-3 border-t border-slate-100 flex items-center gap-1.5 text-slate-600">
-                    <Layers className="w-3.5 h-3.5" />
-                    <span className="text-xs font-bold">
+                  <div className="mt-4 pt-3 border-t border-slate-100 flex items-center gap-2 text-slate-700">
+                    <Layers className="w-4 h-4 text-ocs-600" />
+                    <span className="text-[13px] font-bold">
                       {p.facilityCount === undefined
                         ? 'Facilities'
                         : `${p.facilityCount} ${p.facilityCount === 1 ? 'facility' : 'facilities'}`}

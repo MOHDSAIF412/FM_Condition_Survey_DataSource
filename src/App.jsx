@@ -1091,7 +1091,7 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
   const urgentCount = stats?.priorityCounts?.[1] || 0;
 
   return (
-    <div className="min-h-screen bg-slate-100 flex font-sans">
+    <div className="min-h-screen bg-[#f4f8fd] flex font-sans">
       <Sidebar
         view={view}
         canOpenUsers={currentUser?.role === 'admin'}
@@ -1117,6 +1117,16 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
         online={online}
         pendingCount={pendingPhotoCount}
         currentUser={currentUser}
+        // On the hub screens the subtitle is the project you are in, not a
+        // facility -- "New Facility Assessment" there would be misleading.
+        contextLabel={
+          view === 'survey'
+            ? ''
+            : (activeProject ? `${activeProject.projectNumber} · ${activeProject.name}` : 'ADEC')
+        }
+        // Reports need a facility behind them, so the shortcut only belongs on
+        // the survey screens; the hub screens have their own Reports entry.
+        showReports={view === 'survey'}
         onOpenUsers={() => setView('users')}
         onChangePassword={() => setShowPasswordModal(true)}
         onSignOut={onSignOut}

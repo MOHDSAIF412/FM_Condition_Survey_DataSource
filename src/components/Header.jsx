@@ -1,19 +1,25 @@
 import React, { useState } from 'react';
 import {
-  Building2,
   Download,
   Upload,
   RotateCcw,
   FileText,
   CheckCircle2,
-  Smartphone,
-  FileCheck,
   ChevronDown,
   Users,
   LogOut,
   KeyRound,
+  Bell,
+  User,
 } from 'lucide-react';
 
+/**
+ * Top bar: white surface, app title with its current context, connectivity,
+ * notifications, and the account menu.
+ *
+ * The OCS mark lives in the sidebar on desktop, so it only appears here on
+ * narrow screens where there is no sidebar to carry it.
+ */
 export default function Header({
   survey,
   onReset,
@@ -26,6 +32,8 @@ export default function Header({
   online = true,
   pendingCount = 0,
   currentUser = null,
+  contextLabel = '',
+  showReports = true,
   onOpenUsers,
   onChangePassword,
   onSignOut
@@ -33,124 +41,173 @@ export default function Header({
   // Connectivity wins over sync state: if there is no connection, saying
   // "Synced" would be a lie even when the last push did succeed.
   const sync = !online
-    ? { label: pendingCount > 0
-          ? `Offline - ${pendingCount} waiting to sync`
-          : 'Offline - saved on device',
-        cls: 'bg-amber-500/20 text-amber-200 border-amber-400/40' }
+    ? { label: pendingCount > 0 ? `Offline - ${pendingCount} waiting` : 'Offline',
+        cls: 'bg-amber-50 text-amber-700 border-amber-200', dot: 'bg-amber-500' }
     : ({
-        off:     { label: 'Offline Ready', cls: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' },
-        idle:    { label: 'Online',        cls: 'bg-white/10 text-ocs-100 border-white/20' },
+        off:     { label: 'Offline Ready',    cls: 'bg-emerald-50 text-emerald-700 border-emerald-200', dot: 'bg-emerald-500' },
+        idle:    { label: 'Online',           cls: 'bg-emerald-50 text-emerald-700 border-emerald-200', dot: 'bg-emerald-500' },
         syncing: { label: pendingCount > 0 ? `Syncing ${pendingCount}...` : 'Syncing...',
-                   cls: 'bg-sky-500/20 text-sky-200 border-sky-400/40' },
-        synced:  { label: 'All data synced', cls: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' },
-        offline: { label: 'Waiting to sync',  cls: 'bg-amber-500/20 text-amber-200 border-amber-400/40' }
-      }[syncState] || { label: 'Online', cls: 'bg-white/10 text-ocs-100 border-white/20' });
+                   cls: 'bg-sky-50 text-sky-700 border-sky-200', dot: 'bg-sky-500' },
+        synced:  { label: 'All data synced',  cls: 'bg-emerald-50 text-emerald-700 border-emerald-200', dot: 'bg-emerald-500' },
+        offline: { label: 'Waiting to sync',  cls: 'bg-amber-50 text-amber-700 border-amber-200', dot: 'bg-amber-500' }
+      }[syncState] || { label: 'Online', cls: 'bg-emerald-50 text-emerald-700 border-emerald-200', dot: 'bg-emerald-500' });
+
   const [showMenu, setShowMenu] = useState(false);
+  const [showBell, setShowBell] = useState(false);
+
+  const displayName = currentUser?.full_name || currentUser?.email || 'Signed in';
+  const roleLabel = currentUser?.role === 'admin' ? 'Administrator' : 'FM Team';
+
+  const subtitle = contextLabel
+    || survey?.facility?.facilityName
+    || survey?.facility?.buildingName
+    || 'New Facility Assessment';
 
   return (
-    <header className="sticky top-0 z-30 bg-ocs-800 border-b border-ocs-600/60 text-white shadow-raised safe-area-pt">
-      <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
+    <header className="sticky top-0 z-30 bg-white border-b border-slate-200 safe-area-pt">
+      <div className="px-4 sm:px-6 py-3 flex items-center justify-between gap-3">
 
-        {/* Left: Brand and App Name */}
+        {/* Left: title + current context */}
         <div className="flex items-center gap-3 min-w-0">
-          {/* OCS mark, knocked out for a navy surface. The trimmed asset has no
-              dead margin, so h-7 renders 28px of actual letterform rather than
-              the ~19px the untrimmed file gave inside a white chip. */}
+          {/* Only on narrow screens -- the sidebar carries the mark on desktop. */}
           <img
-            src="/ocs-logo-white.png"
+            src="/ocs-logo.png"
             alt="OCS"
-            width={858}
-            height={464}
-            className="h-7 w-auto shrink-0 pr-3 mr-0.5 border-r border-white/15"
+            className="h-7 w-auto shrink-0 pr-3 border-r border-slate-200 lg:hidden"
+            onError={(e) => { e.target.style.display = 'none'; }}
           />
           <div className="min-w-0">
-            <div className="flex items-center space-x-2 min-w-0">
-              <h1 className="text-sm sm:text-base font-bold tracking-tight text-white truncate">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <h1 className="text-base sm:text-lg font-bold tracking-tight text-slate-900 truncate">
                 FM Condition Survey
               </h1>
-              <span className={`hidden sm:inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold border ${sync.cls}`}>
-                <span
-                  aria-hidden="true"
-                  className={`w-1.5 h-1.5 rounded-full mr-1.5 ${online ? 'bg-emerald-400' : 'bg-amber-400'}`}
-                />
+              <span className={`hidden sm:inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-semibold border ${sync.cls}`}>
+                <span aria-hidden="true" className={`w-1.5 h-1.5 rounded-full mr-1.5 ${sync.dot}`} />
                 {sync.label}
               </span>
             </div>
-            <p className="text-xs text-ocs-200/80 truncate max-w-[200px] sm:max-w-sm">
-              {survey.facility?.facilityName || survey.facility?.buildingName || 'New Facility Assessment'}
+            <p className="text-xs text-slate-500 truncate max-w-[180px] sm:max-w-sm">
+              {subtitle}
             </p>
           </div>
         </div>
 
-        {/* Right: Actions */}
-        <div className="flex items-center space-x-2 shrink-0">
-          {/* Quick Generate Report Button */}
-          <button
-            onClick={onOpenReport}
-            className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-flame-500 hover:bg-flame-400 active:bg-flame-600 text-white font-semibold text-xs sm:text-sm shadow-raised transition-[background-color,transform] duration-150 ease-emphasis active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flame-300 focus-visible:ring-offset-2 focus-visible:ring-offset-ocs-800"
-          >
-            <FileText className="w-4 h-4 shrink-0" />
-            <span className="sm:hidden">Reports</span>
-            <span className="hidden sm:inline">Reports (PDF/Excel)</span>
-          </button>
+        {/* Right: reports, notifications, account */}
+        <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+          {showReports && (
+            <button
+              onClick={onOpenReport}
+              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-flame-500 hover:bg-flame-600 active:scale-[0.97] text-white font-semibold text-xs sm:text-sm shadow-card transition-[background-color,transform] duration-150"
+            >
+              <FileText className="w-4 h-4 shrink-0" />
+              <span className="sm:hidden">Reports</span>
+              <span className="hidden sm:inline">Reports (PDF/Excel)</span>
+            </button>
+          )}
 
-          {/* More Actions Dropdown */}
+          {/* Notifications: the badge is the real count of work still waiting
+              to reach the server, not a decorative number. */}
           <div className="relative">
             <button
-              onClick={() => setShowMenu(!showMenu)}
-              className="p-2 rounded-lg bg-white/10 hover:bg-white/20 text-white transition-colors flex items-center gap-1"
-              title="More Actions"
+              onClick={() => { setShowBell((v) => !v); setShowMenu(false); }}
+              className="relative p-2 rounded-xl hover:bg-slate-100 text-slate-500 transition-colors"
+              title="Sync status"
             >
-              <ChevronDown className={`w-4 h-4 transition-transform ${showMenu ? 'rotate-180' : ''}`} />
+              <Bell className="w-5 h-5" />
+              {pendingCount > 0 && (
+                <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 rounded-full bg-rose-500 text-white text-[10px] font-bold flex items-center justify-center">
+                  {pendingCount}
+                </span>
+              )}
+            </button>
+
+            {showBell && (
+              <>
+                <div className="fixed inset-0 z-40" onClick={() => setShowBell(false)} />
+                <div className="absolute right-0 mt-2 w-64 bg-white border border-slate-200 rounded-xl shadow-xl py-3 px-4 z-50">
+                  <p className="text-xs font-bold text-slate-700 mb-1">Sync status</p>
+                  <p className="text-xs text-slate-600 flex items-center gap-1.5">
+                    <span className={`w-1.5 h-1.5 rounded-full ${sync.dot}`} />
+                    {sync.label}
+                  </p>
+                  {pendingCount > 0 && (
+                    <p className="text-xs text-amber-700 mt-1.5">
+                      {pendingCount} item{pendingCount === 1 ? '' : 's'} still to upload. They send
+                      automatically when there is a connection.
+                    </p>
+                  )}
+                  <p className="text-[11px] text-slate-400 mt-2 flex items-center gap-1">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
+                    Saved on device {lastSaved ? `(${lastSaved})` : ''}
+                  </p>
+                </div>
+              </>
+            )}
+          </div>
+
+          <div className="hidden sm:block w-px h-8 bg-slate-200" />
+
+          {/* Account */}
+          <div className="relative">
+            <button
+              onClick={() => { setShowMenu(!showMenu); setShowBell(false); }}
+              className="flex items-center gap-2.5 pl-1 pr-2 py-1 rounded-xl hover:bg-slate-100 transition-colors"
+            >
+              <span className="w-9 h-9 rounded-full bg-ocs-600 text-white flex items-center justify-center shrink-0">
+                <User className="w-5 h-5" />
+              </span>
+              <span className="hidden sm:block text-left leading-tight">
+                <span className="block text-sm font-bold text-slate-900 max-w-[140px] truncate">
+                  {displayName}
+                </span>
+                <span className="block text-[11px] text-slate-500">{roleLabel}</span>
+              </span>
+              <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${showMenu ? 'rotate-180' : ''}`} />
             </button>
 
             {showMenu && (
               <>
-                <div 
-                  className="fixed inset-0 z-40" 
-                  onClick={() => setShowMenu(false)}
-                />
-                <div className="absolute right-0 mt-2 w-60 bg-slate-800 border border-slate-700 rounded-xl shadow-2xl py-2 z-50 text-slate-200">
-                  <div className="px-3 py-1.5 border-b border-slate-700/60 mb-1">
-                    <p className="text-[12px] font-medium text-slate-400">Offline Status</p>
-                    <p className="text-xs text-emerald-400 flex items-center gap-1 mt-0.5">
-                      <CheckCircle2 className="w-3.5 h-3.5" />
-                      Saved to Device {lastSaved ? `(${lastSaved})` : ''}
-                    </p>
-                  </div>
+                <div className="fixed inset-0 z-40" onClick={() => setShowMenu(false)} />
+                <div className="absolute right-0 mt-2 w-64 bg-white border border-slate-200 rounded-xl shadow-xl py-2 z-50 text-slate-700">
+                  {currentUser && (
+                    <div className="px-4 py-2 border-b border-slate-100 mb-1">
+                      <p className="text-sm font-bold text-slate-900 truncate">{displayName}</p>
+                      <p className="text-[11px] text-slate-500 truncate">{currentUser.email}</p>
+                    </div>
+                  )}
 
                   <button
                     onClick={() => { setShowMenu(false); if (onExportExcel) onExportExcel(); }}
-                    className="w-full text-left px-3.5 py-2 text-xs hover:bg-slate-700 flex items-center space-x-2 text-emerald-400 font-medium"
+                    className="w-full text-left px-4 py-2 text-xs hover:bg-slate-50 flex items-center gap-2 font-medium text-emerald-700"
                   >
-                    <Download className="w-4 h-4 text-emerald-400" />
+                    <Download className="w-4 h-4" />
                     <span>Download Excel Report (.xlsx)</span>
                   </button>
 
                   <button
                     onClick={() => { setShowMenu(false); onExportJSON(); }}
-                    className="w-full text-left px-3.5 py-2 text-xs hover:bg-slate-700 flex items-center space-x-2"
+                    className="w-full text-left px-4 py-2 text-xs hover:bg-slate-50 flex items-center gap-2"
                   >
                     <Download className="w-4 h-4 text-slate-400" />
                     <span>Backup Survey (JSON)</span>
                   </button>
 
-                  <label className="w-full text-left px-3.5 py-2 text-xs hover:bg-slate-700 flex items-center space-x-2 cursor-pointer">
+                  <label className="w-full text-left px-4 py-2 text-xs hover:bg-slate-50 flex items-center gap-2 cursor-pointer">
                     <Upload className="w-4 h-4 text-slate-400" />
                     <span>Restore Survey (JSON)</span>
-                    <input 
-                      type="file" 
-                      accept=".json" 
-                      className="hidden" 
-                      onChange={(e) => { setShowMenu(false); onImportJSON(e); }} 
+                    <input
+                      type="file"
+                      accept=".json"
+                      className="hidden"
+                      onChange={(e) => { setShowMenu(false); onImportJSON(e); }}
                     />
                   </label>
 
-                  <div className="border-t border-slate-700/60 my-1" />
+                  <div className="border-t border-slate-100 my-1" />
 
                   <button
                     onClick={() => { setShowMenu(false); onReset(); }}
-                    className="w-full text-left px-3.5 py-2 text-xs hover:bg-rose-950/40 text-rose-400 flex items-center space-x-2"
+                    className="w-full text-left px-4 py-2 text-xs hover:bg-rose-50 text-rose-600 flex items-center gap-2"
                   >
                     <RotateCcw className="w-4 h-4" />
                     <span>Start Fresh / Clear Survey</span>
@@ -158,16 +215,12 @@ export default function Header({
 
                   {currentUser && (
                     <>
-                      <div className="border-t border-slate-700/60 my-1" />
-                      <div className="px-3.5 py-1.5">
-                        <p className="text-[11px] text-slate-400 truncate">{currentUser.email}</p>
-                        <p className="text-[11px] text-slate-500 capitalize">{currentUser.role || 'user'}</p>
-                      </div>
+                      <div className="border-t border-slate-100 my-1" />
 
                       {currentUser.role === 'admin' && onOpenUsers && (
                         <button
                           onClick={() => { setShowMenu(false); onOpenUsers(); }}
-                          className="w-full text-left px-3.5 py-2 text-xs hover:bg-slate-700 flex items-center space-x-2"
+                          className="w-full text-left px-4 py-2 text-xs hover:bg-slate-50 flex items-center gap-2"
                         >
                           <Users className="w-4 h-4 text-slate-400" />
                           <span>Manage Users</span>
@@ -177,7 +230,7 @@ export default function Header({
                       {onChangePassword && (
                         <button
                           onClick={() => { setShowMenu(false); onChangePassword(); }}
-                          className="w-full text-left px-3.5 py-2 text-xs hover:bg-slate-700 flex items-center space-x-2"
+                          className="w-full text-left px-4 py-2 text-xs hover:bg-slate-50 flex items-center gap-2"
                         >
                           <KeyRound className="w-4 h-4 text-slate-400" />
                           <span>Change Password</span>
@@ -187,7 +240,7 @@ export default function Header({
                       {onSignOut && (
                         <button
                           onClick={() => { setShowMenu(false); onSignOut(); }}
-                          className="w-full text-left px-3.5 py-2 text-xs hover:bg-rose-950/40 text-rose-400 flex items-center space-x-2"
+                          className="w-full text-left px-4 py-2 text-xs hover:bg-rose-50 text-rose-600 flex items-center gap-2"
                         >
                           <LogOut className="w-4 h-4" />
                           <span>Sign Out</span>
