@@ -1150,7 +1150,7 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
 
       {/* Project picker: nothing project-specific is reachable until one is chosen. */}
       {view === 'projects' && (
-        <main className="flex-1 max-w-6xl w-full mx-auto px-3 sm:px-6 pt-4 sm:pt-6 safe-area-content-pb md:pb-8">
+        <main className="flex-1 w-full px-3 sm:px-8 pt-4 sm:pt-6 safe-area-content-pb md:pb-8">
           <ProjectDashboard
             projects={projects}
             loading={projectsLoading}
@@ -1177,7 +1177,7 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
               </button>
             </div>
           </div>
-          <main className="flex-1 max-w-6xl w-full mx-auto px-3 sm:px-6 pt-4 sm:pt-6 safe-area-content-pb md:pb-8">
+          <main className="flex-1 w-full px-3 sm:px-8 pt-4 sm:pt-6 safe-area-content-pb md:pb-8">
             <UserManagement myId={currentUser.id} />
           </main>
         </>
@@ -1196,7 +1196,7 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
             </div>
           </div>
 
-          <main className="flex-1 max-w-6xl w-full mx-auto px-3 sm:px-6 pt-4 sm:pt-6 safe-area-content-pb md:pb-8">
+          <main className="flex-1 w-full px-3 sm:px-8 pt-4 sm:pt-6 safe-area-content-pb md:pb-8">
             <div className="space-y-6">
               <div className="bg-gradient-to-r from-ocs-800 to-slate-900 rounded-2xl p-5 sm:p-6 text-white shadow-md">
                 <div className="flex items-start justify-between gap-4 flex-wrap">
@@ -1268,7 +1268,7 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
               />
             </div>
           </div>
-          <main className="flex-1 max-w-6xl w-full mx-auto px-3 sm:px-6 pt-4 sm:pt-6 safe-area-content-pb md:pb-8">
+          <main className="flex-1 w-full px-3 sm:px-8 pt-4 sm:pt-6 safe-area-content-pb md:pb-8">
             <ReportDashboard
               projects={projects}
               surveys={surveyList}

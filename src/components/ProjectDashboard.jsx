@@ -69,17 +69,17 @@ export default function ProjectDashboard({
   };
 
   return (
-    <div className="max-w-6xl mx-auto space-y-6 pb-10">
+    <div className="space-y-7 pb-10">
       {/* Hero -- a plain sky gradient, deliberately no photo/illustration */}
-      <div className="relative overflow-hidden bg-gradient-to-br from-sky-400 via-sky-300 to-blue-200 rounded-3xl p-6 sm:p-8 shadow-lg">
+      <div className="relative overflow-hidden bg-gradient-to-br from-sky-400 via-sky-300 to-blue-200 rounded-3xl p-7 sm:p-10 shadow-lg">
         <div className="relative flex items-start justify-between gap-4 flex-wrap">
           <div className="flex items-start gap-4 min-w-0">
-            <div className="p-3.5 bg-white/25 backdrop-blur-sm rounded-2xl shrink-0">
-              <Briefcase className="w-9 h-9 text-white" />
+            <div className="p-4 bg-white/25 backdrop-blur-sm rounded-2xl shrink-0">
+              <Briefcase className="w-11 h-11 text-white" />
             </div>
             <div className="min-w-0">
-              <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900">Projects</h2>
-              <p className="text-slate-800/70 text-sm mt-1">
+              <h2 className="text-3xl sm:text-4xl font-bold tracking-tight text-slate-900">Projects</h2>
+              <p className="text-slate-800/70 text-base mt-1.5">
                 Choose a project to work in, or start a new one.
               </p>
             </div>
@@ -88,7 +88,7 @@ export default function ProjectDashboard({
           <button
             type="button"
             onClick={() => { setShowForm((v) => !v); setError(''); }}
-            className="px-5 py-3 rounded-xl bg-flame-500 hover:bg-flame-600 active:scale-[0.98] text-white font-bold text-sm shadow-card inline-flex items-center gap-2 shrink-0 transition-[background-color,transform] duration-150"
+            className="px-6 py-3.5 rounded-xl bg-flame-500 hover:bg-flame-600 active:scale-[0.98] text-white font-bold text-[15px] shadow-card inline-flex items-center gap-2 shrink-0 transition-[background-color,transform] duration-150"
           >
             <FolderPlus className="w-4 h-4" />
             {showForm ? 'Cancel' : 'Create Project'}
@@ -96,23 +96,23 @@ export default function ProjectDashboard({
         </div>
 
         {/* Quick stats -- gives the page something to look at even with one project */}
-        <div className="relative grid grid-cols-2 gap-4 mt-6 max-w-xl">
-          <div className="bg-gradient-to-br from-indigo-500 to-violet-500 rounded-2xl p-4 shadow-md flex items-center gap-3.5">
-            <span className="p-2.5 rounded-xl bg-white/20 shrink-0">
-              <FolderKanban className="w-5 h-5 text-white" />
+        <div className="relative grid grid-cols-2 gap-5 mt-7 max-w-2xl">
+          <div className="bg-gradient-to-br from-indigo-500 to-violet-500 rounded-2xl p-5 shadow-md flex items-center gap-4">
+            <span className="p-3 rounded-xl bg-white/20 shrink-0">
+              <FolderKanban className="w-6 h-6 text-white" />
             </span>
             <span className="min-w-0">
               <span className="block text-[11px] font-bold uppercase tracking-wider text-white/80">Projects</span>
-              <span className="block text-2xl font-bold text-white leading-tight">{totals.projects}</span>
+              <span className="block text-3xl font-bold text-white leading-tight">{totals.projects}</span>
             </span>
           </div>
-          <div className="bg-gradient-to-br from-teal-500 to-emerald-500 rounded-2xl p-4 shadow-md flex items-center gap-3.5">
-            <span className="p-2.5 rounded-xl bg-white/20 shrink-0">
-              <Layers className="w-5 h-5 text-white" />
+          <div className="bg-gradient-to-br from-teal-500 to-emerald-500 rounded-2xl p-5 shadow-md flex items-center gap-4">
+            <span className="p-3 rounded-xl bg-white/20 shrink-0">
+              <Layers className="w-6 h-6 text-white" />
             </span>
             <span className="min-w-0">
               <span className="block text-[11px] font-bold uppercase tracking-wider text-white/80">Facilities</span>
-              <span className="block text-2xl font-bold text-white leading-tight">{totals.facilities}</span>
+              <span className="block text-3xl font-bold text-white leading-tight">{totals.facilities}</span>
             </span>
           </div>
         </div>
@@ -202,8 +202,8 @@ export default function ProjectDashboard({
       )}
 
       <div className="flex items-center justify-between border-b border-slate-200">
-        <h3 className="text-base font-bold text-slate-800 inline-flex items-center gap-2 pb-2.5 border-b-2 border-ocs-600 -mb-px">
-          <ClipboardList className="w-4 h-4 text-ocs-600" />
+        <h3 className="text-lg font-bold text-slate-800 inline-flex items-center gap-2.5 pb-3 border-b-2 border-ocs-600 -mb-px">
+          <ClipboardList className="w-5 h-5 text-ocs-600" />
           All Projects ({projects.length})
         </h3>
         <button
@@ -229,7 +229,7 @@ export default function ProjectDashboard({
           </p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 lg:grid-cols-2 2xl:grid-cols-3 gap-5">
           {projects.map((p, idx) => {
             const accent = ACCENTS[idx % ACCENTS.length];
             return (
@@ -240,22 +240,22 @@ export default function ProjectDashboard({
                 className="group text-left bg-white rounded-2xl border border-slate-200 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-150 overflow-hidden"
               >
                 <div className={`h-1.5 ${accent.bar}`} />
-                <div className="p-5">
+                <div className="p-6">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <span className={`inline-block px-2.5 py-1 rounded-md text-[11px] font-bold border ${accent.chip}`}>
                         {p.projectNumber}
                       </span>
-                      <h4 className="font-bold text-slate-900 text-lg mt-2 leading-snug truncate">
+                      <h4 className="font-bold text-slate-900 text-xl mt-2.5 leading-snug truncate">
                         {p.name}
                       </h4>
                     </div>
-                    <span className="w-9 h-9 rounded-full bg-sky-50 text-ocs-600 flex items-center justify-center shrink-0 group-hover:bg-sky-100 transition-colors">
+                    <span className="w-10 h-10 rounded-full bg-sky-50 text-ocs-600 flex items-center justify-center shrink-0 group-hover:bg-sky-100 transition-colors">
                       <ChevronRight className="w-5 h-5 group-hover:translate-x-0.5 transition-transform" />
                     </span>
                   </div>
 
-                  <div className="flex items-center gap-3 mt-3 text-[13px] text-slate-500 flex-wrap">
+                  <div className="flex items-center gap-3 mt-3.5 text-[14px] text-slate-500 flex-wrap">
                     {p.client && (
                       <span className="inline-flex items-center gap-1.5">
                         <MapPin className="w-3.5 h-3.5 text-ocs-600" /> {p.client}
@@ -271,7 +271,7 @@ export default function ProjectDashboard({
 
                   <div className="mt-4 pt-3 border-t border-slate-100 flex items-center gap-2 text-slate-700">
                     <Layers className="w-4 h-4 text-ocs-600" />
-                    <span className="text-[13px] font-bold">
+                    <span className="text-[14px] font-bold">
                       {p.facilityCount === undefined
                         ? 'Facilities'
                         : `${p.facilityCount} ${p.facilityCount === 1 ? 'facility' : 'facilities'}`}
