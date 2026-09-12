@@ -39,10 +39,10 @@ every hard bug in this project has come from breaking that promise.
 
 ## 2. Current project status
 
-**Live and working.** HEAD is `d895320`, pushed. Web and OTA are deployed.
+**Live and working.** HEAD is `e90db2e`, pushed. Web and OTA are deployed.
 
-**There is one uncommitted change** (see §4) — the only thing in the working
-tree. Everything else is committed and shipped.
+**Working tree is clean.** The sidebar duplicate-"Projects" fix (formerly
+§4/§10 below) has been finished, verified against a mock build, and shipped.
 
 ### Stack
 | Layer | Reality |
@@ -68,6 +68,7 @@ Newest first. `git show <hash>` has full reasoning on each.
 
 | Commit | What |
 |---|---|
+| `e90db2e` | Removed the duplicate "Projects" sidebar item (dupe of Dashboard) and its now-unused `Folder` import |
 | `d895320` | Wireframe skyline SVG in sidebar; dashboard scaled up; hub screens now full-width |
 | `1027b86` | Dashboard matched to the user's reference design (white header, sidebar, light hero) |
 | `c16d899` | Sidebar added; **fixed empty facilities being pushed to the server** |
@@ -109,14 +110,13 @@ Applied as migrations against the live project:
 
 ## 4. What is currently being worked on
 
-**One uncommitted change in `src/components/Sidebar.jsx`.**
+Nothing — the working tree is clean. The sidebar fix (removing the duplicate
+"Projects" item, a dupe of "Dashboard" that made two nav entries light up at
+once) was built against `.env.mock`, verified in the browser preview
+(`aside nav button` text confirmed as exactly Dashboard/Facilities/Reports/
+Settings), then built for production and shipped as `e90db2e`.
 
-The user asked to remove the "Projects" item from the sidebar. It was a
-duplicate that navigated to the same screen as "Dashboard" (both `view ===
-'projects'`), which is also why two nav entries lit up as active at once.
-
-The edit is made but **not built, not tested, not committed, not shipped.**
-See §10 for exactly how to finish it.
+Pick the next item from §9.
 
 ---
 
@@ -317,61 +317,28 @@ grep -l "yymyqygpyxbndifrgjvo" dist/assets/*.js && echo "ABORT" || echo "SAFE"
 
 **In priority order.**
 
-1. **Finish the sidebar change** (§10) — build, verify, ship.
-2. **Fix the delete batch size** — 5 → 4 in `deleteSurveyPermanently()`
+1. **Fix the delete batch size** — 5 → 4 in `deleteSurveyPermanently()`
    (`cloudSync.js`), and correct the threshold wording in `DATA_SAFETY.md`.
    Facilities with 5+ snags currently fail to delete.
-3. **Ask the user to test GPS, camera and a real offline→online cycle** on the
+2. **Ask the user to test GPS, camera and a real offline→online cycle** on the
    phone. This is the largest untested area and only they can do it.
-4. **Decide on RLS tightening** — needs the user's agreement and all devices
+3. **Decide on RLS tightening** — needs the user's agreement and all devices
    updated and signed in first.
-5. **Update `CLAUDE.md`** — it predates Projects, auth and the redesign.
-6. Optional cleanups: delete `syncQueue.js` and `test_verify.js`; review the
+4. **Update `CLAUDE.md`** — it predates Projects, auth and the redesign.
+5. Optional cleanups: delete `syncQueue.js` and `test_verify.js`; review the
    `fetchLatestSurveyId()` startup fallback against the hierarchy.
 
 ---
 
 ## 10. Exact next step
 
-Finish the one uncommitted change.
+Pick item 1 from §9: fix the delete-batch-size bug (5 → 4) in
+`deleteSurveyPermanently()` (`src/utils/cloudSync.js`), and correct the
+threshold wording in `DATA_SAFETY.md` to say the trigger rejects at 5 rows,
+not "more than 5". Use `.env.mock` (`npx vite build --mode mock`) for any
+interactive testing — never point exploratory testing at the live Supabase
+project (see §8's "tried and failed" history before touching delete logic at
+all).
 
-`src/components/Sidebar.jsx` already has the duplicate "Projects" nav item
-removed. `Folder` is now an **unused import** on line 2 — remove it.
-
-```bash
-cd "C:/Users/SAIF412/Desktop/MY PROJECTS/1111111111"
-
-# 1. Drop the now-unused Folder import (line 2)
-#    import { Home, Folder, Building2, FileText, Settings } from 'lucide-react';
-#                  ^^^^^^ remove
-
-# 2. Build isolated and confirm it is NOT pointing at production
-npx vite build --mode mock
-grep -l "yymyqygpyxbndifrgjvo" dist/assets/*.js && echo "ABORT" || echo "SAFE"
-
-# 3. Start the mock (kill any stale one by PID first — pkill does not work here)
-node "C:/Users/SAIF412/AppData/Local/Temp/claude/mock-supabase.mjs" &
-```
-
-Then preview at ≥1024px wide, sign in with `mock@test.local` / any password,
-and confirm the sidebar reads **Dashboard · Facilities · Reports · Settings**
-with only Dashboard highlighted. Verify by measurement rather than screenshot:
-
-```js
-[...document.querySelectorAll('aside nav button')].map(b => b.textContent.trim())
-```
-
-Then build for production, ship, and tell the user to open the app twice:
-
-```bash
-npx vite build
-grep -l "yymyqygpyxbndifrgjvo" dist/assets/*.js >/dev/null && echo "production OK"
-npm run ship "Remove the duplicate Projects item from the sidebar"
-```
-
-`npm run ship "<message>"` commits, pushes, builds the OTA bundle and triggers
-the Vercel deploy. If a commit already exists, it prints "Nothing to ship" —
-in that case run `node scripts/build-ota.mjs && git push origin main` instead.
-
-**Phones need the app opened twice**: once to download the update in the
-background, once more to apply it.
+**Phones need the app opened twice** after any `npm run ship`: once to
+download the update in the background, once more to apply it.
