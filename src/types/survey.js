@@ -169,6 +169,54 @@ export function facilityCode(number) {
 }
 
 /**
+ * What kind of thing is being surveyed. Lives inside `facility`, which the
+ * server already stores whole as jsonb, so this needs no database change.
+ */
+export const FACILITY_TYPES = {
+  BUILDING: {
+    id: 'BUILDING', name: 'Building', icon: 'Building2',
+    badge: 'bg-indigo-50 text-indigo-700 border-indigo-200'
+  },
+  FACILITY: {
+    id: 'FACILITY', name: 'Facility', icon: 'Factory',
+    badge: 'bg-teal-50 text-teal-700 border-teal-200'
+  },
+  LANDSCAPE: {
+    id: 'LANDSCAPE', name: 'Landscape', icon: 'Trees',
+    badge: 'bg-green-50 text-green-700 border-green-200'
+  },
+  MEP: {
+    id: 'MEP', name: 'MEP', icon: 'Wrench',
+    badge: 'bg-sky-50 text-sky-700 border-sky-200'
+  },
+  HVAC: {
+    id: 'HVAC', name: 'HVAC', icon: 'Fan',
+    badge: 'bg-violet-50 text-violet-700 border-violet-200'
+  },
+  ELECTRICAL: {
+    id: 'ELECTRICAL', name: 'Electrical', icon: 'Zap',
+    badge: 'bg-amber-50 text-amber-700 border-amber-200'
+  },
+  FIRE_SAFETY: {
+    id: 'FIRE_SAFETY', name: 'Fire Safety', icon: 'Flame',
+    badge: 'bg-rose-50 text-rose-700 border-rose-200'
+  },
+  CLEANING: {
+    id: 'CLEANING', name: 'Cleaning', icon: 'Sparkles',
+    badge: 'bg-cyan-50 text-cyan-700 border-cyan-200'
+  }
+};
+
+/**
+ * The type of a facility, or null when the surveyor has not set one. Facilities
+ * created before this field existed have no type and must read as "not set"
+ * rather than being silently defaulted to something untrue.
+ */
+export function facilityTypeOf(facility = {}) {
+  return FACILITY_TYPES[facility?.facilityType] || null;
+}
+
+/**
  * @param {number} [facilityNumber] sequence number for this facility. The
  *        caller works it out from the facilities already known, so numbering
  *        continues rather than restarting.
@@ -183,6 +231,7 @@ export function createNewSurvey(facilityNumber) {
       facilityNumber: facilityNumber || 1,
       facilityCode: facilityCode(facilityNumber || 1),
       facilityName: '',
+      facilityType: '',
       buildingName: '',
       address: '',
       googleLocation: {

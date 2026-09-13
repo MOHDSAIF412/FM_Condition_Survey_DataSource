@@ -12,6 +12,7 @@ import Sidebar from './components/Sidebar';
 import UserManagement from './components/UserManagement';
 import ChangePasswordModal from './components/ChangePasswordModal';
 import Breadcrumb from './components/Breadcrumb';
+import ProjectHero from './components/ProjectHero';
 import ReportDashboard from './components/ReportDashboard';
 import { createNewSurvey, calculateSurveyStats } from './types/survey';
 import {
@@ -1095,6 +1096,10 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
       <Sidebar
         view={view}
         canOpenUsers={currentUser?.role === 'admin'}
+        /* Only once you are actually inside a project. The last project stays
+           remembered so reopening it is one tap, but on the project list itself
+           a "Facilities" entry would point at a project you have not chosen. */
+        hasOpenProject={!!activeProject && view !== 'projects'}
         onNavigate={(target) => {
           if (target === 'facilities') {
             setView(activeProject ? 'facilities' : 'projects');
@@ -1198,40 +1203,12 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
 
           <main className="flex-1 w-full px-3 sm:px-8 pt-4 sm:pt-6 safe-area-content-pb md:pb-8">
             <div className="space-y-6">
-              <div className="bg-gradient-to-r from-ocs-800 to-slate-900 rounded-2xl p-5 sm:p-6 text-white shadow-md">
-                <div className="flex items-start justify-between gap-4 flex-wrap">
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="px-2 py-0.5 rounded-md bg-sky-400/20 text-sky-200 text-[11px] font-bold border border-sky-400/30">
-                        {activeProject.projectNumber}
-                      </span>
-                      <h2 className="text-xl font-bold truncate">{activeProject.name}</h2>
-                    </div>
-                    <p className="text-sky-200/80 text-xs mt-1">
-                      {facilitiesInProject.length}
-                      {facilitiesInProject.length === 1 ? ' facility' : ' facilities'} in this project
-                      {activeProject.client ? ` · ${activeProject.client}` : ''}
-                    </p>
-                  </div>
-
-                  <div className="flex items-center gap-2 shrink-0 flex-wrap">
-                    <button
-                      type="button"
-                      onClick={() => setView('reports')}
-                      className="px-4 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white font-bold text-sm inline-flex items-center gap-2 border border-white/20"
-                    >
-                      Reports
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleAddFacilityToProject}
-                      className="px-4 py-2.5 rounded-xl bg-flame-500 hover:bg-flame-600 active:scale-[0.98] text-white font-bold text-sm shadow-card inline-flex items-center gap-2 transition-[background-color,transform] duration-150"
-                    >
-                      + Add Facility
-                    </button>
-                  </div>
-                </div>
-              </div>
+              <ProjectHero
+                project={activeProject}
+                facilities={facilitiesInProject}
+                onOpenReports={() => setView('reports')}
+                onAddFacility={handleAddFacilityToProject}
+              />
 
               {!facilitiesInProject.length && (
                 <div className="bg-white rounded-2xl p-6 border border-slate-200 text-center">

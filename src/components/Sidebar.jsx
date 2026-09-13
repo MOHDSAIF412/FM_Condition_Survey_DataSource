@@ -1,5 +1,5 @@
 import React from 'react';
-import { Home, FileText, Settings } from 'lucide-react';
+import { Home, Building2, FileText, Settings } from 'lucide-react';
 
 /**
  * Desktop-only navigation rail. Hidden below lg: the mobile survey flow
@@ -7,11 +7,15 @@ import { Home, FileText, Settings } from 'lucide-react';
  * path for a surveyor on site and stays exactly as it was -- this is purely
  * an additional way in on a wide screen, not a replacement for it.
  */
-export default function Sidebar({ view, onNavigate, canOpenUsers }) {
+export default function Sidebar({ view, onNavigate, canOpenUsers, hasOpenProject }) {
   // Dashboard IS the project list -- there was a separate "Projects" item
   // pointing at the same screen, which is why two entries lit up for one view.
+  //
+  // Facilities is contextual: it only means something once a project is open,
+  // and on the project list it pointed at nothing.
   const items = [
     { key: 'projects', label: 'Dashboard', icon: Home },
+    ...(hasOpenProject ? [{ key: 'facilities', label: 'Facilities', icon: Building2 }] : []),
     { key: 'reports', label: 'Reports', icon: FileText },
     ...(canOpenUsers ? [{ key: 'users', label: 'Settings', icon: Settings }] : [])
   ];
@@ -32,13 +36,7 @@ export default function Sidebar({ view, onNavigate, canOpenUsers }) {
 
       <nav className="flex-1 pt-5 pr-3 space-y-1.5">
         {items.map((item, idx) => {
-          // "Dashboard" and "Projects" both land on the same project list --
-          // there is one home screen here, not two -- so only "Dashboard"
-          // ever reads as active rather than lighting up two items at once.
-          const isActive = item.label === 'Dashboard'
-            ? view === 'projects'
-            : item.label !== 'Projects' && item.key === view;
-
+          const isActive = item.key === view;
           const Icon = item.icon;
           return (
             <button

@@ -10,6 +10,7 @@ import {
   FilePlus
 } from 'lucide-react';
 import { captureLocation, GPS_STATUS } from '../utils/geolocation';
+import { FACILITY_TYPES } from '../types/survey';
 
 export default function FacilityInfo({ facility = {}, onChange, onNext, onNewFacility }) {
   const [isGettingGps, setIsGettingGps] = useState(false);
@@ -157,6 +158,22 @@ export default function FacilityInfo({ facility = {}, onChange, onNext, onNewFac
               }}
               className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-sky-500 text-sm font-semibold"
             />
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 mb-1">
+              Facility Type
+            </label>
+            <select
+              value={facility.facilityType || ''}
+              onChange={(e) => updateField('facilityType', e.target.value)}
+              className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-sky-500 text-sm bg-white"
+            >
+              <option value="">Not set</option>
+              {Object.values(FACILITY_TYPES).map((t) => (
+                <option key={t.id} value={t.id}>{t.name}</option>
+              ))}
+            </select>
           </div>
 
           <div>

@@ -1,14 +1,19 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   FileText, FileSpreadsheet, FolderOpen, CheckCircle2, Loader2, Trash2, CloudOff, RefreshCw,
-  ChevronDown, ClipboardList, MapPin, Camera, DollarSign
+  ChevronDown, ClipboardList, MapPin, Camera, DollarSign, Search, Calendar, Clock,
+  Building2, Factory, Trees, Wrench, Fan, Zap, Flame, Sparkles
 } from 'lucide-react';
 import { pullSurvey, hydratePhotos } from '../utils/cloudSync';
 import { listAllSurveysOffline } from '../utils/storage';
 import { generateSurveyPDF } from '../utils/pdfGenerator';
 import { generateSurveyExcel } from '../utils/excelGenerator';
 import { formatMoney } from '../utils/currency';
-import { facilityCode, snagLabel, PRIORITY_LEVELS, DEPARTMENTS } from '../types/survey';
+import {
+  facilityCode, snagLabel, facilityTypeOf, PRIORITY_LEVELS, DEPARTMENTS
+} from '../types/survey';
+
+const TYPE_ICONS = { Building2, Factory, Trees, Wrench, Fan, Zap, Flame, Sparkles };
 
 /**
  * Every facility that has been saved, expandable to its snag list, with a
@@ -18,6 +23,10 @@ import { facilityCode, snagLabel, PRIORITY_LEVELS, DEPARTMENTS } from '../types/
  * open, so a facility submitted from the phone can be downloaded on the laptop.
  * Photo bytes are fetched first -- the generators read from dataUrl, and a
  * facility synced from another device carries only storage paths until then.
+ *
+ * Desktop gets a table; a phone keeps the stacked rows. The surveyor's real
+ * day-to-day screen is the phone, and a 5-column table there would either
+ * shrink past reading size or need sideways scrolling to reach the buttons.
  */
 export default function SavedFacilities({ surveys = [], currentId, onOpen, onDelete, onRefresh, onSyncNow }) {
   const [busy, setBusy] = useState(null);
@@ -25,22 +34,12 @@ export default function SavedFacilities({ surveys = [], currentId, onOpen, onDel
   const [syncResult, setSyncResult] = useState('');
   const [expandedId, setExpandedId] = useState(null);
   const [detailsById, setDetailsById] = useState({}); // id -> { items } | { error } | 'loading'
+  const [query, setQuery] = useState('');
+  const [filter, setFilter] = useState('all'); // all | submitted | draft | open
+  const [sort, setSort] = useState('newest');
+  const [selected, setSelected] = useState([]); // facility ids ticked for the combined report
 
   const waiting = surveys.filter((s) => s.pendingSync).length;
-
-  const syncNow = async () => {
-    if (!onSyncNow) return;
-    setSyncing(true);
-    setSyncResult('');
-    try {
-      const res = await onSyncNow();
-      setSyncResult(res?.message || 'Done.');
-    } catch (err) {
-      setSyncResult('Could not sync: ' + (err.message || err));
-    } finally {
-      setSyncing(false);
-    }
-  };
 
   /**
    * Every facility carries a reference (FAC-001) from the moment it is created,
@@ -55,6 +54,63 @@ export default function SavedFacilities({ surveys = [], currentId, onOpen, onDel
     if (name) return name;
     const n = s.itemCount || 0;
     return `Unnamed facility (${n} snag${n === 1 ? '' : 's'})`;
+  };
+
+  const counts = {
+    all: surveys.length,
+    submitted: surveys.filter((s) => s.status === 'submitted').length,
+    draft: surveys.filter((s) => s.status !== 'submitted').length,
+    open: surveys.filter((s) => s.id === currentId).length
+  };
+
+  const visible = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    let rows = surveys.filter((s) => {
+      if (filter === 'submitted' && s.status !== 'submitted') return false;
+      if (filter === 'draft' && s.status === 'submitted') return false;
+      if (filter === 'open' && s.id !== currentId) return false;
+      if (!q) return true;
+      const type = facilityTypeOf(s.facility);
+      const haystack = [
+        describe(s),
+        s.status === 'submitted' ? 'submitted' : 'draft',
+        type?.name || '',
+        s.id === currentId ? 'open now' : ''
+      ].join(' ').toLowerCase();
+      return haystack.includes(q);
+    });
+
+    rows = [...rows].sort((a, b) => {
+      if (sort === 'oldest') return new Date(a.updatedAt) - new Date(b.updatedAt);
+      if (sort === 'name') return describe(a).localeCompare(describe(b));
+      if (sort === 'snags') return (b.itemCount || 0) - (a.itemCount || 0);
+      return new Date(b.updatedAt) - new Date(a.updatedAt); // newest first
+    });
+    return rows;
+  }, [surveys, query, filter, sort, currentId]);
+
+  const visibleIds = visible.map((s) => s.id);
+  const selectedVisible = selected.filter((id) => visibleIds.includes(id));
+  const allTicked = visible.length > 0 && selectedVisible.length === visible.length;
+
+  const toggleOne = (id) =>
+    setSelected((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+
+  const toggleAll = () =>
+    setSelected(allTicked ? selected.filter((id) => !visibleIds.includes(id)) : [...new Set([...selected, ...visibleIds])]);
+
+  const syncNow = async () => {
+    if (!onSyncNow) return;
+    setSyncing(true);
+    setSyncResult('');
+    try {
+      const res = await onSyncNow();
+      setSyncResult(res?.message || 'Done.');
+    } catch (err) {
+      setSyncResult('Could not sync: ' + (err.message || err));
+    } finally {
+      setSyncing(false);
+    }
   };
 
   /**
@@ -89,18 +145,21 @@ export default function SavedFacilities({ surveys = [], currentId, onOpen, onDel
     }
   };
 
-  /** One workbook containing every saved facility. */
+  /** One workbook containing the ticked facilities, or all of them when none are. */
   const downloadAll = async () => {
+    const wanted = selectedVisible.length
+      ? surveys.filter((s) => selectedVisible.includes(s.id))
+      : surveys;
     setBusy('all:excel');
     setSyncResult('');
     try {
       const loaded = [];
-      for (const s of surveys) {
+      for (const s of wanted) {
         const full = await loadSurvey(s.id);
         if (full && (full.items || []).length) loaded.push(await hydratePhotos(full));
       }
       if (!loaded.length) {
-        alert('None of the saved facilities have snags to report yet.');
+        alert('None of the chosen facilities have snags to report yet.');
         return;
       }
       await generateSurveyExcel(loaded, 'ALL');
@@ -154,15 +213,155 @@ export default function SavedFacilities({ surveys = [], currentId, onOpen, onDel
     );
   }
 
+  const TypeBadge = ({ facility }) => {
+    const type = facilityTypeOf(facility);
+    if (!type) return <span className="text-xs text-slate-400">Not set</span>;
+    const Icon = TYPE_ICONS[type.icon] || Building2;
+    return (
+      <span className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border inline-flex items-center gap-1.5 ${type.badge}`}>
+        <Icon className="w-3.5 h-3.5" /> {type.name}
+      </span>
+    );
+  };
+
+  const StatusBadge = ({ status }) =>
+    status === 'submitted' ? (
+      <span className="px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 inline-flex items-center gap-1.5">
+        <CheckCircle2 className="w-3.5 h-3.5" /> Submitted
+      </span>
+    ) : (
+      <span className="px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-50 text-amber-700 border border-amber-200 inline-flex items-center gap-1.5">
+        <Clock className="w-3.5 h-3.5" /> Draft
+      </span>
+    );
+
+  const RowActions = ({ s, compact }) => (
+    <div className={`flex items-center gap-2 ${compact ? 'flex-wrap' : 'justify-end'}`} onClick={(e) => e.stopPropagation()}>
+      {s.id !== currentId && (
+        <button
+          type="button"
+          onClick={() => onOpen(s.id)}
+          className="px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold inline-flex items-center gap-1.5"
+        >
+          <FolderOpen className="w-3.5 h-3.5" /> Open
+        </button>
+      )}
+      <button
+        type="button"
+        disabled={busy !== null}
+        onClick={() => download(s.id, 'pdf')}
+        className="px-3 py-2 rounded-xl bg-ocs-600 hover:bg-ocs-500 disabled:opacity-50 text-white text-xs font-bold inline-flex items-center gap-1.5"
+      >
+        {busy === `${s.id}:pdf` ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileText className="w-3.5 h-3.5" />}
+        PDF
+      </button>
+      <button
+        type="button"
+        disabled={busy !== null}
+        onClick={() => download(s.id, 'excel')}
+        className="px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-xs font-bold inline-flex items-center gap-1.5"
+      >
+        {busy === `${s.id}:excel` ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileSpreadsheet className="w-3.5 h-3.5" />}
+        Excel
+      </button>
+      {onDelete && (
+        <button
+          type="button"
+          disabled={busy !== null}
+          onClick={() => remove(s)}
+          title="Permanently delete this facility"
+          className="px-3 py-2 rounded-xl bg-red-50 hover:bg-red-100 disabled:opacity-50 text-red-600 text-xs font-bold inline-flex items-center gap-1 border border-red-200"
+        >
+          {busy === `${s.id}:delete` ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+        </button>
+      )}
+    </div>
+  );
+
+  const SnagDetail = ({ detail }) => (
+    <>
+      {detail === 'loading' && (
+        <div className="flex items-center gap-2 text-slate-500 text-sm py-3">
+          <Loader2 className="w-4 h-4 animate-spin" /> Loading snags…
+        </div>
+      )}
+      {detail && detail.error && <div className="text-rose-600 text-sm py-3">{detail.error}</div>}
+      {detail && detail.items && (
+        detail.items.length === 0 ? (
+          <p className="text-sm text-slate-400 py-3">No snags recorded yet.</p>
+        ) : (
+          <div className="border border-slate-200 rounded-xl divide-y divide-slate-100 overflow-hidden bg-slate-50/50">
+            {detail.items.map((item, idx) => {
+              const priority = PRIORITY_LEVELS[item.priority] || PRIORITY_LEVELS[2];
+              const dept = DEPARTMENTS[item.department] || DEPARTMENTS.GENERAL;
+              return (
+                <div key={item.id || idx} className="px-4 py-3 flex items-start gap-3 bg-white">
+                  <span className="w-6 h-6 rounded-lg bg-slate-800 text-white text-[11px] font-bold flex items-center justify-center shrink-0 mt-0.5">
+                    {idx + 1}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-semibold text-slate-900 text-sm">{snagLabel(item, idx)}</span>
+                      <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${priority?.badge || 'bg-slate-200 text-slate-700'}`}>
+                        P{item.priority}
+                      </span>
+                      <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold border ${dept?.badge || 'border-slate-200 text-slate-600'}`}>
+                        {(dept?.name || 'General').split('&')[0]}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-3 mt-1 text-[11px] text-slate-500 flex-wrap">
+                      {item.location && (
+                        <span className="inline-flex items-center gap-1"><MapPin className="w-3 h-3" /> {item.location}</span>
+                      )}
+                      {!!(item.photos || []).length && (
+                        <span className="inline-flex items-center gap-1"><Camera className="w-3 h-3" /> {item.photos.length}</span>
+                      )}
+                      {!!item.estimatedCost && (
+                        <span className="inline-flex items-center gap-1 font-semibold text-slate-700">
+                          <DollarSign className="w-3 h-3" /> {formatMoney(item.estimatedCost)}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )
+      )}
+    </>
+  );
+
+  const pills = [
+    { key: 'all', label: 'All', n: counts.all },
+    { key: 'submitted', label: 'Submitted', n: counts.submitted },
+    { key: 'draft', label: 'Draft', n: counts.draft },
+    { key: 'open', label: 'Open now', n: counts.open }
+  ];
+
+  const excelLabel = selectedVisible.length
+    ? `Selected in one Excel (${selectedVisible.length})`
+    : `All in one Excel (${surveys.length})`;
+
   return (
     <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-      {/* Stacked on a phone: three action buttons beside the heading squeezed
-          the title onto two lines and pushed the last one off the edge. */}
-      <div className="px-6 py-4 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <h3 className="text-base font-bold text-slate-800 whitespace-nowrap">
+      <div className="px-4 sm:px-6 py-4 border-b border-slate-200 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
+        <h3 className="text-base font-bold text-slate-800 whitespace-nowrap inline-flex items-center gap-2">
+          <Building2 className="w-4 h-4 text-ocs-600" />
           Saved Facilities <span className="text-slate-400 font-semibold">({surveys.length})</span>
         </h3>
-        <div className="flex items-center gap-2 flex-wrap sm:justify-end">
+
+        <div className="flex items-center gap-2 flex-wrap lg:justify-end">
+          <div className="relative flex-1 min-w-[190px] lg:flex-none lg:w-64">
+            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+            <input
+              type="search"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search facility, ID or status…"
+              className="w-full pl-9 pr-3 py-2 rounded-xl border border-slate-300 text-xs focus:outline-none focus:ring-2 focus:ring-sky-500"
+            />
+          </div>
           <button
             type="button"
             onClick={onRefresh}
@@ -175,13 +374,11 @@ export default function SavedFacilities({ surveys = [], currentId, onOpen, onDel
               type="button"
               disabled={busy !== null}
               onClick={downloadAll}
-              title="One Excel workbook containing every saved facility"
+              title="One Excel workbook containing the chosen facilities"
               className="px-3.5 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-600 disabled:opacity-60 text-white text-xs font-bold inline-flex items-center gap-1.5"
             >
-              {busy === 'all:excel'
-                ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                : <FileSpreadsheet className="w-3.5 h-3.5" />}
-              {busy === 'all:excel' ? 'Building…' : `All in one Excel (${surveys.length})`}
+              {busy === 'all:excel' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileSpreadsheet className="w-3.5 h-3.5" />}
+              {busy === 'all:excel' ? 'Building…' : excelLabel}
             </button>
           )}
           {onSyncNow && (
@@ -191,18 +388,48 @@ export default function SavedFacilities({ surveys = [], currentId, onOpen, onDel
               disabled={syncing}
               title="Upload anything saved on this device that has not reached the server yet"
               className={`px-3.5 py-2 rounded-xl text-xs font-bold inline-flex items-center gap-1.5 transition-colors disabled:opacity-60 ${
-                waiting > 0
-                  ? 'bg-flame-500 hover:bg-flame-600 text-white'
-                  : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+                waiting > 0 ? 'bg-flame-500 hover:bg-flame-600 text-white' : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
               }`}
             >
-              {syncing
-                ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                : <RefreshCw className="w-3.5 h-3.5" />}
+              {syncing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
               {syncing ? 'Syncing…' : waiting > 0 ? `Sync now (${waiting})` : 'Sync now'}
             </button>
           )}
         </div>
+      </div>
+
+      {/* Filter pills + sort */}
+      <div className="px-4 sm:px-6 py-3 border-b border-slate-200 flex items-center justify-between gap-3 flex-wrap">
+        <div className="flex items-center gap-2 flex-wrap">
+          {pills.map((p) => (
+            <button
+              key={p.key}
+              type="button"
+              onClick={() => setFilter(p.key)}
+              className={`px-3 py-1.5 rounded-full text-xs font-bold border transition-colors ${
+                filter === p.key
+                  ? 'bg-ocs-600 text-white border-ocs-600'
+                  : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+              }`}
+            >
+              {p.label} <span className={filter === p.key ? 'text-sky-200' : 'text-slate-400'}>({p.n})</span>
+            </button>
+          ))}
+        </div>
+
+        <label className="inline-flex items-center gap-2 text-xs text-slate-500 font-semibold">
+          Sort by:
+          <select
+            value={sort}
+            onChange={(e) => setSort(e.target.value)}
+            className="px-2.5 py-1.5 rounded-lg border border-slate-300 text-xs font-semibold text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-sky-500"
+          >
+            <option value="newest">Newest first</option>
+            <option value="oldest">Oldest first</option>
+            <option value="name">Name / ID</option>
+            <option value="snags">Most snags</option>
+          </select>
+        </label>
       </div>
 
       {syncResult && (
@@ -211,185 +438,178 @@ export default function SavedFacilities({ surveys = [], currentId, onOpen, onDel
         </div>
       )}
 
-      <ul className="divide-y divide-slate-100">
-        {surveys.map((s) => {
-          const isCurrent = s.id === currentId;
+      {!visible.length && (
+        <div className="px-6 py-10 text-center">
+          <Search className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+          <p className="text-sm font-semibold text-slate-600">Nothing matches that</p>
+          <p className="text-xs text-slate-400 mt-1">Try a different search or filter.</p>
+        </div>
+      )}
+
+      {/* Desktop table */}
+      {!!visible.length && (
+        <div className="hidden lg:block overflow-x-auto">
+          <table className="w-full text-left">
+            <thead>
+              <tr className="bg-slate-50/80 border-b border-slate-200 text-[11px] uppercase tracking-wide text-slate-500">
+                <th className="w-10 pl-6 py-3">
+                  <input
+                    type="checkbox"
+                    checked={allTicked}
+                    onChange={toggleAll}
+                    title="Tick every facility shown"
+                    className="w-4 h-4 rounded border-slate-300 accent-ocs-600"
+                  />
+                </th>
+                <th className="py-3 font-bold">Facility / ID</th>
+                <th className="py-3 font-bold">Type</th>
+                <th className="py-3 font-bold">Status</th>
+                <th className="py-3 font-bold">Last Updated</th>
+                <th className="py-3 pr-6" />
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {visible.map((s) => {
+                const isOpen = expandedId === s.id;
+                const detail = detailsById[s.id];
+                const snagCount = detail && detail.items ? detail.items.length : s.itemCount;
+                const when = s.submittedAt || s.updatedAt;
+                return (
+                  <React.Fragment key={s.id}>
+                    <tr
+                      onClick={() => toggleExpand(s)}
+                      className="hover:bg-slate-50/80 cursor-pointer align-middle"
+                    >
+                      <td className="pl-6 py-3" onClick={(e) => e.stopPropagation()}>
+                        <input
+                          type="checkbox"
+                          checked={selected.includes(s.id)}
+                          onChange={() => toggleOne(s.id)}
+                          className="w-4 h-4 rounded border-slate-300 accent-ocs-600"
+                        />
+                      </td>
+                      <td className="py-3 pr-4">
+                        <div className="flex items-center gap-3 min-w-0">
+                          <ChevronDown
+                            className={`w-4 h-4 text-slate-400 shrink-0 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`}
+                          />
+                          <span className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0 border border-emerald-100">
+                            <Building2 className="w-4 h-4" />
+                          </span>
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="font-bold text-slate-900 text-sm truncate">{describe(s)}</span>
+                              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-600 border border-slate-200 inline-flex items-center gap-1 shrink-0">
+                                <ClipboardList className="w-3 h-3" />
+                                {snagCount ?? 0} snag{snagCount === 1 ? '' : 's'}
+                              </span>
+                              {s.id === currentId && (
+                                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-ocs-50 text-ocs-700 border border-ocs-200 shrink-0">
+                                  Open now
+                                </span>
+                              )}
+                              {s.pendingSync && (
+                                <span
+                                  title="Saved on this device. It uploads automatically when there is a connection."
+                                  className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200 inline-flex items-center gap-1 shrink-0"
+                                >
+                                  <CloudOff className="w-3 h-3" /> Waiting
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-[11px] text-slate-400 mt-0.5">
+                              {s.submittedAt ? 'Submitted ' : 'Updated '}
+                              {new Date(when).toLocaleString()}
+                            </p>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="py-3 pr-4"><TypeBadge facility={s.facility} /></td>
+                      <td className="py-3 pr-4"><StatusBadge status={s.status} /></td>
+                      <td className="py-3 pr-4">
+                        <span className="inline-flex items-start gap-1.5 text-xs text-slate-600">
+                          <Calendar className="w-3.5 h-3.5 mt-0.5 text-slate-400 shrink-0" />
+                          <span>
+                            {new Date(when).toLocaleDateString()}
+                            <br />
+                            <span className="text-slate-400">{new Date(when).toLocaleTimeString()}</span>
+                          </span>
+                        </span>
+                      </td>
+                      <td className="py-3 pr-6"><RowActions s={s} /></td>
+                    </tr>
+                    {isOpen && (
+                      <tr>
+                        <td colSpan={6} className="px-6 pb-5 pt-0 bg-slate-50/40">
+                          <div className="pl-10"><SnagDetail detail={detail} /></div>
+                        </td>
+                      </tr>
+                    )}
+                  </React.Fragment>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* Phone / tablet: stacked rows */}
+      <ul className="lg:hidden divide-y divide-slate-100">
+        {visible.map((s) => {
           const isOpen = expandedId === s.id;
           const detail = detailsById[s.id];
           const snagCount = detail && detail.items ? detail.items.length : s.itemCount;
-
           return (
             <li key={s.id}>
-              {/* The row itself toggles the snag list; the action buttons sit in
-                  their own click zone so pressing PDF/Excel/Delete never also
-                  opens or closes the row underneath them. */}
               <div
                 role="button"
                 tabIndex={0}
                 onClick={() => toggleExpand(s)}
                 onKeyDown={(e) => { if (e.key === 'Enter') toggleExpand(s); }}
-                className="w-full text-left px-6 py-4 flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4 cursor-pointer hover:bg-slate-50/80 transition-colors"
+                className="w-full text-left px-4 sm:px-6 py-4 flex flex-col gap-3 cursor-pointer hover:bg-slate-50/80 transition-colors"
               >
-                {/* Name + badges: always its own full-width block first, so a
-                    long facility name never gets squeezed down to a couple of
-                    letters by the action buttons competing for the same row. */}
                 <div className="flex items-start gap-3 min-w-0 flex-1">
                   <ChevronDown
                     className={`w-5 h-5 text-slate-400 shrink-0 mt-0.5 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`}
                   />
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-bold text-slate-900 text-base">
-                        {describe(s)}
-                      </span>
+                      <span className="font-bold text-slate-900 text-base">{describe(s)}</span>
                       <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-slate-100 text-slate-600 border border-slate-200 inline-flex items-center gap-1 shrink-0">
                         <ClipboardList className="w-3 h-3" />
                         {snagCount ?? 0} snag{snagCount === 1 ? '' : 's'}
                       </span>
-                      {s.status === 'submitted' ? (
-                        <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 inline-flex items-center gap-1 shrink-0">
-                          <CheckCircle2 className="w-3 h-3" /> Submitted
-                        </span>
-                      ) : (
-                        <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 text-amber-800 border border-amber-300 shrink-0">
-                          Draft
-                        </span>
-                      )}
-                      {isCurrent && (
-                        <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-ocs-100 text-ocs-700 border border-ocs-200 shrink-0">
+                      <StatusBadge status={s.status} />
+                      {s.id === currentId && (
+                        <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-ocs-50 text-ocs-700 border border-ocs-200 shrink-0">
                           Open now
                         </span>
                       )}
                       {s.pendingSync && (
                         <span
                           title="Saved on this device. It uploads automatically when there is a connection."
-                          className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 text-amber-800 border border-amber-300 inline-flex items-center gap-1 shrink-0"
+                          className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-amber-50 text-amber-700 border border-amber-200 inline-flex items-center gap-1 shrink-0"
                         >
                           <CloudOff className="w-3 h-3" /> Waiting to upload
                         </span>
                       )}
                     </div>
-                    <p className="text-xs text-slate-500 mt-1">
+                    <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                      <TypeBadge facility={s.facility} />
+                    </div>
+                    <p className="text-xs text-slate-500 mt-1.5">
                       {s.submittedAt
                         ? `Submitted ${new Date(s.submittedAt).toLocaleString()}`
                         : `Updated ${new Date(s.updatedAt).toLocaleString()}`}
                     </p>
                   </div>
                 </div>
-
-                <div
-                  className="flex items-center gap-2 shrink-0 flex-wrap pl-8 sm:pl-0"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  {!isCurrent && (
-                    <button
-                      type="button"
-                      onClick={() => onOpen(s.id)}
-                      className="px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold"
-                    >
-                      Open
-                    </button>
-                  )}
-                  <button
-                    type="button"
-                    disabled={busy !== null}
-                    onClick={() => download(s.id, 'pdf')}
-                    className="px-3 py-2 rounded-xl bg-ocs-600 hover:bg-ocs-500 disabled:opacity-50 text-white text-xs font-bold inline-flex items-center gap-1.5"
-                  >
-                    {busy === `${s.id}:pdf`
-                      ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                      : <FileText className="w-3.5 h-3.5" />}
-                    PDF
-                  </button>
-                  <button
-                    type="button"
-                    disabled={busy !== null}
-                    onClick={() => download(s.id, 'excel')}
-                    className="px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-xs font-bold inline-flex items-center gap-1.5"
-                  >
-                    {busy === `${s.id}:excel`
-                      ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                      : <FileSpreadsheet className="w-3.5 h-3.5" />}
-                    Excel
-                  </button>
-                  {onDelete && (
-                    <button
-                      type="button"
-                      disabled={busy !== null}
-                      onClick={() => remove(s)}
-                      title="Permanently delete this facility"
-                      className="px-3 py-2 rounded-xl bg-red-50 hover:bg-red-100 disabled:opacity-50 text-red-600 text-xs font-bold inline-flex items-center gap-1 border border-red-200"
-                    >
-                      {busy === `${s.id}:delete`
-                        ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                        : <Trash2 className="w-3.5 h-3.5" />}
-                    </button>
-                  )}
-                </div>
+                <div className="pl-8"><RowActions s={s} compact /></div>
               </div>
 
-              {/* Expanded snag list */}
               {isOpen && (
-                <div className="px-6 pb-5 pl-14 -mt-1">
-                  {detail === 'loading' && (
-                    <div className="flex items-center gap-2 text-slate-500 text-sm py-3">
-                      <Loader2 className="w-4 h-4 animate-spin" /> Loading snags…
-                    </div>
-                  )}
-
-                  {detail && detail.error && (
-                    <div className="text-rose-600 text-sm py-3">{detail.error}</div>
-                  )}
-
-                  {detail && detail.items && (
-                    detail.items.length === 0 ? (
-                      <p className="text-sm text-slate-400 py-3">No snags recorded yet.</p>
-                    ) : (
-                      <div className="border border-slate-200 rounded-xl divide-y divide-slate-100 overflow-hidden bg-slate-50/50">
-                        {detail.items.map((item, idx) => {
-                          const priority = PRIORITY_LEVELS[item.priority] || PRIORITY_LEVELS[2];
-                          const dept = DEPARTMENTS[item.department] || DEPARTMENTS.GENERAL;
-                          return (
-                            <div key={item.id || idx} className="px-4 py-3 flex items-start gap-3 bg-white">
-                              <span className="w-6 h-6 rounded-lg bg-slate-800 text-white text-[11px] font-bold flex items-center justify-center shrink-0 mt-0.5">
-                                {idx + 1}
-                              </span>
-                              <div className="min-w-0 flex-1">
-                                <div className="flex items-center gap-2 flex-wrap">
-                                  <span className="font-semibold text-slate-900 text-sm">
-                                    {snagLabel(item, idx)}
-                                  </span>
-                                  <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${priority?.badge || 'bg-slate-200 text-slate-700'}`}>
-                                    P{item.priority}
-                                  </span>
-                                  <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold border ${dept?.badge || 'border-slate-200 text-slate-600'}`}>
-                                    {(dept?.name || 'General').split('&')[0]}
-                                  </span>
-                                </div>
-                                <div className="flex items-center gap-3 mt-1 text-[11px] text-slate-500 flex-wrap">
-                                  {item.location && (
-                                    <span className="inline-flex items-center gap-1">
-                                      <MapPin className="w-3 h-3" /> {item.location}
-                                    </span>
-                                  )}
-                                  {!!(item.photos || []).length && (
-                                    <span className="inline-flex items-center gap-1">
-                                      <Camera className="w-3 h-3" /> {item.photos.length}
-                                    </span>
-                                  )}
-                                  {!!item.estimatedCost && (
-                                    <span className="inline-flex items-center gap-1 font-semibold text-slate-700">
-                                      <DollarSign className="w-3 h-3" /> {formatMoney(item.estimatedCost)}
-                                    </span>
-                                  )}
-                                </div>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )
-                  )}
+                <div className="px-4 sm:px-6 pb-5 pl-12 -mt-1">
+                  <SnagDetail detail={detail} />
                 </div>
               )}
             </li>
