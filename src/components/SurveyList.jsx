@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import AssetItemCard from './AssetItemCard';
 import { DEPARTMENTS, createDefaultAsset } from '../types/survey';
+import QuickAddSnag from './QuickAddSnag';
 
 export default function SurveyList({ 
   items = [], 
@@ -67,8 +68,32 @@ export default function SurveyList({
     onAddItem(newItem);
   };
 
+  /**
+   * Adds a snag from a Quick Add template. The location carries over from the
+   * last snag the same way the manual button does -- the surveyor is usually
+   * still standing in the same room.
+   */
+  const handleAddFromTemplate = (template) => {
+    const lastItem = items.length > 0 ? items[items.length - 1] : null;
+    const item = createDefaultAsset(lastItem?.location || '', template.department);
+    item.defectDescription = template.description;
+    item.priority = template.priority;
+    item.unit = template.unit || item.unit;
+    if (template.estimatedCost) item.estimatedCost = template.estimatedCost;
+
+    // A filter that would hide the snag just added makes it look like nothing
+    // happened, so clear anything narrowing the list first.
+    if (searchQuery) setSearchQuery('');
+    if (selectedPriority !== 'ALL') setSelectedPriority('ALL');
+    if (selectedDept !== 'ALL' && selectedDept !== template.department) setSelectedDept('ALL');
+
+    onAddItem(item);
+  };
+
   return (
     <div className="max-w-4xl mx-auto space-y-4 pb-8">
+      <QuickAddSnag items={items} onAdd={handleAddFromTemplate} />
+
       {/* Search and Filter Toolbar */}
       <div className="bg-white rounded-2xl p-4 border border-slate-200 shadow-sm space-y-3">
         {/* Search Bar */}
