@@ -166,11 +166,15 @@ Reports need a facility behind them; on the hub screens it pointed at nothing.
 ### Things that must not be reverted
 - `pushSurvey()`'s **upsert + tombstone** model in `cloudSync.js` — reverting
   to delete-and-reinsert has destroyed real user data **twice**.
-- The Supabase **mass-delete-block trigger**. Note: `DATA_SAFETY.md` says it
-  blocks statements deleting *more than* 5 rows, but **observed behaviour is
-  that a 5-row delete is also rolled back** — batch in 4s or fewer. This is
-  not yet fixed in the app's own `deleteSurveyPermanently()`, which batches
-  in 5s (see §7).
+- The Supabase **mass-delete-block trigger**. Verified against the live
+  function definition on 2026-09-14: it raises only when `removed > 5`, so a
+  5-row batch is allowed and `deleteSurveyPermanently()`'s batches of 5 are
+  correct. An earlier note here claimed a 5-row delete was also rolled back
+  and that the app was off by one — that was wrong; don't "fix" it back to 4.
+  What actually keeps deletion safe is the **order**: photos are deleted
+  before items, so dropping the survey row cascades into nothing. Reversing
+  that order would cascade every photo of a facility in one statement and the
+  guard would refuse the whole delete.
 - **Tab panels stay mounted** (`hidden`, not conditional render) in `TabPanel`.
 - `notifyAppReady()` in `otaUpdates.js` — removing it breaks OTA rollback.
 - `pt-1`, never `py-1`, on the mobile bottom nav — a `py` utility overrides
@@ -214,26 +218,27 @@ Reports need a facility behind them; on the hub screens it pointed at nothing.
 ## 7. Current bugs / issues
 
 ### Open
-1. **Delete-facility batching is off by one.** `deleteSurveyPermanently()` in
-   `cloudSync.js` batches deletes in **5s**, but the database trigger appears
-   to reject at 5, not above 5. **Deleting a facility with 5+ snags will
-   silently fail.** Change the batch size to 4 and correct `DATA_SAFETY.md`.
-   This was observed directly while cleaning up test rows.
-2. **RLS on survey tables is still open to the anon key.** Login gates the
+1. **RLS on survey tables is still open to the anon key.** Login gates the
    *app*, but `projects`, `condition_surveys`, `survey_items`, `survey_photos`
    still grant full access to `anon`. Anyone with the URL and the public key
    could read/write around the app. Deliberately left alone: tightening it
    locks out every device that has not yet updated **and** signed in.
    Do this once all devices are on the new build.
-3. **`fetchLatestSurveyId()` fallback is questionable.** On a device with no
+2. **`fetchLatestSurveyId()` fallback is questionable.** On a device with no
    local survey, startup adopts *the most recently updated survey across the
    entire account*, ignoring projects. Pre-existing behaviour, not yet
    reviewed against the new hierarchy.
-4. **`syncQueue.js` is dead code.** Nothing imports it. `CLAUDE.md` describes
+3. **`syncQueue.js` is dead code.** Nothing imports it. `CLAUDE.md` describes
    it as the durable offline queue; it isn't wired up. The real mechanism is
    `pendingSync` flags + `flushPendingSurveys()`.
-5. **`test_verify.js`** at the root imports a deleted file and will throw. Not
+4. **`test_verify.js`** at the root imports a deleted file and will throw. Not
    part of any build.
+
+### Closed
+- **"Delete-facility batching is off by one."** Not a real bug. The live
+  `block_mass_delete()` raises only when `removed > 5`, so batches of 5 pass.
+  Checked against the function definition on 2026-09-14; the largest facility
+  holds 43 photos and 23 snags, well within reach of 5-row batches.
 
 ### Never verified on a physical Android device
 - Native camera capture end-to-end

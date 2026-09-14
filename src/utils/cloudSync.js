@@ -384,21 +384,14 @@ export async function listSurveys() {
     return [];
   }
   const surveys = data || [];
+  const ids = surveys.map((r) => r.id);
 
-  // Item counts, so two facilities with no name entered yet can still be told
-  // apart in the Saved Facilities list instead of both reading "Unnamed facility".
-  const counts = {};
-  if (surveys.length) {
-    const { data: itemRows, error: countErr } = await supabase
-      .from('survey_items')
-      .select('survey_id')
-      .in('survey_id', surveys.map((r) => r.id));
-    if (!countErr) {
-      for (const row of itemRows || []) {
-        counts[row.survey_id] = (counts[row.survey_id] || 0) + 1;
-      }
-    }
-  }
+  // Snag counts tell two unnamed facilities apart in the list; photo counts
+  // say how much evidence each one carries. Both are fetched together.
+  const [itemCounts, photoCounts] = await Promise.all([
+    countRowsBySurvey('survey_items', ids),
+    countRowsBySurvey('survey_photos', ids)
+  ]);
 
   return surveys.map((r) => ({
     id: r.id,
@@ -406,11 +399,44 @@ export async function listSurveys() {
     projectId: r.project_id || null,
     facility: r.facility || {},
     facilityName: r.facility_name || (r.facility && r.facility.facilityName) || '',
-    itemCount: counts[r.id] || 0,
+    itemCount: itemCounts[r.id] || 0,
+    photoCount: photoCounts[r.id] || 0,
     status: r.status || 'draft',
     submittedAt: r.submitted_at,
     updatedAt: r.updated_at
   }));
+}
+
+/**
+ * How many rows each survey owns in `table`, as { surveyId: count }.
+ *
+ * Paged deliberately. PostgREST caps how many rows one request may return, and
+ * this counts a row per snag or per photo across every facility -- a few
+ * hundred facilities' photos would quietly exceed that cap and every count
+ * after the cut-off would read low, with nothing to indicate the total was
+ * wrong.
+ */
+async function countRowsBySurvey(table, surveyIds) {
+  const counts = {};
+  if (!surveyIds.length) return counts;
+
+  const PAGE = 1000;
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await supabase
+      .from(table)
+      .select('survey_id')
+      .in('survey_id', surveyIds)
+      .range(from, from + PAGE - 1);
+
+    if (error) {
+      console.warn(`Could not count ${table}:`, error.message);
+      return counts;
+    }
+    for (const row of data || []) {
+      counts[row.survey_id] = (counts[row.survey_id] || 0) + 1;
+    }
+    if (!data || data.length < PAGE) return counts;
+  }
 }
 
 /**

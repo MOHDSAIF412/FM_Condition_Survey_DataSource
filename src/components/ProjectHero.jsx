@@ -1,5 +1,5 @@
 import React from 'react';
-import { Building2, CheckCircle2, Clock, ClipboardList, MapPin, Briefcase, FileText } from 'lucide-react';
+import { Building2, CheckCircle2, Clock, ClipboardList, Camera, MapPin, Briefcase, FileText } from 'lucide-react';
 
 /**
  * Header of the facilities screen: which project you are in, and how it is
@@ -14,12 +14,14 @@ export default function ProjectHero({ project, facilities = [], onOpenReports, o
   const submitted = facilities.filter((f) => f.status === 'submitted').length;
   const inProgress = total - submitted;
   const snags = facilities.reduce((n, f) => n + (f.itemCount || 0), 0);
+  const photos = facilities.reduce((n, f) => n + (f.photoCount || 0), 0);
 
   const tiles = [
     { label: 'Total Facilities', value: total, icon: Building2, tile: 'bg-indigo-500', wrap: 'from-indigo-50 to-indigo-100/40 border-indigo-100' },
     { label: 'Submitted', value: submitted, icon: CheckCircle2, tile: 'bg-emerald-500', wrap: 'from-emerald-50 to-emerald-100/40 border-emerald-100' },
     { label: 'In Progress', value: inProgress, icon: Clock, tile: 'bg-amber-500', wrap: 'from-amber-50 to-amber-100/40 border-amber-100' },
-    { label: 'Total Snags', value: snags, icon: ClipboardList, tile: 'bg-sky-500', wrap: 'from-sky-50 to-sky-100/40 border-sky-100' }
+    { label: 'Total Snags', value: snags, icon: ClipboardList, tile: 'bg-sky-500', wrap: 'from-sky-50 to-sky-100/40 border-sky-100' },
+    { label: 'Photos Attached', value: photos, icon: Camera, tile: 'bg-violet-500', wrap: 'from-violet-50 to-violet-100/40 border-violet-100' }
   ];
 
   return (
@@ -111,9 +113,10 @@ export default function ProjectHero({ project, facilities = [], onOpenReports, o
             </div>
           </div>
 
-          {/* Four across only from xl. At lg the sidebar leaves each tile about
-              180px, which cut every label to "TOTAL F...". */}
-          <div className="grid grid-cols-2 xl:grid-cols-4 gap-3 sm:gap-4 mt-5">
+          {/* Widened in steps rather than all five across early: at lg the
+              sidebar leaves each tile about 180px, which cut every label to
+              "TOTAL F...". */}
+          <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3 sm:gap-4 mt-5">
             {tiles.map((t) => {
               const Icon = t.icon;
               return (
