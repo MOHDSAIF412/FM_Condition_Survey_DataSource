@@ -14,6 +14,11 @@ import { supabase, isCloudConfigured, PHOTO_BUCKET } from './supabaseClient';
 
 const UPLOADABLE_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
 
+// Photos downloaded at once when building a report. Tuned for a phone on site:
+// enough to keep the connection busy, not so many that a large report starves
+// the rest of the app or trips server-side rate limiting.
+const PHOTO_FETCH_CONCURRENCY = 6;
+
 /**
  * Turns any data URL into an uploadable image Blob.
  *
@@ -80,6 +85,14 @@ async function uploadPhoto(surveyId, itemId, photo) {
 async function downloadPhoto(storagePath) {
   const { data, error } = await supabase.storage.from(PHOTO_BUCKET).download(storagePath);
   if (error) throw error;
+
+  // A photo missing from Storage can come back as an error document rather
+  // than an error, and this project has had orphaned photo rows before. Without
+  // this check that body is turned into a "data:application/json" URL, which
+  // then rides silently into a client's PDF and Excel as a broken image.
+  if (!data || !String(data.type || '').startsWith('image/')) {
+    throw new Error(`storage returned ${data?.type || 'no content'} for ${storagePath}`);
+  }
   return blobToDataUrl(data);
 }
 
@@ -516,6 +529,34 @@ export function subscribeToCloudChanges(surveyId, onRemoteChange) {
  * Returns a copy; the original is untouched. Failures leave that one photo
  * without bytes rather than aborting the whole report.
  */
+/**
+ * Runs `task` over every entry with at most `limit` in flight at once.
+ *
+ * Results come back in input order. The limit matters: a report covering every
+ * facility can involve hundreds of photos, and firing them all at once buries
+ * the browser's connection pool and risks the server rate-limiting the lot,
+ * while doing them one at a time is what made a 67-facility report take
+ * minutes.
+ */
+export async function mapWithConcurrency(entries, limit, task) {
+  const list = [...entries];
+  const results = new Array(list.length);
+  let next = 0;
+
+  const worker = async () => {
+    while (true) {
+      const i = next++;
+      if (i >= list.length) return;
+      results[i] = await task(list[i], i);
+    }
+  };
+
+  await Promise.all(
+    Array.from({ length: Math.max(1, Math.min(limit, list.length)) }, worker)
+  );
+  return results;
+}
+
 export async function hydratePhotos(survey) {
   if (!isCloudConfigured || !survey) return survey;
 
@@ -524,27 +565,38 @@ export async function hydratePhotos(survey) {
   );
   if (!needsBytes) return survey;
 
+  // Flattened first so every missing photo in the whole survey downloads in
+  // the same pool. Nesting the loops meant a snag with one slow photo held up
+  // every snag after it.
+  const wanted = [];
+  (survey.items || []).forEach((item, itemIdx) => {
+    (item.photos || []).forEach((photo, photoIdx) => {
+      if (!photo.dataUrl && photo.storagePath) wanted.push({ itemIdx, photoIdx, photo });
+    });
+  });
+
   let fetched = 0;
   let failed = 0;
-  const items = [];
-  for (const item of survey.items || []) {
-    const photos = [];
-    for (const photo of item.photos || []) {
-      if (photo.dataUrl || !photo.storagePath) {
-        photos.push(photo);
-        continue;
-      }
-      try {
-        photos.push({ ...photo, dataUrl: await downloadPhoto(photo.storagePath) });
-        fetched++;
-      } catch (err) {
-        console.warn('[report] photo unavailable:', photo.storagePath, err?.message);
-        photos.push(photo);
-        failed++;
-      }
+  const bytesByKey = new Map();
+
+  await mapWithConcurrency(wanted, PHOTO_FETCH_CONCURRENCY, async ({ itemIdx, photoIdx, photo }) => {
+    try {
+      const dataUrl = await downloadPhoto(photo.storagePath);
+      bytesByKey.set(`${itemIdx}:${photoIdx}`, dataUrl);
+      fetched++;
+    } catch (err) {
+      console.warn('[report] photo unavailable:', photo.storagePath, err?.message);
+      failed++;
     }
-    items.push({ ...item, photos });
-  }
+  });
+
+  const items = (survey.items || []).map((item, itemIdx) => ({
+    ...item,
+    photos: (item.photos || []).map((photo, photoIdx) => {
+      const dataUrl = bytesByKey.get(`${itemIdx}:${photoIdx}`);
+      return dataUrl ? { ...photo, dataUrl } : photo;
+    })
+  }));
 
   console.info(`[report] fetched ${fetched} photo(s) for the report` + (failed ? `, ${failed} unavailable` : ''));
   return { ...survey, items };

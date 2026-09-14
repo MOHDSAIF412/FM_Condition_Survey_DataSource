@@ -538,43 +538,42 @@ export async function generateSurveyExcel(input, selectedFacility = 'ALL') {
   const THUMB_PADDING_PX = 6;
 
   /**
-   * One column per photo, sized to the snag carrying the most.
+   * One row per photo, not one row per snag.
    *
-   * Only `photos[0]` used to be embedded, so a snag photographed three times
-   * showed one picture here while the PDF showed all three -- evidence quietly
-   * missing from the client's spreadsheet. Capped so a single snag with dozens
-   * of photos cannot produce an unreadable sheet.
+   * A snag photographed three times produces three rows carrying the same
+   * location, component, trade, priority and defect text, each with its own
+   * picture and a "1 of 3" marker. Photos used to be spread sideways across
+   * numbered columns, which pushed the written detail off the screen and made
+   * a snag's evidence hard to read against its description.
+   *
+   * Quantity and cost appear only on a snag's first row. Repeating them would
+   * make the column total count a three-photo snag's CapEx three times.
    */
-  const MAX_PHOTO_COLUMNS = 8;
-  const photoColumnCount = Math.min(
-    MAX_PHOTO_COLUMNS,
-    Math.max(1, ...itemsToReport.map((i) => (i.photos || []).length), 1)
-  );
-
-  // 1-based column indices, since everything shifts with the photo count.
   const COL = {
     num: 1,
-    photo: (k) => 2 + k,              // k is 0-based
-    location: 2 + photoColumnCount,
-    name: 3 + photoColumnCount,
-    dept: 4 + photoColumnCount,
-    priority: 5 + photoColumnCount,
-    defect: 6 + photoColumnCount,
-    qty: 7 + photoColumnCount,
-    cost: 8 + photoColumnCount
+    photo: 2,
+    photoOf: 3,
+    location: 4,
+    name: 5,
+    dept: 6,
+    priority: 7,
+    defect: 8,
+    qty: 9,
+    cost: 10
   };
   const lastCol = COL.cost;
 
   wsSnags.columns = [
-    { width: 8 },                                                  // Snag #
-    ...Array.from({ length: photoColumnCount }, () => ({ width: THUMB_COL_WIDTH })),
-    { width: 32 }, // Snag Location / Room
-    { width: 34 }, // Snag / Component Name
-    { width: 24 }, // Department / Trade
-    { width: 14 }, // Priority
-    { width: 48 }, // Observed Defects & Notes
-    { width: 10 }, // Quantity
-    { width: 18 }  // Est. Cost (AED)
+    { width: 8 },                // Snag #
+    { width: THUMB_COL_WIDTH },  // Evidence Photo
+    { width: 10 },               // Photo n of m
+    { width: 32 },               // Snag Location / Room
+    { width: 34 },               // Snag / Component Name
+    { width: 24 },               // Department / Trade
+    { width: 14 },               // Priority
+    { width: 48 },               // Observed Defects & Notes
+    { width: 10 },               // Quantity
+    { width: 18 }                // Est. Cost (AED)
   ];
 
   const letterFor = (n) => wsSnags.getColumn(n).letter;
@@ -593,8 +592,8 @@ export async function generateSurveyExcel(input, selectedFacility = 'ALL') {
   // Clean Table Headers
   const snagHeaders = [
     'Snag #',
-    ...Array.from({ length: photoColumnCount }, (_, k) =>
-      photoColumnCount === 1 ? 'Evidence Photo' : `Evidence Photo ${k + 1}`),
+    'Evidence Photo',
+    'Photo',
     'Snag Location / Room',
     'Snag / Component Name',
     'Department / Trade',
@@ -639,48 +638,65 @@ export async function generateSurveyExcel(input, selectedFacility = 'ALL') {
     snagRowIdx++;
 
     // Populate snag rows and embed every photo
+    const cellW = colWidthToPx(THUMB_COL_WIDTH);
+    const cellH = rowHeightToPx(THUMB_ROW_HEIGHT_PTS);
+
     for (let i = 0; i < groupItems.length; i++) {
       const item = groupItems[i];
       const dept = DEPARTMENTS[item.department] || DEPARTMENTS.GENERAL;
-      const photos = item.photos || [];
+      const photos = (item.photos || []).filter((p) => p && p.dataUrl);
 
-      const row = wsSnags.getRow(snagRowIdx);
-      row.getCell(COL.num).value = i + 1;
-      row.getCell(COL.location).value = item.location || 'General Site Area';
-      row.getCell(COL.name).value = snagLabel(item, i);
-      row.getCell(COL.dept).value = dept.name;
-      row.getCell(COL.priority).value = `P${item.priority}`;
-      row.getCell(COL.defect).value = item.defectDescription || 'No defect observed.';
-      row.getCell(COL.qty).value = item.quantity || 1;
-      row.getCell(COL.cost).value = parseFloat(item.estimatedCost) || 0;
+      // A snag with no usable photo still gets exactly one row, so it is not
+      // silently absent from the schedule.
+      const rowCount = Math.max(1, photos.length);
 
-      row.font = { name: 'Arial', size: 9 };
-      row.height = THUMB_ROW_HEIGHT_PTS; // Photo box height
+      for (let k = 0; k < rowCount; k++) {
+        const photo = photos[k];
+        const isFirstRowOfSnag = k === 0;
 
-      row.getCell(COL.num).alignment = { horizontal: 'center', vertical: 'middle' };
-      row.getCell(COL.num).font = { bold: true };
-      row.getCell(COL.location).alignment = { vertical: 'middle' };
-      row.getCell(COL.location).font = { bold: true };
-      row.getCell(COL.name).alignment = { vertical: 'middle', wrapText: true };
-      row.getCell(COL.name).font = { bold: true };
-      row.getCell(COL.dept).alignment = { vertical: 'middle' };
-      row.getCell(COL.priority).alignment = { horizontal: 'center', vertical: 'middle' };
-      row.getCell(COL.priority).font = {
-        bold: true,
-        color: { argb: item.priority === 1 ? 'FFDC2626' : item.priority === 2 ? 'FFF97316' : 'FF0F172A' }
-      };
-      row.getCell(COL.defect).alignment = { vertical: 'middle', wrapText: true };
-      row.getCell(COL.qty).alignment = { horizontal: 'center', vertical: 'middle' };
-      row.getCell(COL.cost).alignment = { horizontal: 'right', vertical: 'middle' };
-      row.getCell(COL.cost).numFmt = EXCEL_MONEY_FORMAT;
-      row.getCell(COL.cost).font = { bold: true };
+        const row = wsSnags.getRow(snagRowIdx);
+        row.getCell(COL.num).value = isFirstRowOfSnag ? i + 1 : '';
+        row.getCell(COL.photoOf).value = photos.length ? `${k + 1} of ${photos.length}` : '—';
+        row.getCell(COL.location).value = item.location || 'General Site Area';
+        row.getCell(COL.name).value = snagLabel(item, i);
+        row.getCell(COL.dept).value = dept.name;
+        row.getCell(COL.priority).value = `P${item.priority}`;
+        row.getCell(COL.defect).value = item.defectDescription || 'No defect observed.';
 
-      const cellW = colWidthToPx(THUMB_COL_WIDTH);
-      const cellH = rowHeightToPx(THUMB_ROW_HEIGHT_PTS);
+        // Only once per snag -- see the COL comment above.
+        if (isFirstRowOfSnag) {
+          row.getCell(COL.qty).value = item.quantity || 1;
+          row.getCell(COL.cost).value = parseFloat(item.estimatedCost) || 0;
+          row.getCell(COL.cost).numFmt = EXCEL_MONEY_FORMAT;
+          row.getCell(COL.cost).font = { name: 'Arial', size: 9, bold: true };
+        }
 
-      for (let k = 0; k < photoColumnCount; k++) {
-        const colIndex = COL.photo(k);
-        const cell = row.getCell(colIndex);
+        row.font = { name: 'Arial', size: 9 };
+        row.height = THUMB_ROW_HEIGHT_PTS; // Photo box height
+
+        row.getCell(COL.num).alignment = { horizontal: 'center', vertical: 'middle' };
+        row.getCell(COL.num).font = { name: 'Arial', size: 9, bold: true };
+        row.getCell(COL.photoOf).alignment = { horizontal: 'center', vertical: 'middle' };
+        row.getCell(COL.photoOf).font = {
+          name: 'Arial', size: 8, bold: true, color: { argb: 'FF64748B' }
+        };
+        row.getCell(COL.location).alignment = { vertical: 'middle', wrapText: true };
+        row.getCell(COL.location).font = { name: 'Arial', size: 9, bold: true };
+        row.getCell(COL.name).alignment = { vertical: 'middle', wrapText: true };
+        row.getCell(COL.name).font = { name: 'Arial', size: 9, bold: true };
+        row.getCell(COL.dept).alignment = { vertical: 'middle' };
+        row.getCell(COL.priority).alignment = { horizontal: 'center', vertical: 'middle' };
+        row.getCell(COL.priority).font = {
+          name: 'Arial',
+          size: 9,
+          bold: true,
+          color: { argb: item.priority === 1 ? 'FFDC2626' : item.priority === 2 ? 'FFF97316' : 'FF0F172A' }
+        };
+        row.getCell(COL.defect).alignment = { vertical: 'middle', wrapText: true };
+        row.getCell(COL.qty).alignment = { horizontal: 'center', vertical: 'middle' };
+        row.getCell(COL.cost).alignment = { horizontal: 'right', vertical: 'middle' };
+
+        const cell = row.getCell(COL.photo);
         cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFFFFF' } };
         cell.border = {
           top: { style: 'thin', color: { argb: 'FFCBD5E1' } },
@@ -690,59 +706,53 @@ export async function generateSurveyExcel(input, selectedFacility = 'ALL') {
         };
         cell.alignment = { horizontal: 'center', vertical: 'middle' };
 
-        const photo = photos[k];
-        if (!photo || !photo.dataUrl) {
-          // Only label the first box, so a snag with one photo does not read
-          // as a row of "No photo" cells.
-          if (k === 0 && !photos.length) {
-            cell.value = 'No photo';
-            cell.font = { italic: true, color: { argb: 'FF94A3B8' } };
-          }
-          continue;
-        }
-
-        try {
-          // Crop the bitmap to the cell's own ratio so it fills it exactly.
-          let cropped = null;
+        if (!photo) {
+          cell.value = 'No photo';
+          cell.font = { name: 'Arial', size: 9, italic: true, color: { argb: 'FF94A3B8' } };
+        } else {
           try {
-            cropped = await coverCropToRatio(photo.dataUrl, cellW / cellH, cellW * 2);
-          } catch (cropErr) {
-            console.warn('Thumbnail crop failed, falling back to uncropped embed:', cropErr);
-          }
+            // Crop the bitmap to the cell's own ratio so it fills it exactly.
+            let cropped = null;
+            try {
+              cropped = await coverCropToRatio(photo.dataUrl, cellW / cellH, cellW * 2);
+            } catch (cropErr) {
+              console.warn('Thumbnail crop failed, falling back to uncropped embed:', cropErr);
+            }
 
-          if (cropped && cropped.base64) {
-            const imageId = workbook.addImage({ base64: cropped.base64, extension: 'jpeg' });
-            placeImageInBox(wsSnags, imageId, cropped, {
-              col: colIndex - 1,          // placeImageInBox takes a 0-based column
-              row: snagRowIdx - 1,
-              widthPx: cellW,
-              heightPx: cellH,
-              fit: 'cover'
-            });
-          } else {
-            // Cropping failed (decode error, huge image, etc) -- fall back to the
-            // uncropped photo, contain-fit, rather than dropping it silently.
-            const safe = await getSafeJpegImage(photo.dataUrl);
-            if (safe && safe.base64) {
-              const imageId = workbook.addImage({ base64: safe.base64, extension: 'jpeg' });
-              placeImageInBox(wsSnags, imageId, safe, {
-                col: colIndex - 1,
+            if (cropped && cropped.base64) {
+              const imageId = workbook.addImage({ base64: cropped.base64, extension: 'jpeg' });
+              placeImageInBox(wsSnags, imageId, cropped, {
+                col: COL.photo - 1,          // placeImageInBox takes a 0-based column
                 row: snagRowIdx - 1,
                 widthPx: cellW,
                 heightPx: cellH,
-                fit: 'contain'
+                fit: 'cover'
               });
             } else {
-              cell.value = 'Photo unavailable';
-              cell.font = { italic: true, color: { argb: 'FF94A3B8' } };
+              // Cropping failed (decode error, huge image, etc) -- fall back to the
+              // uncropped photo, contain-fit, rather than dropping it silently.
+              const safe = await getSafeJpegImage(photo.dataUrl);
+              if (safe && safe.base64) {
+                const imageId = workbook.addImage({ base64: safe.base64, extension: 'jpeg' });
+                placeImageInBox(wsSnags, imageId, safe, {
+                  col: COL.photo - 1,
+                  row: snagRowIdx - 1,
+                  widthPx: cellW,
+                  heightPx: cellH,
+                  fit: 'contain'
+                });
+              } else {
+                cell.value = 'Photo unavailable';
+                cell.font = { name: 'Arial', size: 9, italic: true, color: { argb: 'FF94A3B8' } };
+              }
             }
+          } catch (imgErr) {
+            console.warn('Failed embedding thumbnail into Excel:', imgErr);
           }
-        } catch (imgErr) {
-          console.warn('Failed embedding thumbnail into Excel:', imgErr);
         }
-      }
 
-      snagRowIdx++;
+        snagRowIdx++;
+      }
     }
 
     snagRowIdx++;   // blank spacer between facilities

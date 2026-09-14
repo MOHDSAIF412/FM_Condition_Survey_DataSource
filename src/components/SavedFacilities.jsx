@@ -4,7 +4,7 @@ import {
   ChevronDown, ClipboardList, MapPin, Camera, DollarSign, Search, Calendar, Clock,
   Building2, Factory, Trees, Wrench, Fan, Zap, Flame, Sparkles
 } from 'lucide-react';
-import { pullSurvey, hydratePhotos } from '../utils/cloudSync';
+import { pullSurvey, hydratePhotos, mapWithConcurrency } from '../utils/cloudSync';
 import { listAllSurveysOffline } from '../utils/storage';
 import { generateSurveyPDF } from '../utils/pdfGenerator';
 import { generateSurveyExcel } from '../utils/excelGenerator';
@@ -14,6 +14,10 @@ import {
 } from '../types/survey';
 
 const TYPE_ICONS = { Building2, Factory, Trees, Wrench, Fan, Zap, Flame, Sparkles };
+
+// Facilities pulled at once for a combined report. Each one is itself fetching
+// its photos in parallel, so this stays modest to avoid stacking the two.
+const FACILITY_FETCH_CONCURRENCY = 4;
 
 /**
  * Every facility that has been saved, expandable to its snag list, with a
@@ -38,6 +42,8 @@ export default function SavedFacilities({ surveys = [], currentId, onOpen, onDel
   const [filter, setFilter] = useState('all'); // all | submitted | draft | open
   const [sort, setSort] = useState('newest');
   const [selected, setSelected] = useState([]); // facility ids ticked for the combined report
+  const [progress, setProgress] = useState(null); // { done, total, building } while a combined report builds
+  const [viewer, setViewer] = useState(null); // { photos, index, label, location } for the full-size photo
 
   const waiting = surveys.filter((s) => s.pendingSync).length;
 
@@ -130,7 +136,13 @@ export default function SavedFacilities({ surveys = [], currentId, onOpen, onDel
     return (await listAllSurveysOffline()).find((s) => s && s.id === surveyId) || null;
   };
 
-  /** Toggles a row open and lazily fetches its snags the first time. */
+  /**
+   * Toggles a row open and lazily fetches its snags the first time.
+   *
+   * Photo bytes are pulled too, so the thumbnails under each snag are the real
+   * evidence rather than a count. A facility synced from another device carries
+   * only storage paths until this runs.
+   */
   const toggleExpand = async (s) => {
     const opening = expandedId !== s.id;
     setExpandedId(opening ? s.id : null);
@@ -139,29 +151,49 @@ export default function SavedFacilities({ surveys = [], currentId, onOpen, onDel
     setDetailsById((prev) => ({ ...prev, [s.id]: 'loading' }));
     try {
       const full = await loadSurvey(s.id);
-      setDetailsById((prev) => ({ ...prev, [s.id]: { items: full?.items || [] } }));
+      const ready = full ? await hydratePhotos(full) : null;
+      setDetailsById((prev) => ({ ...prev, [s.id]: { items: ready?.items || [] } }));
     } catch (err) {
       setDetailsById((prev) => ({ ...prev, [s.id]: { error: err.message || 'Could not load snags.' } }));
     }
   };
 
-  /** One workbook containing the ticked facilities, or all of them when none are. */
+  /**
+   * One workbook containing the ticked facilities, or all of them when none are.
+   *
+   * Facilities are fetched several at a time. Doing them strictly one after
+   * another meant a 67-facility report spent minutes waiting on round trips
+   * that had no reason to be sequential.
+   */
   const downloadAll = async () => {
     const wanted = selectedVisible.length
       ? surveys.filter((s) => selectedVisible.includes(s.id))
       : surveys;
     setBusy('all:excel');
     setSyncResult('');
+    setProgress({ done: 0, total: wanted.length });
     try {
-      const loaded = [];
-      for (const s of wanted) {
-        const full = await loadSurvey(s.id);
-        if (full && (full.items || []).length) loaded.push(await hydratePhotos(full));
-      }
+      let done = 0;
+      const pulled = await mapWithConcurrency(wanted, FACILITY_FETCH_CONCURRENCY, async (s) => {
+        try {
+          const full = await loadSurvey(s.id);
+          if (!full || !(full.items || []).length) return null;
+          return await hydratePhotos(full);
+        } catch (err) {
+          console.warn('Skipped a facility in the combined report:', s.id, err?.message);
+          return null;
+        } finally {
+          done++;
+          setProgress({ done, total: wanted.length });
+        }
+      });
+
+      const loaded = pulled.filter(Boolean);
       if (!loaded.length) {
         alert('None of the chosen facilities have snags to report yet.');
         return;
       }
+      setProgress({ done: wanted.length, total: wanted.length, building: true });
       await generateSurveyExcel(loaded, 'ALL');
       setSyncResult(`Combined Excel created for ${loaded.length} facilities.`);
     } catch (err) {
@@ -169,6 +201,7 @@ export default function SavedFacilities({ surveys = [], currentId, onOpen, onDel
       alert('Could not build the combined report: ' + (err.message || err));
     } finally {
       setBusy(null);
+      setProgress(null);
     }
   };
 
@@ -278,6 +311,75 @@ export default function SavedFacilities({ surveys = [], currentId, onOpen, onDel
     </div>
   );
 
+  /**
+   * Full-size photo, with arrows when the snag carries more than one.
+   *
+   * Built as a function returning JSX rather than a nested component: a
+   * component declared inside the render is a new type on every keystroke of
+   * state, so React would tear down and rebuild the <img> each time the
+   * surveyor pressed Next and the picture would blink.
+   */
+  const renderPhotoViewer = () => {
+    if (!viewer) return null;
+    const { photos, index, label, location } = viewer;
+    const photo = photos[index];
+    if (!photo) return null;
+    const step = (by) => setViewer({ ...viewer, index: (index + by + photos.length) % photos.length });
+
+    return (
+      <div
+        className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4"
+        onClick={() => setViewer(null)}
+        role="dialog"
+        aria-modal="true"
+      >
+        <div className="max-w-4xl w-full" onClick={(e) => e.stopPropagation()}>
+          <div className="flex items-start justify-between gap-3 mb-3">
+            <div className="min-w-0">
+              <p className="text-white font-bold text-sm truncate">{label}</p>
+              {location && <p className="text-white/60 text-xs truncate">{location}</p>}
+            </div>
+            <button
+              type="button"
+              onClick={() => setViewer(null)}
+              className="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white text-xs font-bold shrink-0"
+            >
+              Close
+            </button>
+          </div>
+
+          <img
+            src={photo.dataUrl}
+            alt={label}
+            className="w-full max-h-[70vh] object-contain rounded-xl bg-black"
+          />
+
+          <div className="flex items-center justify-between gap-3 mt-3">
+            <button
+              type="button"
+              disabled={photos.length < 2}
+              onClick={() => step(-1)}
+              className="px-3 py-2 rounded-lg bg-white/10 hover:bg-white/20 disabled:opacity-30 text-white text-xs font-bold"
+            >
+              ‹ Previous
+            </button>
+            <span className="text-white/70 text-xs font-semibold">
+              Photo {index + 1} of {photos.length}
+            </span>
+            <button
+              type="button"
+              disabled={photos.length < 2}
+              onClick={() => step(1)}
+              className="px-3 py-2 rounded-lg bg-white/10 hover:bg-white/20 disabled:opacity-30 text-white text-xs font-bold"
+            >
+              Next ›
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   const SnagDetail = ({ detail }) => (
     <>
       {detail === 'loading' && (
@@ -314,7 +416,10 @@ export default function SavedFacilities({ surveys = [], currentId, onOpen, onDel
                         <span className="inline-flex items-center gap-1"><MapPin className="w-3 h-3" /> {item.location}</span>
                       )}
                       {!!(item.photos || []).length && (
-                        <span className="inline-flex items-center gap-1"><Camera className="w-3 h-3" /> {item.photos.length}</span>
+                        <span className="inline-flex items-center gap-1">
+                          <Camera className="w-3 h-3" />
+                          {item.photos.length} photo{item.photos.length === 1 ? '' : 's'}
+                        </span>
                       )}
                       {!!item.estimatedCost && (
                         <span className="inline-flex items-center gap-1 font-semibold text-slate-700">
@@ -322,6 +427,27 @@ export default function SavedFacilities({ surveys = [], currentId, onOpen, onDel
                         </span>
                       )}
                     </div>
+
+                    {!!(item.photos || []).filter((p) => p.dataUrl).length && (
+                      <div className="flex items-center gap-2 mt-2 flex-wrap">
+                        {item.photos.filter((p) => p.dataUrl).map((p, pi) => (
+                          <button
+                            key={p.id || pi}
+                            type="button"
+                            onClick={() => setViewer({
+                              photos: item.photos.filter((x) => x.dataUrl),
+                              index: pi,
+                              label: snagLabel(item, idx),
+                              location: item.location
+                            })}
+                            title={`View photo ${pi + 1}`}
+                            className="w-16 h-16 rounded-lg overflow-hidden border border-slate-200 hover:border-ocs-500 hover:ring-2 hover:ring-sky-200 transition-all shrink-0"
+                          >
+                            <img src={p.dataUrl} alt={`Snag photo ${pi + 1}`} className="w-full h-full object-cover" />
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
               );
@@ -343,8 +469,17 @@ export default function SavedFacilities({ surveys = [], currentId, onOpen, onDel
     ? `Selected in one Excel (${selectedVisible.length})`
     : `All in one Excel (${surveys.length})`;
 
+  // A 67-facility report takes a while whatever happens, so say where it is up
+  // to rather than showing an unchanging "Building…".
+  const buildingLabel = !progress
+    ? 'Building…'
+    : progress.building
+      ? 'Writing workbook…'
+      : `Loading ${progress.done} of ${progress.total}…`;
+
   return (
     <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+      {renderPhotoViewer()}
       <div className="px-4 sm:px-6 py-4 border-b border-slate-200 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
         <h3 className="text-base font-bold text-slate-800 whitespace-nowrap inline-flex items-center gap-2">
           <Building2 className="w-4 h-4 text-ocs-600" />
@@ -378,7 +513,7 @@ export default function SavedFacilities({ surveys = [], currentId, onOpen, onDel
               className="px-3.5 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-600 disabled:opacity-60 text-white text-xs font-bold inline-flex items-center gap-1.5"
             >
               {busy === 'all:excel' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileSpreadsheet className="w-3.5 h-3.5" />}
-              {busy === 'all:excel' ? 'Building…' : excelLabel}
+              {busy === 'all:excel' ? buildingLabel : excelLabel}
             </button>
           )}
           {onSyncNow && (
