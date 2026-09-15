@@ -219,7 +219,11 @@ export default function ReportModal({ survey = {}, onClose }) {
           <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight">
             {facility.facilityName || facility.buildingName || 'Facilities Condition Audit'}
           </h1>
-          {facility.facilityName && facility.buildingName && (
+          {/* Only when it actually says something different. The name field
+              used to copy itself into buildingName, so for many facilities the
+              two are identical and this printed the name twice. */}
+          {facility.facilityName && facility.buildingName
+            && facility.buildingName.trim() !== facility.facilityName.trim() && (
             <p className="text-sky-300 text-sm font-semibold mt-0.5">
               {facility.buildingName}
             </p>

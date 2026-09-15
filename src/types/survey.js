@@ -173,38 +173,62 @@ export function facilityCode(number) {
  * server already stores whole as jsonb, so this needs no database change.
  */
 export const FACILITY_TYPES = {
-  BUILDING: {
-    id: 'BUILDING', name: 'Building', icon: 'Building2',
+  COMMERCIAL: {
+    id: 'COMMERCIAL', name: 'Commercial', icon: 'Building2',
     badge: 'bg-indigo-50 text-indigo-700 border-indigo-200'
   },
-  FACILITY: {
-    id: 'FACILITY', name: 'Facility', icon: 'Factory',
-    badge: 'bg-teal-50 text-teal-700 border-teal-200'
+  RESIDENTIAL: {
+    id: 'RESIDENTIAL', name: 'Residential', icon: 'Home',
+    badge: 'bg-emerald-50 text-emerald-700 border-emerald-200'
   },
-  LANDSCAPE: {
-    id: 'LANDSCAPE', name: 'Landscape', icon: 'Trees',
-    badge: 'bg-green-50 text-green-700 border-green-200'
-  },
-  MEP: {
-    id: 'MEP', name: 'MEP', icon: 'Wrench',
-    badge: 'bg-sky-50 text-sky-700 border-sky-200'
-  },
-  HVAC: {
-    id: 'HVAC', name: 'HVAC', icon: 'Fan',
-    badge: 'bg-violet-50 text-violet-700 border-violet-200'
-  },
-  ELECTRICAL: {
-    id: 'ELECTRICAL', name: 'Electrical', icon: 'Zap',
+  SCHOOL: {
+    id: 'SCHOOL', name: 'School', icon: 'GraduationCap',
     badge: 'bg-amber-50 text-amber-700 border-amber-200'
   },
-  FIRE_SAFETY: {
-    id: 'FIRE_SAFETY', name: 'Fire Safety', icon: 'Flame',
+  RETAIL: {
+    id: 'RETAIL', name: 'Retail / Mall', icon: 'ShoppingBag',
+    badge: 'bg-pink-50 text-pink-700 border-pink-200'
+  },
+  OFFICE: {
+    id: 'OFFICE', name: 'Office', icon: 'Briefcase',
+    badge: 'bg-sky-50 text-sky-700 border-sky-200'
+  },
+  WAREHOUSE: {
+    id: 'WAREHOUSE', name: 'Warehouse', icon: 'Warehouse',
+    badge: 'bg-orange-50 text-orange-700 border-orange-200'
+  },
+  MOSQUE: {
+    id: 'MOSQUE', name: 'Mosque', icon: 'Moon',
+    badge: 'bg-teal-50 text-teal-700 border-teal-200'
+  },
+  CLINIC: {
+    id: 'CLINIC', name: 'Clinic / Hospital', icon: 'Stethoscope',
     badge: 'bg-rose-50 text-rose-700 border-rose-200'
   },
-  CLEANING: {
-    id: 'CLEANING', name: 'Cleaning', icon: 'Sparkles',
+  HOTEL: {
+    id: 'HOTEL', name: 'Hotel', icon: 'BedDouble',
+    badge: 'bg-violet-50 text-violet-700 border-violet-200'
+  },
+  SPORTS: {
+    id: 'SPORTS', name: 'Sports & Leisure', icon: 'Trophy',
     badge: 'bg-cyan-50 text-cyan-700 border-cyan-200'
   }
+};
+
+/**
+ * Types that are no longer offered but were already recorded against real
+ * facilities. Kept so those rows keep reading what the surveyor chose instead
+ * of silently reverting to "Not set"; they simply cannot be picked again.
+ */
+export const LEGACY_FACILITY_TYPES = {
+  BUILDING: { id: 'BUILDING', name: 'Building', icon: 'Building2', badge: 'bg-slate-50 text-slate-600 border-slate-200' },
+  FACILITY: { id: 'FACILITY', name: 'Facility', icon: 'Factory', badge: 'bg-slate-50 text-slate-600 border-slate-200' },
+  LANDSCAPE: { id: 'LANDSCAPE', name: 'Landscape', icon: 'Trees', badge: 'bg-slate-50 text-slate-600 border-slate-200' },
+  MEP: { id: 'MEP', name: 'MEP', icon: 'Wrench', badge: 'bg-slate-50 text-slate-600 border-slate-200' },
+  HVAC: { id: 'HVAC', name: 'HVAC', icon: 'Fan', badge: 'bg-slate-50 text-slate-600 border-slate-200' },
+  ELECTRICAL: { id: 'ELECTRICAL', name: 'Electrical', icon: 'Zap', badge: 'bg-slate-50 text-slate-600 border-slate-200' },
+  FIRE_SAFETY: { id: 'FIRE_SAFETY', name: 'Fire Safety', icon: 'Flame', badge: 'bg-slate-50 text-slate-600 border-slate-200' },
+  CLEANING: { id: 'CLEANING', name: 'Cleaning', icon: 'Sparkles', badge: 'bg-slate-50 text-slate-600 border-slate-200' }
 };
 
 /**
@@ -213,7 +237,8 @@ export const FACILITY_TYPES = {
  * rather than being silently defaulted to something untrue.
  */
 export function facilityTypeOf(facility = {}) {
-  return FACILITY_TYPES[facility?.facilityType] || null;
+  const key = facility?.facilityType;
+  return FACILITY_TYPES[key] || LEGACY_FACILITY_TYPES[key] || null;
 }
 
 /**

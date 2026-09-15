@@ -7,12 +7,13 @@ import {
   ExternalLink,
   Compass,
   CheckCircle2,
-  FilePlus
+  FilePlus,
+  Loader2
 } from 'lucide-react';
 import { captureLocation, GPS_STATUS } from '../utils/geolocation';
 import { FACILITY_TYPES } from '../types/survey';
 
-export default function FacilityInfo({ facility = {}, onChange, onNext, onNewFacility }) {
+export default function FacilityInfo({ facility = {}, onChange, onCreate, creating, created, onNewFacility }) {
   const [isGettingGps, setIsGettingGps] = useState(false);
   const [gpsError, setGpsError] = useState('');
   const [gpsStatus, setGpsStatus] = useState(GPS_STATUS.IDLE);
@@ -104,7 +105,7 @@ export default function FacilityInfo({ facility = {}, onChange, onNext, onNewFac
               <p className="text-sky-200/80 text-xs mt-0.5 truncate">
                 {facility.facilityName || facility.buildingName
                   ? `Working on: ${facility.facilityName || facility.buildingName}`
-                  : 'Enter this facility’s name below, then Proceed to Survey Items.'}
+                  : 'Enter this facility’s name below, then press Create Facility.'}
               </p>
             </div>
           </div>
@@ -144,18 +145,13 @@ export default function FacilityInfo({ facility = {}, onChange, onNext, onNewFac
                  immediately repopulate from the building name - the text could
                  not be deleted. */
               value={facility.facilityName ?? ''}
-              onChange={(e) => {
-                const value = e.target.value;
-                /* One update, not two. Both calls spread the same stale
-                   `facility` prop, so the second silently discarded the first
-                   and typing here was lost whenever the building name was
-                   still empty. */
-                onChange({
-                  ...facility,
-                  facilityName: value,
-                  ...(facility.buildingName ? {} : { buildingName: value })
-                });
-              }}
+              /* Writes facilityName only. It used to copy itself into
+                 buildingName whenever that was empty, which made sense while
+                 both fields were on screen; now that Building / Tower Name has
+                 been removed, mirroring would just print the same name twice on
+                 the report cover. Records that already carry a building name
+                 keep it -- every reader still falls back to it. */
+              onChange={(e) => onChange({ ...facility, facilityName: e.target.value })}
               className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-sky-500 text-sm font-semibold"
             />
           </div>
@@ -174,18 +170,6 @@ export default function FacilityInfo({ facility = {}, onChange, onNext, onNewFac
                 <option key={t.id} value={t.id}>{t.name}</option>
               ))}
             </select>
-          </div>
-
-          <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">
-              Building / Tower Name
-            </label>
-            <input
-              type="text"
-              value={facility.buildingName || ''}
-              onChange={(e) => updateField('buildingName', e.target.value)}
-              className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-sky-500 text-sm"
-            />
           </div>
 
           <div>
@@ -358,13 +342,25 @@ export default function FacilityInfo({ facility = {}, onChange, onNext, onNewFac
         </div>
       </div>
 
-      {/* Next Step Button */}
-      <div className="flex justify-end pt-2">
+      {/* Creating the facility is the deliberate step that fixes its reference
+          number. Until then the code on screen is provisional. */}
+      <div className="flex flex-col sm:flex-row sm:justify-end sm:items-center gap-2 pt-2">
+        {!facility.facilityName?.trim() && (
+          <p className="text-xs text-slate-500 sm:mr-auto">
+            Enter the facility name to create it.
+          </p>
+        )}
         <button
-          onClick={onNext}
-          className="w-full sm:w-auto px-6 py-3 rounded-xl bg-sky-600 hover:bg-sky-500 active:scale-[0.98] text-white font-semibold text-sm shadow-md transition-all flex items-center justify-center space-x-2"
+          onClick={onCreate}
+          disabled={creating || !facility.facilityName?.trim()}
+          className="w-full sm:w-auto px-6 py-3 rounded-xl bg-sky-600 hover:bg-sky-500 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold text-sm shadow-md transition-all flex items-center justify-center space-x-2"
         >
-          <span>Proceed to Survey Items</span>
+          {creating
+            ? <Loader2 className="w-4 h-4 animate-spin" />
+            : <FilePlus className="w-4 h-4" />}
+          <span>
+            {creating ? 'Creating…' : created ? 'Save & Continue' : 'Create Facility'}
+          </span>
           <span>→</span>
         </button>
       </div>

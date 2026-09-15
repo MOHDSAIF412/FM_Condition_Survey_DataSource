@@ -173,7 +173,16 @@ export async function pushSurvey(survey) {
   };
   if (survey.projectId) surveyRow.project_id = survey.projectId;
 
-  const { error: surveyErr } = await supabase.from('condition_surveys').upsert(surveyRow);
+  // `facility_number` is deliberately absent from surveyRow: the column's
+  // sequence default assigns it when the row is first inserted, and an upsert
+  // only touches the columns it is given, so later edits leave it alone. That
+  // is what makes the number collision-proof -- worked out on the device, two
+  // surveyors creating a facility at the same moment both picked the same one.
+  const { data: savedSurvey, error: surveyErr } = await supabase
+    .from('condition_surveys')
+    .upsert(surveyRow)
+    .select('facility_number')
+    .maybeSingle();
   if (surveyErr) throw surveyErr;
 
   const items = survey.items || [];
@@ -276,6 +285,10 @@ export async function pushSurvey(survey) {
     // photos synced rather than assuming the whole batch succeeded.
     syncedPhotoIds: photoRows.map((r) => r.id),
     failedPhotoIds: failedPhotoIds,
+    // What the database actually assigned. While offline the facility carries a
+    // provisional number worked out on the device; this is the authoritative
+    // one and the caller adopts it once the facility has reached the server.
+    facilityNumber: savedSurvey?.facility_number ?? null,
     // We are now the server state, so this is what the next push builds on.
     cloudRevision: nextRevision
   };

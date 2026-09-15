@@ -14,7 +14,7 @@ import ChangePasswordModal from './components/ChangePasswordModal';
 import Breadcrumb from './components/Breadcrumb';
 import ProjectHero from './components/ProjectHero';
 import ReportDashboard from './components/ReportDashboard';
-import { createNewSurvey, calculateSurveyStats } from './types/survey';
+import { createNewSurvey, calculateSurveyStats, facilityCode } from './types/survey';
 import {
   saveSurveyOffline,
   loadCurrentSurveyOffline,
@@ -124,6 +124,7 @@ export default function App({ currentUser = null, onSignOut } = {}) {
     skipCloudPushRef.current = true;
   }
   const [syncState, setSyncState] = useState(isCloudConfigured ? 'idle' : 'off');
+  const [creatingFacility, setCreatingFacility] = useState(false);
   const [online, setOnline] = useState(isOnline());
   const surveyRef = useRef(null);
   const pushTimeoutRef = useRef(null);
@@ -255,6 +256,22 @@ export default function App({ currentUser = null, onSignOut } = {}) {
       const cur = surveyRef.current;
       if ((cur.deletedItemIds || []).length || (cur.deletedPhotoIds || []).length) {
         surveyRef.current = { ...cur, deletedItemIds: [], deletedPhotoIds: [] };
+      }
+
+      // Adopt the number the database assigned. A facility created offline
+      // carries a provisional one worked out from what this device could see,
+      // which is exactly how FAC-079 ended up on three different facilities.
+      const assigned = pushResult.facilityNumber;
+      const latest = surveyRef.current;
+      if (assigned && Number(latest.facility?.facilityNumber) !== Number(assigned)) {
+        surveyRef.current = {
+          ...latest,
+          facility: {
+            ...latest.facility,
+            facilityNumber: assigned,
+            facilityCode: facilityCode(assigned)
+          }
+        };
       }
     }
 
@@ -589,6 +606,77 @@ export default function App({ currentUser = null, onSignOut } = {}) {
   }, [isLoaded, survey?.id]);
 
   /**
+   * Marks one facility submitted and stores it, without starting a new one.
+   *
+   * Local storage first: that is what guarantees the submission survives with
+   * no signal. The upload is attempted afterwards and its failure is not fatal,
+   * because the facility is already saved as pending and flushes on reconnect.
+   */
+  async function submitSurveyRecord(record) {
+    const submitted = {
+      ...record,
+      status: 'submitted',
+      submittedAt: new Date().toISOString()
+    };
+    try {
+      await saveSurveyOffline(submitted, { pendingSync: true });
+    } catch (err) {
+      console.error('Could not save the submitted facility:', err);
+      alert('Could not save this facility locally. Nothing has been changed.');
+      return false;
+    }
+
+    if (surveyRef.current?.id === submitted.id) {
+      surveyRef.current = submitted;
+      setSurvey(submitted);
+    }
+
+    if (isCloudConfigured && isOnline()) {
+      try {
+        setSyncState('syncing');
+        await pushSurvey(submitted);
+        await markSurveySynced(submitted.id);
+        setSyncState('synced');
+      } catch (err) {
+        console.info('Submitted facility will upload when there is a connection:', err.message);
+        setSyncState('offline');
+      }
+    }
+    refreshSurveyList();
+    return true;
+  }
+
+  /**
+   * Submits a facility straight from the Saved Facilities list, so one left as
+   * a draft can be finished without opening it first.
+   */
+  const handleSubmitFromList = async (surveyId) => {
+    const fromList = surveyList.find((s) => s.id === surveyId);
+    const local = (await listAllSurveysOffline()).find((s) => s && s.id === surveyId);
+    let record = surveyRef.current?.id === surveyId ? surveyRef.current : local;
+
+    if (!record && isCloudConfigured && isOnline()) {
+      record = await pullSurvey(surveyId, {});
+    }
+    if (!record) {
+      alert('That facility could not be loaded. Check your connection and try again.');
+      return;
+    }
+
+    const name = (record.facility?.facilityName || fromList?.facilityName || '').trim();
+    const hasWork = (record.items || []).some(
+      (i) => (i.defectDescription || '').trim() || (i.location || '').trim()
+    );
+    if (!hasWork) {
+      alert('Add at least one snag before submitting this facility.');
+      return;
+    }
+    if (!confirm(`Submit "${name || 'this facility'}"?\n\nIt stays available in the list for reports.`)) return;
+
+    await submitSurveyRecord(record);
+  };
+
+  /**
    * Finishes the current facility and starts a fresh one.
    *
    * The current survey is only marked submitted and set aside once it is
@@ -862,7 +950,34 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
     refreshSurveyList();
   };
 
-  const handleBackToProjects = () => {
+  /**
+   * Offers to submit the open facility before leaving it.
+   *
+   * A surveyor who finishes a site and taps straight back left it sitting as a
+   * draft, which is how facilities ended up unsubmitted with work in them.
+   * Cancel stays put; declining still leaves the work saved as a draft.
+   */
+  async function offerSubmitBeforeLeaving() {
+    const current = surveyRef.current;
+    if (!current || current.status === 'submitted') return true;
+
+    const name = (current.facility?.facilityName || '').trim();
+    const hasWork = (current.items || []).some(
+      (i) => (i.defectDescription || '').trim() || (i.location || '').trim() || (i.photos || []).length
+    );
+    if (!name || !hasWork) return true;
+
+    const answer = confirm(
+      `Submit "${name}" before going back?\n\n`
+      + 'OK submits it and it stays available for reports.\n'
+      + 'Cancel leaves it as a draft you can come back to.'
+    );
+    if (answer) await submitSurveyRecord(current);
+    return true;
+  }
+
+  const handleBackToProjects = async () => {
+    if (view === 'survey' && !(await offerSubmitBeforeLeaving())) return;
     setView('projects');
     refreshProjects();
   };
@@ -948,6 +1063,39 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
    * create a new facility and continue with that". Every snag added afterwards
    * belongs to the new facility, because it carries a brand new id.
    */
+  /**
+   * Creates the facility, then moves on to its snags.
+   *
+   * Pushing here is what fixes the reference number: the database assigns it,
+   * so two surveyors creating a facility at the same moment cannot both take
+   * FAC-079 the way they have before. With no signal the facility is still
+   * created locally and keeps a provisional number until it next syncs -- a
+   * surveyor in a plant room must never be blocked from starting work.
+   */
+  const handleCreateFacility = async () => {
+    const name = (surveyRef.current?.facility?.facilityName || '').trim();
+    if (!name) return;
+
+    setCreatingFacility(true);
+    try {
+      await saveSurveyOffline(surveyRef.current, { markPending: true });
+      if (isCloudConfigured && isOnline()) {
+        try {
+          await pushAndSettle();
+        } catch (err) {
+          console.warn('Facility created locally; it will sync when there is a connection:', err?.message);
+        }
+      }
+      // Without this the facility exists but the Saved Facilities list still
+      // shows the set it was loaded with, so the one just created is missing
+      // until something else happens to refresh it.
+      refreshSurveyList();
+      setActiveTab('items');
+    } finally {
+      setCreatingFacility(false);
+    }
+  };
+
   const handleNewFacility = async () => {
     const current = surveyRef.current;
     const currentName = current?.facility?.facilityName || current?.facility?.buildingName;
@@ -987,7 +1135,8 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
 
   // Backup export as JSON
   const handleExportJSON = async () => {
-    const safeTitle = (survey.facility?.buildingName || 'survey').replace(/\s+/g, '_').toLowerCase();
+    const safeTitle = (survey.facility?.facilityName || survey.facility?.buildingName || 'survey')
+      .replace(/\s+/g, '_').toLowerCase();
     const filename = `${safeTitle}_backup_${new Date().toISOString().split('T')[0]}.json`;
     try {
       await saveText(JSON.stringify(survey, null, 2), filename, 'application/json', 'Survey backup');
@@ -1226,6 +1375,7 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
                 onDelete={handleDeleteSurvey}
                 onRefresh={refreshSurveyList}
                 onSyncNow={handleSyncNow}
+                onSubmit={handleSubmitFromList}
               />
             </div>
           </main>
@@ -1339,7 +1489,9 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
           <FacilityInfo
             facility={survey?.facility || {}}
             onChange={handleUpdateFacility}
-            onNext={() => setActiveTab('items')}
+            onCreate={handleCreateFacility}
+            creating={creatingFacility}
+            created={!!survey?.cloudRevision}
             onNewFacility={handleNewFacility}
           />
         </TabPanel>
@@ -1369,6 +1521,7 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
               onDelete={handleDeleteSurvey}
               onRefresh={refreshSurveyList}
               onSyncNow={handleSyncNow}
+              onSubmit={handleSubmitFromList}
             />
           </div>
           <SignatureSection

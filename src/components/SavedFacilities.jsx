@@ -2,7 +2,8 @@ import React, { useState, useMemo } from 'react';
 import {
   FileText, FileSpreadsheet, FolderOpen, CheckCircle2, Loader2, Trash2, CloudOff, RefreshCw,
   ChevronDown, ClipboardList, MapPin, Camera, DollarSign, Search, Calendar, Clock,
-  Building2, Factory, Trees, Wrench, Fan, Zap, Flame, Sparkles
+  Building2, Factory, Trees, Wrench, Fan, Zap, Flame, Sparkles,
+  Home, GraduationCap, ShoppingBag, Briefcase, Warehouse, Moon, Stethoscope, BedDouble, Trophy
 } from 'lucide-react';
 import { pullSurvey, hydratePhotos, mapWithConcurrency } from '../utils/cloudSync';
 import { listAllSurveysOffline } from '../utils/storage';
@@ -13,7 +14,10 @@ import {
   facilityCode, snagLabel, facilityTypeOf, PRIORITY_LEVELS, DEPARTMENTS
 } from '../types/survey';
 
-const TYPE_ICONS = { Building2, Factory, Trees, Wrench, Fan, Zap, Flame, Sparkles };
+const TYPE_ICONS = {
+  Building2, Factory, Trees, Wrench, Fan, Zap, Flame, Sparkles,
+  Home, GraduationCap, ShoppingBag, Briefcase, Warehouse, Moon, Stethoscope, BedDouble, Trophy
+};
 
 // Facilities pulled at once for a combined report. Each one is itself fetching
 // its photos in parallel, so this stays modest to avoid stacking the two.
@@ -32,7 +36,7 @@ const FACILITY_FETCH_CONCURRENCY = 4;
  * day-to-day screen is the phone, and a 5-column table there would either
  * shrink past reading size or need sideways scrolling to reach the buttons.
  */
-export default function SavedFacilities({ surveys = [], currentId, onOpen, onDelete, onRefresh, onSyncNow }) {
+export default function SavedFacilities({ surveys = [], currentId, onOpen, onDelete, onRefresh, onSyncNow, onSubmit }) {
   const [busy, setBusy] = useState(null);
   const [syncing, setSyncing] = useState(false);
   const [syncResult, setSyncResult] = useState('');
@@ -139,9 +143,11 @@ export default function SavedFacilities({ surveys = [], currentId, onOpen, onDel
   /**
    * Toggles a row open and lazily fetches its snags the first time.
    *
-   * Photo bytes are pulled too, so the thumbnails under each snag are the real
-   * evidence rather than a count. A facility synced from another device carries
-   * only storage paths until this runs.
+   * The snag list is shown as soon as it arrives and the photos are fetched
+   * afterwards, filling the thumbnails in behind it. Waiting for the photos
+   * first meant a facility carrying forty of them sat blank for seconds on a
+   * phone before anything appeared -- the list is what the surveyor opened the
+   * row to read, so it must not queue behind the evidence.
    */
   const toggleExpand = async (s) => {
     const opening = expandedId !== s.id;
@@ -149,12 +155,27 @@ export default function SavedFacilities({ surveys = [], currentId, onOpen, onDel
     if (!opening || detailsById[s.id]) return;
 
     setDetailsById((prev) => ({ ...prev, [s.id]: 'loading' }));
+    let full;
     try {
-      const full = await loadSurvey(s.id);
-      const ready = full ? await hydratePhotos(full) : null;
-      setDetailsById((prev) => ({ ...prev, [s.id]: { items: ready?.items || [] } }));
+      full = await loadSurvey(s.id);
+      setDetailsById((prev) => ({ ...prev, [s.id]: { items: full?.items || [], photosLoading: true } }));
     } catch (err) {
       setDetailsById((prev) => ({ ...prev, [s.id]: { error: err.message || 'Could not load snags.' } }));
+      return;
+    }
+
+    if (!full) {
+      setDetailsById((prev) => ({ ...prev, [s.id]: { items: [] } }));
+      return;
+    }
+
+    try {
+      const ready = await hydratePhotos(full);
+      setDetailsById((prev) => ({ ...prev, [s.id]: { items: ready?.items || [] } }));
+    } catch (err) {
+      // The snags are already on screen; losing the pictures must not blank them.
+      console.warn('Photos could not be loaded for this facility:', err?.message);
+      setDetailsById((prev) => ({ ...prev, [s.id]: { items: full.items || [] } }));
     }
   };
 
@@ -224,6 +245,16 @@ export default function SavedFacilities({ surveys = [], currentId, onOpen, onDel
     }
   };
 
+  const submit = async (s) => {
+    if (!onSubmit) return;
+    setBusy(`${s.id}:submit`);
+    try {
+      await onSubmit(s.id);
+    } finally {
+      setBusy(null);
+    }
+  };
+
   const remove = async (s) => {
     if (!onDelete) return;
     setBusy(`${s.id}:delete`);
@@ -257,16 +288,41 @@ export default function SavedFacilities({ surveys = [], currentId, onOpen, onDel
     );
   };
 
-  const StatusBadge = ({ status }) =>
-    status === 'submitted' ? (
-      <span className="px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 inline-flex items-center gap-1.5">
-        <CheckCircle2 className="w-3.5 h-3.5" /> Submitted
-      </span>
-    ) : (
-      <span className="px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-50 text-amber-700 border border-amber-200 inline-flex items-center gap-1.5">
-        <Clock className="w-3.5 h-3.5" /> Draft
+  /**
+   * A draft is also the place to finish it: leaving the list, opening the
+   * facility and submitting from inside was the only route before, so drafts
+   * with completed work sat unsubmitted.
+   */
+  const StatusBadge = ({ s }) => {
+    if (s.status === 'submitted') {
+      return (
+        <span className="px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 inline-flex items-center gap-1.5">
+          <CheckCircle2 className="w-3.5 h-3.5" /> Submitted
+        </span>
+      );
+    }
+    return (
+      <span className="inline-flex items-center gap-1.5 flex-wrap">
+        <span className="px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-50 text-amber-700 border border-amber-200 inline-flex items-center gap-1.5">
+          <Clock className="w-3.5 h-3.5" /> Draft
+        </span>
+        {onSubmit && (
+          <button
+            type="button"
+            disabled={busy !== null}
+            onClick={(e) => { e.stopPropagation(); submit(s); }}
+            title="Mark this facility submitted"
+            className="px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white inline-flex items-center gap-1.5"
+          >
+            {busy === `${s.id}:submit`
+              ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              : <CheckCircle2 className="w-3.5 h-3.5" />}
+            Submit
+          </button>
+        )}
       </span>
     );
+  };
 
   const RowActions = ({ s, compact }) => (
     <div className={`flex items-center gap-2 ${compact ? 'flex-wrap' : 'justify-end'}`} onClick={(e) => e.stopPropagation()}>
@@ -380,7 +436,9 @@ export default function SavedFacilities({ surveys = [], currentId, onOpen, onDel
     );
   };
 
-  const SnagDetail = ({ detail }) => (
+  const SnagDetail = ({ detail }) => {
+    const photosLoading = !!(detail && detail.photosLoading);
+    return (
     <>
       {detail === 'loading' && (
         <div className="flex items-center gap-2 text-slate-500 text-sm py-3">
@@ -419,6 +477,9 @@ export default function SavedFacilities({ surveys = [], currentId, onOpen, onDel
                         <span className="inline-flex items-center gap-1">
                           <Camera className="w-3 h-3" />
                           {item.photos.length} photo{item.photos.length === 1 ? '' : 's'}
+                          {photosLoading && !item.photos.some((p) => p.dataUrl) && (
+                            <Loader2 className="w-3 h-3 animate-spin text-slate-400" />
+                          )}
                         </span>
                       )}
                       {!!item.estimatedCost && (
@@ -456,7 +517,8 @@ export default function SavedFacilities({ surveys = [], currentId, onOpen, onDel
         )
       )}
     </>
-  );
+    );
+  };
 
   const pills = [
     { key: 'all', label: 'All', n: counts.all },
@@ -660,7 +722,7 @@ export default function SavedFacilities({ surveys = [], currentId, onOpen, onDel
                         </div>
                       </td>
                       <td className="py-3 pr-4"><TypeBadge facility={s.facility} /></td>
-                      <td className="py-3 pr-4"><StatusBadge status={s.status} /></td>
+                      <td className="py-3 pr-4"><StatusBadge s={s} /></td>
                       <td className="py-3 pr-4">
                         <span className="inline-flex items-start gap-1.5 text-xs text-slate-600">
                           <Calendar className="w-3.5 h-3.5 mt-0.5 text-slate-400 shrink-0" />
@@ -714,7 +776,7 @@ export default function SavedFacilities({ surveys = [], currentId, onOpen, onDel
                         <ClipboardList className="w-3 h-3" />
                         {snagCount ?? 0} snag{snagCount === 1 ? '' : 's'}
                       </span>
-                      <StatusBadge status={s.status} />
+                      <StatusBadge s={s} />
                       {s.id === currentId && (
                         <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-ocs-50 text-ocs-700 border border-ocs-200 shrink-0">
                           Open now
