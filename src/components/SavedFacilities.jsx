@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import {
   FileText, FileSpreadsheet, FolderOpen, CheckCircle2, Loader2, Trash2, CloudOff, RefreshCw,
   ChevronDown, ClipboardList, MapPin, Camera, DollarSign, Search, Calendar, Clock,
@@ -36,7 +36,7 @@ const FACILITY_FETCH_CONCURRENCY = 4;
  * day-to-day screen is the phone, and a 5-column table there would either
  * shrink past reading size or need sideways scrolling to reach the buttons.
  */
-export default function SavedFacilities({ surveys = [], currentId, onOpen, onDelete, onRefresh, onSyncNow, onSubmit }) {
+export default function SavedFacilities({ surveys = [], currentId, onOpen, onDelete, onRefresh, onSyncNow, onSubmit, focus }) {
   const [busy, setBusy] = useState(null);
   const [syncing, setSyncing] = useState(false);
   const [syncResult, setSyncResult] = useState('');
@@ -48,6 +48,23 @@ export default function SavedFacilities({ surveys = [], currentId, onOpen, onDel
   const [selected, setSelected] = useState([]); // facility ids ticked for the combined report
   const [progress, setProgress] = useState(null); // { done, total, building } while a combined report builds
   const [viewer, setViewer] = useState(null); // { photos, index, label, location } for the full-size photo
+  const panelRef = useRef(null);
+
+  /**
+   * Applies a stat tile the user tapped above: narrows or reorders this list to
+   * whatever that number counted, then brings the list into view. Keyed on
+   * `focus.nonce` so tapping the same tile twice still scrolls back to it.
+   */
+  useEffect(() => {
+    if (!focus || !focus.key) return;
+    if (focus.key === 'submitted') { setFilter('submitted'); setSort('newest'); }
+    else if (focus.key === 'draft') { setFilter('draft'); setSort('newest'); }
+    else if (focus.key === 'snags') { setFilter('all'); setSort('snags'); }
+    else if (focus.key === 'photos') { setFilter('all'); setSort('photos'); }
+    else { setFilter('all'); setSort('newest'); }
+    setQuery('');
+    panelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, [focus?.nonce, focus?.key]);
 
   const waiting = surveys.filter((s) => s.pendingSync).length;
 
@@ -94,6 +111,7 @@ export default function SavedFacilities({ surveys = [], currentId, onOpen, onDel
       if (sort === 'oldest') return new Date(a.updatedAt) - new Date(b.updatedAt);
       if (sort === 'name') return describe(a).localeCompare(describe(b));
       if (sort === 'snags') return (b.itemCount || 0) - (a.itemCount || 0);
+      if (sort === 'photos') return (b.photoCount || 0) - (a.photoCount || 0);
       return new Date(b.updatedAt) - new Date(a.updatedAt); // newest first
     });
     return rows;
@@ -540,7 +558,7 @@ export default function SavedFacilities({ surveys = [], currentId, onOpen, onDel
       : `Loading ${progress.done} of ${progress.total}…`;
 
   return (
-    <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+    <div ref={panelRef} className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden scroll-mt-4">
       {renderPhotoViewer()}
       <div className="px-4 sm:px-6 py-4 border-b border-slate-200 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
         <h3 className="text-base font-bold text-slate-800 whitespace-nowrap inline-flex items-center gap-2">
@@ -625,6 +643,7 @@ export default function SavedFacilities({ surveys = [], currentId, onOpen, onDel
             <option value="oldest">Oldest first</option>
             <option value="name">Name / ID</option>
             <option value="snags">Most snags</option>
+            <option value="photos">Most photos</option>
           </select>
         </label>
       </div>
@@ -700,6 +719,12 @@ export default function SavedFacilities({ surveys = [], currentId, onOpen, onDel
                                 <ClipboardList className="w-3 h-3" />
                                 {snagCount ?? 0} snag{snagCount === 1 ? '' : 's'}
                               </span>
+                              {!!s.photoCount && (
+                                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-violet-50 text-violet-700 border border-violet-200 inline-flex items-center gap-1 shrink-0">
+                                  <Camera className="w-3 h-3" />
+                                  {s.photoCount}
+                                </span>
+                              )}
                               {s.id === currentId && (
                                 <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-ocs-50 text-ocs-700 border border-ocs-200 shrink-0">
                                   Open now

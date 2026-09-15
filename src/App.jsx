@@ -125,6 +125,9 @@ export default function App({ currentUser = null, onSignOut } = {}) {
   }
   const [syncState, setSyncState] = useState(isCloudConfigured ? 'idle' : 'off');
   const [creatingFacility, setCreatingFacility] = useState(false);
+  // Which stat tile was last tapped. The nonce lets the same tile be tapped
+  // twice and still scroll the list back into view.
+  const [listFocus, setListFocus] = useState(null);
   const [online, setOnline] = useState(isOnline());
   const surveyRef = useRef(null);
   const pushTimeoutRef = useRef(null);
@@ -1357,6 +1360,7 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
                 facilities={facilitiesInProject}
                 onOpenReports={() => setView('reports')}
                 onAddFacility={handleAddFacilityToProject}
+                onFocusList={(key) => setListFocus({ key, nonce: Date.now() })}
               />
 
               {!facilitiesInProject.length && (
@@ -1376,6 +1380,7 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
                 onRefresh={refreshSurveyList}
                 onSyncNow={handleSyncNow}
                 onSubmit={handleSubmitFromList}
+                focus={listFocus}
               />
             </div>
           </main>

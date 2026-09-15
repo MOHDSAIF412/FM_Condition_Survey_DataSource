@@ -9,19 +9,21 @@ import { Building2, CheckCircle2, Clock, ClipboardList, Camera, MapPin, Briefcas
  * no "Overdue" tile because nothing in this app carries a due date, and a
  * permanently-zero tile would only look like a feature that was broken.
  */
-export default function ProjectHero({ project, facilities = [], onOpenReports, onAddFacility }) {
+export default function ProjectHero({ project, facilities = [], onOpenReports, onAddFacility, onFocusList }) {
   const total = facilities.length;
   const submitted = facilities.filter((f) => f.status === 'submitted').length;
   const inProgress = total - submitted;
   const snags = facilities.reduce((n, f) => n + (f.itemCount || 0), 0);
   const photos = facilities.reduce((n, f) => n + (f.photoCount || 0), 0);
 
+  // Each tile narrows the list underneath it to whatever the number counts, so
+  // "9 in progress" answers "which nine?" in one tap.
   const tiles = [
-    { label: 'Total Facilities', value: total, icon: Building2, tile: 'bg-indigo-500', wrap: 'from-indigo-50 to-indigo-100/40 border-indigo-100' },
-    { label: 'Submitted', value: submitted, icon: CheckCircle2, tile: 'bg-emerald-500', wrap: 'from-emerald-50 to-emerald-100/40 border-emerald-100' },
-    { label: 'In Progress', value: inProgress, icon: Clock, tile: 'bg-amber-500', wrap: 'from-amber-50 to-amber-100/40 border-amber-100' },
-    { label: 'Total Snags', value: snags, icon: ClipboardList, tile: 'bg-sky-500', wrap: 'from-sky-50 to-sky-100/40 border-sky-100' },
-    { label: 'Photos Attached', value: photos, icon: Camera, tile: 'bg-violet-500', wrap: 'from-violet-50 to-violet-100/40 border-violet-100' }
+    { key: 'all', label: 'Total Facilities', value: total, icon: Building2, tile: 'bg-indigo-500', wrap: 'from-indigo-50 to-indigo-100/40 border-indigo-100', hint: 'Show every facility' },
+    { key: 'submitted', label: 'Submitted', value: submitted, icon: CheckCircle2, tile: 'bg-emerald-500', wrap: 'from-emerald-50 to-emerald-100/40 border-emerald-100', hint: 'Show only submitted facilities' },
+    { key: 'draft', label: 'In Progress', value: inProgress, icon: Clock, tile: 'bg-amber-500', wrap: 'from-amber-50 to-amber-100/40 border-amber-100', hint: 'Show only facilities still in progress' },
+    { key: 'snags', label: 'Total Snags', value: snags, icon: ClipboardList, tile: 'bg-sky-500', wrap: 'from-sky-50 to-sky-100/40 border-sky-100', hint: 'Sort by most snags' },
+    { key: 'photos', label: 'Photos Attached', value: photos, icon: Camera, tile: 'bg-violet-500', wrap: 'from-violet-50 to-violet-100/40 border-violet-100', hint: 'Sort by most photos' }
   ];
 
   return (
@@ -120,9 +122,12 @@ export default function ProjectHero({ project, facilities = [], onOpenReports, o
             {tiles.map((t) => {
               const Icon = t.icon;
               return (
-                <div
+                <button
                   key={t.label}
-                  className={`rounded-2xl border bg-gradient-to-br ${t.wrap} px-4 py-3.5 flex items-center gap-3`}
+                  type="button"
+                  onClick={() => onFocusList && onFocusList(t.key)}
+                  title={t.hint}
+                  className={`text-left rounded-2xl border bg-gradient-to-br ${t.wrap} px-4 py-3.5 flex items-center gap-3 transition-[transform,box-shadow] duration-150 hover:shadow-md hover:-translate-y-0.5 active:translate-y-0 focus:outline-none focus:ring-2 focus:ring-ocs-500`}
                 >
                   <div className={`w-11 h-11 rounded-xl ${t.tile} text-white flex items-center justify-center shrink-0 shadow-sm`}>
                     <Icon className="w-5 h-5" />
@@ -135,7 +140,7 @@ export default function ProjectHero({ project, facilities = [], onOpenReports, o
                     </p>
                     <p className="text-2xl font-bold text-slate-900 leading-tight">{t.value}</p>
                   </div>
-                </div>
+                </button>
               );
             })}
           </div>
