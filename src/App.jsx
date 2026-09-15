@@ -13,6 +13,7 @@ import UserManagement from './components/UserManagement';
 import ChangePasswordModal from './components/ChangePasswordModal';
 import Breadcrumb from './components/Breadcrumb';
 import ProjectHero from './components/ProjectHero';
+import PhotoGallery from './components/PhotoGallery';
 import ReportDashboard from './components/ReportDashboard';
 import { createNewSurvey, calculateSurveyStats, facilityCode } from './types/survey';
 import {
@@ -1389,7 +1390,12 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
                 facilities={facilitiesInProject}
                 onOpenReports={() => setView('reports')}
                 onAddFacility={handleAddFacilityToProject}
-                onFocusList={(key) => setListFocus({ key, nonce: Date.now() })}
+                onFocusList={(key) => {
+                  // The photo count is the one tile with somewhere better to
+                  // go than a re-sorted list.
+                  if (key === 'photos') { setView('photos'); return; }
+                  setListFocus({ key, nonce: Date.now() });
+                }}
               />
 
               {!facilitiesInProject.length && (
@@ -1413,6 +1419,29 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
                 focus={listFocus}
               />
             </div>
+          </main>
+        </>
+      )}
+
+      {/* Every photo in the project, plus the snags carrying none. */}
+      {view === 'photos' && (
+        <>
+          <div className="bg-white border-b border-slate-200">
+            <div className="max-w-6xl mx-auto px-3 sm:px-6 py-2">
+              <Breadcrumb
+                project={activeProject}
+                moduleName="Photos"
+                onHome={handleBackToProjects}
+                onProject={() => setView('facilities')}
+              />
+            </div>
+          </div>
+          <main className="flex-1 w-full px-3 sm:px-8 pt-4 sm:pt-6 safe-area-content-pb md:pb-8">
+            <PhotoGallery
+              project={activeProject}
+              facilities={facilitiesInProject}
+              onOpenFacility={handleOpenSurvey}
+            />
           </main>
         </>
       )}

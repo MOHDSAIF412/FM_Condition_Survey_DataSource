@@ -82,7 +82,7 @@ async function uploadPhoto(surveyId, itemId, photo) {
 }
 
 /** Downloads a photo back into a data URL so the PDF/Excel code is unchanged. */
-async function downloadPhoto(storagePath) {
+export async function downloadPhoto(storagePath) {
   const { data, error } = await supabase.storage.from(PHOTO_BUCKET).download(storagePath);
   if (error) throw error;
 
@@ -449,6 +449,82 @@ async function countRowsBySurvey(table, surveyIds) {
       counts[row.survey_id] = (counts[row.survey_id] || 0) + 1;
     }
     if (!data || data.length < PAGE) return counts;
+  }
+}
+
+/**
+ * Every snag across the given facilities, each with its photos attached.
+ *
+ * Deliberately metadata only -- no image bytes. The gallery fetches those one
+ * tile at a time as they scroll into view; pulling all of them up front would
+ * be ~94MB for a project this size and would stall a phone on site.
+ *
+ * Returns { photos, snagsWithoutPhotos } because the second is the point: with
+ * hundreds of snags there is otherwise no way to notice that a P1 defect is
+ * going into a client report carrying no evidence at all.
+ */
+export async function listProjectEvidence(surveyIds = []) {
+  const empty = { photos: [], snagsWithoutPhotos: [] };
+  if (!isCloudConfigured || !surveyIds.length) return empty;
+
+  const [items, photoRows] = await Promise.all([
+    fetchAllPages('survey_items', 'id, survey_id, location, defect_description, priority, department, asset_name, position', surveyIds),
+    fetchAllPages('survey_photos', 'id, survey_id, item_id, storage_path, caption, name, taken_at', surveyIds)
+  ]);
+
+  const itemById = new Map(items.map((i) => [i.id, i]));
+  const photoCountByItem = new Map();
+  for (const p of photoRows) {
+    photoCountByItem.set(p.item_id, (photoCountByItem.get(p.item_id) || 0) + 1);
+  }
+
+  const photos = photoRows
+    .filter((p) => p.storage_path)
+    .map((p) => {
+      const item = itemById.get(p.item_id) || {};
+      return {
+        id: p.id,
+        surveyId: p.survey_id,
+        itemId: p.item_id,
+        storagePath: p.storage_path,
+        takenAt: p.taken_at,
+        location: item.location || '',
+        description: item.defect_description || '',
+        priority: item.priority || null,
+        department: item.department || 'GENERAL'
+      };
+    });
+
+  const snagsWithoutPhotos = items
+    .filter((i) => !photoCountByItem.get(i.id))
+    .map((i) => ({
+      id: i.id,
+      surveyId: i.survey_id,
+      location: i.location || '',
+      description: i.defect_description || '',
+      priority: i.priority || null,
+      department: i.department || 'GENERAL'
+    }));
+
+  return { photos, snagsWithoutPhotos };
+}
+
+/** Pages through one table for a set of surveys, same reason as the counts do. */
+async function fetchAllPages(table, columns, surveyIds) {
+  const out = [];
+  const PAGE = 1000;
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await supabase
+      .from(table)
+      .select(columns)
+      .in('survey_id', surveyIds)
+      .range(from, from + PAGE - 1);
+    if (error) {
+      console.warn(`Could not read ${table}:`, error.message);
+      return out;
+    }
+    out.push(...(data || []));
+    if (!data || data.length < PAGE) return out;
   }
 }
 

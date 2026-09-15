@@ -1,5 +1,5 @@
 import React from 'react';
-import { Home, Building2, FileText, Settings } from 'lucide-react';
+import { Home, Building2, Camera, FileText, Settings } from 'lucide-react';
 
 /**
  * Desktop-only navigation rail. Hidden below lg: the mobile survey flow
@@ -15,7 +15,10 @@ export default function Sidebar({ view, onNavigate, canOpenUsers, hasOpenProject
   // and on the project list it pointed at nothing.
   const items = [
     { key: 'projects', label: 'Dashboard', icon: Home },
-    ...(hasOpenProject ? [{ key: 'facilities', label: 'Facilities', icon: Building2 }] : []),
+    ...(hasOpenProject ? [
+      { key: 'facilities', label: 'Facilities', icon: Building2 },
+      { key: 'photos', label: 'Photos', icon: Camera }
+    ] : []),
     { key: 'reports', label: 'Reports', icon: FileText },
     ...(canOpenUsers ? [{ key: 'users', label: 'Settings', icon: Settings }] : [])
   ];
