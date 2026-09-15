@@ -90,8 +90,11 @@ function openDB() {
       if (!db.objectStoreNames.contains(STORE_SETTINGS)) {
         db.createObjectStore(STORE_SETTINGS, { keyPath: 'key' });
       }
-      // Created here as well as in syncQueue.js: whichever module opens the
-      // database first runs the upgrade, so both must know the full schema.
+      // Left in place although nothing writes to it any more: the module that
+      // used it was never wired up and has been removed, but devices already
+      // hold a database at this version containing the store. Dropping it from
+      // the schema would mean a version bump, and an IndexedDB upgrade is not
+      // something to risk against a phone holding unsynced survey work.
       if (!db.objectStoreNames.contains('sync_queue')) {
         const q = db.createObjectStore('sync_queue', { keyPath: 'id' });
         q.createIndex('status', 'status');
