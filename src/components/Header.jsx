@@ -44,7 +44,9 @@ export default function Header({
 }) {
   // Connectivity wins over sync state: if there is no connection, saying
   // "Synced" would be a lie even when the last push did succeed.
-  const sync = !online
+  // A refused session is reported even while offline: it is the reason nothing
+  // will upload, and it does not resolve by finding signal.
+  const sync = (!online && syncState !== 'unauthorized')
     ? { label: pendingCount > 0 ? `Offline - ${pendingCount} waiting` : 'Offline',
         cls: 'bg-amber-50 text-amber-700 border-amber-200', dot: 'bg-amber-500' }
     : ({
@@ -53,7 +55,11 @@ export default function Header({
         syncing: { label: pendingCount > 0 ? `Syncing ${pendingCount}...` : 'Syncing...',
                    cls: 'bg-sky-50 text-sky-700 border-sky-200', dot: 'bg-sky-500' },
         synced:  { label: 'All data synced',  cls: 'bg-emerald-50 text-emerald-700 border-emerald-200', dot: 'bg-emerald-500' },
-        offline: { label: 'Waiting to sync',  cls: 'bg-amber-50 text-amber-700 border-amber-200', dot: 'bg-amber-500' }
+        offline: { label: 'Waiting to sync',  cls: 'bg-amber-50 text-amber-700 border-amber-200', dot: 'bg-amber-500' },
+        // Distinct from "waiting": nothing will ever upload until they sign in
+        // again, so this must not look like a patchy connection.
+        unauthorized: { label: 'Sign in again to sync',
+                        cls: 'bg-rose-50 text-rose-700 border-rose-200', dot: 'bg-rose-500' }
       }[syncState] || { label: 'Online', cls: 'bg-emerald-50 text-emerald-700 border-emerald-200', dot: 'bg-emerald-500' });
 
   const [showMenu, setShowMenu] = useState(false);

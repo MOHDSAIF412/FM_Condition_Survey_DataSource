@@ -124,6 +124,28 @@ export default function App({ currentUser = null, onSignOut } = {}) {
     skipLocalSaveRef.current = true;
     skipCloudPushRef.current = true;
   }
+
+  /**
+   * Tells a refused sign-in apart from a missing signal.
+   *
+   * Since the database started requiring a signed-in user, an expired session
+   * fails the push outright. Reporting that as "waiting to sync" would tell a
+   * surveyor their work is safely queued when in fact nothing will ever upload
+   * until they sign in again.
+   */
+  function isAuthFailure(err) {
+    const code = String(err?.code || '');
+    const msg = String(err?.message || err || '').toLowerCase();
+    return err?.status === 401
+      || code === '42501' || code === 'PGRST301'
+      || msg.includes('jwt') || msg.includes('not authenticated')
+      || msg.includes('row-level security') || msg.includes('permission denied');
+  }
+
+  /** One place that decides which unhappy sync state the header should show. */
+  function reportSyncFailure(err) {
+    setSyncState(isAuthFailure(err) ? 'unauthorized' : 'offline');
+  }
   const [syncState, setSyncState] = useState(isCloudConfigured ? 'idle' : 'off');
   const [creatingFacility, setCreatingFacility] = useState(false);
   // Admins hold everything; an ordinary surveyor holds only what was ticked
@@ -159,7 +181,7 @@ export default function App({ currentUser = null, onSignOut } = {}) {
             if (surveyRef.current) await pushAndSettle();
           } catch (err) {
             console.info('Reconnect sync deferred:', err.message);
-            setSyncState('offline');
+            reportSyncFailure(err);
           }
           try {
             await flushPendingSurveys();
@@ -555,6 +577,7 @@ export default function App({ currentUser = null, onSignOut } = {}) {
       } catch (err) {
         // Offline is the normal case on site, not an error worth shouting about.
         console.info('Cloud push deferred:', err.message);
+        reportSyncFailure(err);
         setSyncState('offline');
       }
     }, 1500);
@@ -647,7 +670,7 @@ export default function App({ currentUser = null, onSignOut } = {}) {
         setSyncState('synced');
       } catch (err) {
         console.info('Submitted facility will upload when there is a connection:', err.message);
-        setSyncState('offline');
+        reportSyncFailure(err);
       }
     }
     refreshSurveyList();
@@ -741,7 +764,7 @@ It stays available in the facility list for reports.`)) {
         setSyncState('synced');
       } catch (err) {
         console.info('Submitted facility will upload when there is a connection:', err.message);
-        setSyncState('offline');
+        reportSyncFailure(err);
       }
     }
 
