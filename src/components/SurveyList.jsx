@@ -16,7 +16,8 @@ export default function SurveyList({
   items = [], 
   onAddItem, 
   onUpdateItem, 
-  onDeleteItem
+  onDeleteItem,
+  canDelete = true
 }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedDept, setSelectedDept] = useState('ALL');
@@ -227,6 +228,7 @@ export default function SurveyList({
               onUpdateItem={onUpdateItem}
               onDelete={onDeleteItem}
               onDeleteItem={onDeleteItem}
+              canDelete={canDelete}
               onAddNextAsset={handleAddNewAsset}
               recentLocations={recentLocations}
             />

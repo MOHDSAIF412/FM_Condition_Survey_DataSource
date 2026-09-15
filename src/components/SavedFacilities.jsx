@@ -36,7 +36,7 @@ const FACILITY_FETCH_CONCURRENCY = 4;
  * day-to-day screen is the phone, and a 5-column table there would either
  * shrink past reading size or need sideways scrolling to reach the buttons.
  */
-export default function SavedFacilities({ surveys = [], currentId, onOpen, onDelete, onRefresh, onSyncNow, onSubmit, focus }) {
+export default function SavedFacilities({ surveys = [], currentId, onOpen, onDelete, onRefresh, onSyncNow, onSubmit, focus, canDownloadReports = true }) {
   const [busy, setBusy] = useState(null);
   const [syncing, setSyncing] = useState(false);
   const [syncResult, setSyncResult] = useState('');
@@ -353,6 +353,8 @@ export default function SavedFacilities({ surveys = [], currentId, onOpen, onDel
           <FolderOpen className="w-3.5 h-3.5" /> Open
         </button>
       )}
+      {canDownloadReports && (
+      <>
       <button
         type="button"
         disabled={busy !== null}
@@ -371,6 +373,8 @@ export default function SavedFacilities({ surveys = [], currentId, onOpen, onDel
         {busy === `${s.id}:excel` ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileSpreadsheet className="w-3.5 h-3.5" />}
         Excel
       </button>
+      </>
+      )}
       {onDelete && (
         <button
           type="button"
@@ -584,7 +588,7 @@ export default function SavedFacilities({ surveys = [], currentId, onOpen, onDel
           >
             Refresh
           </button>
-          {surveys.length > 1 && (
+          {surveys.length > 1 && canDownloadReports && (
             <button
               type="button"
               disabled={busy !== null}

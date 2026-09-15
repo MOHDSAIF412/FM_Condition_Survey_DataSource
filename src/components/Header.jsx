@@ -13,6 +13,9 @@ import {
   User,
 } from 'lucide-react';
 
+const MENU_ITEM = 'w-full text-left px-4 py-2.5 text-xs hover:bg-slate-50 flex items-center gap-2';
+const MENU_HEADING = 'px-4 pt-2 pb-1 text-[10px] font-bold uppercase tracking-wide text-slate-400';
+
 /**
  * Top bar: white surface, app title with its current context, connectivity,
  * notifications, and the account menu.
@@ -36,7 +39,8 @@ export default function Header({
   showReports = true,
   onOpenUsers,
   onChangePassword,
-  onSignOut
+  onSignOut,
+  canDownloadReports = true
 }) {
   // Connectivity wins over sync state: if there is no connection, saying
   // "Synced" would be a lie even when the last push did succeed.
@@ -168,31 +172,46 @@ export default function Header({
             {showMenu && (
               <>
                 <div className="fixed inset-0 z-40" onClick={() => setShowMenu(false)} />
-                <div className="absolute right-0 mt-2 w-64 bg-white border border-slate-200 rounded-xl shadow-xl py-2 z-50 text-slate-700">
+                {/* Grouped under headings rather than one flat list. The
+                    destructive "clear survey" used to sit between backup and
+                    Manage Users, a thumb's width from things used daily; it now
+                    lives on its own at the bottom, below everything routine. */}
+                <div className="absolute right-0 mt-2 w-72 bg-white border border-slate-200 rounded-xl shadow-xl py-1.5 z-50 text-slate-700 max-h-[80vh] overflow-y-auto">
                   {currentUser && (
-                    <div className="px-4 py-2 border-b border-slate-100 mb-1">
+                    <div className="px-4 py-3 border-b border-slate-100">
                       <p className="text-sm font-bold text-slate-900 truncate">{displayName}</p>
                       <p className="text-[11px] text-slate-500 truncate">{currentUser.email}</p>
+                      <span className={`inline-block mt-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                        currentUser.role === 'admin'
+                          ? 'bg-ocs-50 text-ocs-700 border-ocs-200'
+                          : 'bg-slate-100 text-slate-600 border-slate-200'
+                      }`}>
+                        {currentUser.role === 'admin' ? 'Administrator' : 'Surveyor'}
+                      </span>
                     </div>
                   )}
 
-                  <button
-                    onClick={() => { setShowMenu(false); if (onExportExcel) onExportExcel(); }}
-                    className="w-full text-left px-4 py-2 text-xs hover:bg-slate-50 flex items-center gap-2 font-medium text-emerald-700"
-                  >
-                    <Download className="w-4 h-4" />
-                    <span>Download Excel Report (.xlsx)</span>
-                  </button>
+                  <p className={MENU_HEADING}>This facility</p>
+
+                  {canDownloadReports && (
+                    <button
+                      onClick={() => { setShowMenu(false); if (onExportExcel) onExportExcel(); }}
+                      className={MENU_ITEM + ' text-emerald-700 font-medium'}
+                    >
+                      <Download className="w-4 h-4" />
+                      <span>Download Excel Report (.xlsx)</span>
+                    </button>
+                  )}
 
                   <button
                     onClick={() => { setShowMenu(false); onExportJSON(); }}
-                    className="w-full text-left px-4 py-2 text-xs hover:bg-slate-50 flex items-center gap-2"
+                    className={MENU_ITEM}
                   >
                     <Download className="w-4 h-4 text-slate-400" />
                     <span>Backup Survey (JSON)</span>
                   </button>
 
-                  <label className="w-full text-left px-4 py-2 text-xs hover:bg-slate-50 flex items-center gap-2 cursor-pointer">
+                  <label className={MENU_ITEM + ' cursor-pointer'}>
                     <Upload className="w-4 h-4 text-slate-400" />
                     <span>Restore Survey (JSON)</span>
                     <input
@@ -203,34 +222,29 @@ export default function Header({
                     />
                   </label>
 
-                  <div className="border-t border-slate-100 my-1" />
-
-                  <button
-                    onClick={() => { setShowMenu(false); onReset(); }}
-                    className="w-full text-left px-4 py-2 text-xs hover:bg-rose-50 text-rose-600 flex items-center gap-2"
-                  >
-                    <RotateCcw className="w-4 h-4" />
-                    <span>Start Fresh / Clear Survey</span>
-                  </button>
+                  {currentUser && currentUser.role === 'admin' && onOpenUsers && (
+                    <>
+                      <div className="border-t border-slate-100 my-1" />
+                      <p className={MENU_HEADING}>Administration</p>
+                      <button
+                        onClick={() => { setShowMenu(false); onOpenUsers(); }}
+                        className={MENU_ITEM}
+                      >
+                        <Users className="w-4 h-4 text-slate-400" />
+                        <span>Manage Users &amp; Access</span>
+                      </button>
+                    </>
+                  )}
 
                   {currentUser && (
                     <>
                       <div className="border-t border-slate-100 my-1" />
-
-                      {currentUser.role === 'admin' && onOpenUsers && (
-                        <button
-                          onClick={() => { setShowMenu(false); onOpenUsers(); }}
-                          className="w-full text-left px-4 py-2 text-xs hover:bg-slate-50 flex items-center gap-2"
-                        >
-                          <Users className="w-4 h-4 text-slate-400" />
-                          <span>Manage Users</span>
-                        </button>
-                      )}
+                      <p className={MENU_HEADING}>Account</p>
 
                       {onChangePassword && (
                         <button
                           onClick={() => { setShowMenu(false); onChangePassword(); }}
-                          className="w-full text-left px-4 py-2 text-xs hover:bg-slate-50 flex items-center gap-2"
+                          className={MENU_ITEM}
                         >
                           <KeyRound className="w-4 h-4 text-slate-400" />
                           <span>Change Password</span>
@@ -240,14 +254,25 @@ export default function Header({
                       {onSignOut && (
                         <button
                           onClick={() => { setShowMenu(false); onSignOut(); }}
-                          className="w-full text-left px-4 py-2 text-xs hover:bg-rose-50 text-rose-600 flex items-center gap-2"
+                          className={MENU_ITEM}
                         >
-                          <LogOut className="w-4 h-4" />
+                          <LogOut className="w-4 h-4 text-slate-400" />
                           <span>Sign Out</span>
                         </button>
                       )}
                     </>
                   )}
+
+                  <div className="border-t border-slate-100 mt-1 pt-1">
+                    <p className={MENU_HEADING + ' text-rose-400'}>Careful</p>
+                    <button
+                      onClick={() => { setShowMenu(false); onReset(); }}
+                      className="w-full text-left px-4 py-2.5 text-xs hover:bg-rose-50 text-rose-600 flex items-center gap-2"
+                    >
+                      <RotateCcw className="w-4 h-4" />
+                      <span>Start Fresh / Clear Survey</span>
+                    </button>
+                  </div>
                 </div>
               </>
             )}

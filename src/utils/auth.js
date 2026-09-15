@@ -64,7 +64,7 @@ export async function getMyProfile() {
 
   const { data, error } = await supabase
     .from('fm_survey_users')
-    .select('id, email, full_name, role, is_active, created_at')
+    .select('id, email, full_name, role, is_active, created_at, permissions')
     .eq('id', auth.user.id)
     .maybeSingle();
 
@@ -73,6 +73,17 @@ export async function getMyProfile() {
     return null;
   }
   return data;
+}
+
+/**
+ * Whether a user may do something. Admins hold everything: an administrator
+ * locked out of deleting a snag would just change their own permission back,
+ * so the tick boxes only ever describe ordinary surveyors.
+ */
+export function can(user, permission) {
+  if (!user) return false;
+  if (user.role === 'admin') return true;
+  return user.permissions?.[permission] === true;
 }
 
 /**
@@ -112,4 +123,43 @@ export async function createUser({ email, fullName, role, password }) {
 
 export async function deleteUser(userId) {
   return callAdminUsers('DELETE', { userId });
+}
+
+/**
+ * Permissions for every user, keyed by id.
+ *
+ * Read straight from the table rather than through the admin-users function:
+ * the row-level policy already limits this to an admin (or your own row), so
+ * there is nothing here a caller could not already see.
+ */
+export async function listUserPermissions() {
+  if (!isCloudConfigured) return {};
+  const { data, error } = await supabase
+    .from('fm_survey_users')
+    .select('id, role, permissions');
+  if (error) {
+    console.warn('[auth] could not load permissions:', error.message);
+    return {};
+  }
+  const byId = {};
+  for (const row of data || []) byId[row.id] = { role: row.role, permissions: row.permissions || {} };
+  return byId;
+}
+
+/** Grants or revokes one permission. Admins already hold everything. */
+export async function setUserPermission(userId, key, granted) {
+  const { data: current, error: readErr } = await supabase
+    .from('fm_survey_users')
+    .select('permissions')
+    .eq('id', userId)
+    .maybeSingle();
+  if (readErr) throw readErr;
+
+  const next = { ...(current?.permissions || {}), [key]: granted };
+  const { error } = await supabase
+    .from('fm_survey_users')
+    .update({ permissions: next })
+    .eq('id', userId);
+  if (error) throw error;
+  return next;
 }

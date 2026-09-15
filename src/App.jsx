@@ -35,6 +35,7 @@ import {
   deleteSurveyPermanently
 } from './utils/cloudSync';
 import { isCloudConfigured } from './utils/supabaseClient';
+import { can } from './utils/auth';
 import { initNetworkMonitor, onNetworkChange, isOnline } from './utils/network';
 import { PHOTO_SYNC, consumeCaptureReturn } from './utils/photoCapture';
 import {
@@ -125,6 +126,10 @@ export default function App({ currentUser = null, onSignOut } = {}) {
   }
   const [syncState, setSyncState] = useState(isCloudConfigured ? 'idle' : 'off');
   const [creatingFacility, setCreatingFacility] = useState(false);
+  // Admins hold everything; an ordinary surveyor holds only what was ticked
+  // for them in Manage Users.
+  const mayDeleteSnags = can(currentUser, 'delete_snags');
+  const mayDownloadReports = can(currentUser, 'download_reports');
   // Which stat tile was last tapped. The nonce lets the same tile be tapped
   // twice and still scroll the list back into view.
   const [listFocus, setListFocus] = useState(null);
@@ -1274,6 +1279,7 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
         online={online}
         pendingCount={pendingPhotoCount}
         currentUser={currentUser}
+        canDownloadReports={mayDownloadReports}
         // On the hub screens the subtitle is the project you are in, not a
         // facility -- "New Facility Assessment" there would be misleading.
         contextLabel={
@@ -1376,7 +1382,8 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
                 surveys={facilitiesInProject}
                 currentId={survey?.id}
                 onOpen={handleOpenSurvey}
-                onDelete={handleDeleteSurvey}
+                onDelete={mayDeleteSnags ? handleDeleteSurvey : null}
+                canDownloadReports={mayDownloadReports}
                 onRefresh={refreshSurveyList}
                 onSyncNow={handleSyncNow}
                 onSubmit={handleSubmitFromList}
@@ -1507,6 +1514,7 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
             onAddItem={handleAddItem}
             onUpdateItem={handleUpdateItem}
             onDeleteItem={handleDeleteItem}
+            canDelete={mayDeleteSnags}
           />
         </TabPanel>
 
@@ -1523,7 +1531,8 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
               surveys={surveyList}
               currentId={survey?.id}
               onOpen={handleOpenSurvey}
-              onDelete={handleDeleteSurvey}
+              onDelete={mayDeleteSnags ? handleDeleteSurvey : null}
+              canDownloadReports={mayDownloadReports}
               onRefresh={refreshSurveyList}
               onSyncNow={handleSyncNow}
               onSubmit={handleSubmitFromList}

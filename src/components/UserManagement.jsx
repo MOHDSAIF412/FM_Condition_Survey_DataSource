@@ -1,6 +1,16 @@
 import React, { useState, useEffect } from 'react';
-import { UserPlus, Trash2, Loader2, ShieldCheck, User, Copy, Check, AlertCircle } from 'lucide-react';
-import { listUsers, createUser, deleteUser } from '../utils/auth';
+import { UserPlus, Trash2, Loader2, ShieldCheck, User, Copy, Check, X, AlertCircle } from 'lucide-react';
+import { listUsers, createUser, deleteUser, listUserPermissions, setUserPermission } from '../utils/auth';
+
+/**
+ * What an ordinary surveyor can be granted. Deliberately short: every entry
+ * here is something that destroys work or leaves the building as a client
+ * document, and a long list of switches nobody understands is worse than none.
+ */
+const PERMISSIONS = [
+  { key: 'delete_snags', label: 'Delete snags', help: 'remove snags and photos from a facility' },
+  { key: 'download_reports', label: 'Download reports', help: 'generate client-facing PDF and Excel reports' }
+];
 
 /**
  * Admin-only. The server (the admin-users Edge Function) enforces "only an
@@ -17,16 +27,33 @@ export default function UserManagement({ myId }) {
   const [justCreated, setJustCreated] = useState(null); // { email, password }
   const [copied, setCopied] = useState(false);
   const [deletingId, setDeletingId] = useState(null);
+  const [perms, setPerms] = useState({});      // userId -> { role, permissions }
+  const [savingKey, setSavingKey] = useState(null);
 
   const refresh = async () => {
     setLoading(true);
     setError('');
     try {
-      setUsers(await listUsers());
+      const [list, permissions] = await Promise.all([listUsers(), listUserPermissions()]);
+      setUsers(list);
+      setPerms(permissions);
     } catch (err) {
       setError(err.message || 'Could not load users.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const togglePermission = async (userId, key, granted) => {
+    setSavingKey(`${userId}:${key}`);
+    setError('');
+    try {
+      const next = await setUserPermission(userId, key, granted);
+      setPerms((prev) => ({ ...prev, [userId]: { ...(prev[userId] || {}), permissions: next } }));
+    } catch (err) {
+      setError(err.message || 'Could not change that permission.');
+    } finally {
+      setSavingKey(null);
     }
   };
 
@@ -212,6 +239,44 @@ export default function UserManagement({ myId }) {
                     )}
                   </div>
                   <p className="text-[11px] text-slate-500 mt-0.5">{u.email}</p>
+
+                  {/* What this person is allowed to do, shown as the current
+                      state rather than hidden behind an edit screen. An admin
+                      holds everything by definition, so there is nothing to
+                      tick for them. */}
+                  <div className="flex items-center gap-2 mt-2 flex-wrap">
+                    {u.role === 'admin' ? (
+                      <span className="text-[11px] text-slate-400 italic">
+                        Administrator — full access to everything
+                      </span>
+                    ) : (
+                      PERMISSIONS.map((p) => {
+                        const granted = perms[u.id]?.permissions?.[p.key] === true;
+                        const busy = savingKey === `${u.id}:${p.key}`;
+                        return (
+                          <button
+                            key={p.key}
+                            type="button"
+                            disabled={busy}
+                            onClick={() => togglePermission(u.id, p.key, !granted)}
+                            title={granted ? `Revoke: ${p.help}` : `Grant: ${p.help}`}
+                            className={`px-2.5 py-1 rounded-full text-[11px] font-bold border inline-flex items-center gap-1.5 transition-colors disabled:opacity-50 ${
+                              granted
+                                ? 'bg-emerald-50 text-emerald-700 border-emerald-300 hover:bg-emerald-100'
+                                : 'bg-slate-50 text-slate-500 border-slate-200 hover:bg-slate-100'
+                            }`}
+                          >
+                            {busy
+                              ? <Loader2 className="w-3 h-3 animate-spin" />
+                              : granted
+                                ? <Check className="w-3 h-3" />
+                                : <X className="w-3 h-3" />}
+                            {p.label}
+                          </button>
+                        );
+                      })
+                    )}
+                  </div>
                 </div>
 
                 {u.id !== myId && (

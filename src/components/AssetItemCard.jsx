@@ -39,6 +39,7 @@ function AssetItemCard({
   onUpdate, 
   onUpdateItem,
   onDelete, 
+  canDelete = true,
   onDeleteItem,
   onAddNextAsset,
   recentLocations = []
@@ -237,7 +238,9 @@ function AssetItemCard({
             </span>
           )}
 
-          {/* Quick Delete in Card Header */}
+          {/* Quick Delete in Card Header. Absent entirely when this surveyor
+              has not been granted delete access. */}
+          {canDelete && (
           <button
             type="button"
             onClick={(e) => {
@@ -249,6 +252,7 @@ function AssetItemCard({
           >
             <Trash2 className="w-4 h-4 text-rose-500" />
           </button>
+          )}
 
           <button 
             type="button"
@@ -577,6 +581,7 @@ function AssetItemCard({
 
           {/* Card Bottom Actions: NEXT ASSET BUTTON & DELETE */}
           <div className="pt-3 flex items-center justify-between border-t border-slate-100 flex-wrap gap-2">
+            {canDelete ? (
             <button
               type="button"
               onClick={handleDelete}
@@ -586,6 +591,7 @@ function AssetItemCard({
               <Trash2 className="w-4 h-4 text-rose-500" />
               <span>Delete Snag</span>
             </button>
+            ) : <span />}
 
             {/* Next Asset Button (inherits location) */}
             <button
