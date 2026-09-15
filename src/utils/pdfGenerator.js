@@ -1,5 +1,7 @@
-import jsPDF from 'jspdf';
-import 'jspdf-autotable';
+/* jsPDF and its autotable plugin are loaded on demand inside
+   generateSurveyPDF, not imported here: between them and ExcelJS they were the
+   bulk of the bundle every surveyor downloaded before they could record a
+   single snag. */
 import { PRIORITY_LEVELS, DEPARTMENTS, calculateSurveyStats, snagLabel } from '../types/survey';
 import { OCS_LOGO_TRIMMED, OCS_LOGO_WHITE, OCS_LOGO_TRIMMED_RATIO } from '../assets/logoTrimmed';
 import { formatMoney } from './currency';
@@ -48,6 +50,13 @@ async function getSafeImageDataUrl(dataUrl) {
  * Generates an executive Facilities Management condition assessment report
  */
 export async function generateSurveyPDF(survey, selectedFacility = 'ALL') {
+  // autotable patches jsPDF's prototype, so it must finish loading before the
+  // document is constructed or doc.autoTable would not exist.
+  const [{ default: jsPDF }] = await Promise.all([
+    import('jspdf'),
+    import('jspdf-autotable')
+  ]);
+
   const doc = new jsPDF({
     orientation: 'portrait',
     unit: 'mm',

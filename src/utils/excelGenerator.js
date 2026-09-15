@@ -1,4 +1,8 @@
-import ExcelJS from 'exceljs';
+/* ExcelJS is loaded on demand inside generateSurveyExcel rather than imported
+   at the top. It is one of the largest things the app depends on, and importing
+   it here put the whole spreadsheet engine into the bundle every surveyor
+   downloads on first open -- including the ones who never build a report that
+   day, on a phone, on site. */
 import { PRIORITY_LEVELS, DEPARTMENTS, calculateSurveyStats, snagLabel } from '../types/survey.js';
 import { OCS_LOGO_BASE64 } from '../assets/logoDataUrl.js';
 import { saveBlob } from './fileSaver.js';
@@ -226,6 +230,7 @@ export async function generateSurveyExcel(input, selectedFacility = 'ALL') {
   const facility = groups[0]?.facility || {};
   const googleLoc = facility.googleLocation || {};
 
+  const ExcelJS = (await import('exceljs')).default;
   const workbook = new ExcelJS.Workbook();
   workbook.creator = 'FM Condition Survey Engine';
   workbook.lastModifiedBy = facility.surveyorName || 'Surveyor';
