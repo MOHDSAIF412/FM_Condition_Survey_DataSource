@@ -24,6 +24,20 @@ const TYPE_ICONS = {
 const FACILITY_FETCH_CONCURRENCY = 4;
 
 /**
+ * The date a row is both shown and sorted by.
+ *
+ * Must stay the submitted date where there is one. Sorting on `updatedAt`
+ * alone put facilities at the top of "Newest first" that the row itself
+ * described as weeks old: every re-sync stamps `updated_at`, so a facility
+ * submitted on the 8th but pushed again on the 15th sorted as the 15th while
+ * reading "Submitted 08/09".
+ */
+function sortDate(s) {
+  const t = Date.parse(s?.submittedAt || s?.updatedAt || '');
+  return Number.isNaN(t) ? 0 : t;
+}
+
+/**
  * Every facility that has been saved, expandable to its snag list, with a
  * report download per facility.
  *
@@ -108,11 +122,11 @@ export default function SavedFacilities({ surveys = [], currentId, onOpen, onDel
     });
 
     rows = [...rows].sort((a, b) => {
-      if (sort === 'oldest') return new Date(a.updatedAt) - new Date(b.updatedAt);
+      if (sort === 'oldest') return sortDate(a) - sortDate(b);
       if (sort === 'name') return describe(a).localeCompare(describe(b));
       if (sort === 'snags') return (b.itemCount || 0) - (a.itemCount || 0);
       if (sort === 'photos') return (b.photoCount || 0) - (a.photoCount || 0);
-      return new Date(b.updatedAt) - new Date(a.updatedAt); // newest first
+      return sortDate(b) - sortDate(a); // newest first
     });
     return rows;
   }, [surveys, query, filter, sort, currentId]);
