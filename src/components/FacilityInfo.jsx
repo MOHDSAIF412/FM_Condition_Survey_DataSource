@@ -135,10 +135,11 @@ export default function FacilityInfo({ facility = {}, onChange, onCreate, creati
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
           <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">
+            <label htmlFor="facility-name" className="block text-xs font-semibold text-slate-700 mb-1">
               Facilities Name / Complex Name *
             </label>
             <input
+              id="facility-name"
               type="text"
               /* Bound to facilityName alone. It used to fall back to
                  `|| facility.buildingName`, so clearing the field made it
@@ -157,10 +158,11 @@ export default function FacilityInfo({ facility = {}, onChange, onCreate, creati
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">
+            <label htmlFor="facility-type" className="block text-xs font-semibold text-slate-700 mb-1">
               Facility Type
             </label>
             <select
+              id="facility-type"
               value={facility.facilityType || ''}
               onChange={(e) => updateField('facilityType', e.target.value)}
               className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-sky-500 text-sm bg-white"
@@ -173,10 +175,11 @@ export default function FacilityInfo({ facility = {}, onChange, onCreate, creati
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">
+            <label htmlFor="facility-gia" className="block text-xs font-semibold text-slate-700 mb-1">
               Gross Internal Area (GIA)
             </label>
             <input
+              id="facility-gia"
               type="text"
               value={facility.grossInternalArea || ''}
               onChange={(e) => updateField('grossInternalArea', e.target.value)}
@@ -260,11 +263,12 @@ export default function FacilityInfo({ facility = {}, onChange, onCreate, creati
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="sm:col-span-2">
-            <label className="block text-xs font-semibold text-slate-700 mb-1">
+            <label htmlFor="facility-address" className="block text-xs font-semibold text-slate-700 mb-1">
               Google Maps Location Address
             </label>
             <div className="relative">
               <input
+              id="facility-address"
                 type="text"
                 value={googleLoc.address || facility.address || ''}
                 onChange={(e) => {
@@ -278,10 +282,11 @@ export default function FacilityInfo({ facility = {}, onChange, onCreate, creati
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">
+            <label htmlFor="facility-lat" className="block text-xs font-semibold text-slate-700 mb-1">
               GPS Latitude
             </label>
             <input
+              id="facility-lat"
               type="text"
               value={googleLoc.latitude || ''}
               onChange={(e) => updateGoogleLocation('latitude', e.target.value)}
@@ -290,10 +295,11 @@ export default function FacilityInfo({ facility = {}, onChange, onCreate, creati
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">
+            <label htmlFor="facility-lng" className="block text-xs font-semibold text-slate-700 mb-1">
               GPS Longitude
             </label>
             <input
+              id="facility-lng"
               type="text"
               value={googleLoc.longitude || ''}
               onChange={(e) => updateGoogleLocation('longitude', e.target.value)}
@@ -330,10 +336,11 @@ export default function FacilityInfo({ facility = {}, onChange, onCreate, creati
         </h3>
 
         <div>
-          <label className="block text-xs font-semibold text-slate-700 mb-1">
+          <label htmlFor="facility-scope" className="block text-xs font-semibold text-slate-700 mb-1">
             Audit Scope Description
           </label>
           <textarea
+              id="facility-scope"
             rows={3}
             value={facility.scopeNotes || ''}
             onChange={(e) => updateField('scopeNotes', e.target.value)}

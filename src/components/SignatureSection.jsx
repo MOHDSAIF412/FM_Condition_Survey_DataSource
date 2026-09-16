@@ -202,10 +202,10 @@ export default function SignatureSection({ signatures, onChange, facility, onOpe
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">
+            <label htmlFor="surveyor-name" className="block text-xs font-semibold text-slate-700 mb-1">
               Surveyor Full Name & Credentials
             </label>
-            <input
+            <input id="surveyor-name"
               type="text"
               value={signatures.surveyor?.name || facility.surveyorName || ''}
               onChange={(e) => updateSurveyor('name', e.target.value)}
@@ -214,11 +214,11 @@ export default function SignatureSection({ signatures, onChange, facility, onOpe
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">
+            <label htmlFor="surveyor-date" className="block text-xs font-semibold text-slate-700 mb-1">
               Sign-Off Date
             </label>
             <div className="relative">
-              <input
+              <input id="surveyor-date"
                 type="date"
                 value={signatures.surveyor?.date || facility.surveyDate || ''}
                 onChange={(e) => updateSurveyor('date', e.target.value)}
@@ -245,10 +245,10 @@ export default function SignatureSection({ signatures, onChange, facility, onOpe
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">
+            <label htmlFor="client-name" className="block text-xs font-semibold text-slate-700 mb-1">
               Client / Manager Full Name
             </label>
-            <input
+            <input id="client-name"
               type="text"
               value={signatures.client?.name || facility.facilityManager || facility.clientName || ''}
               onChange={(e) => updateClient('name', e.target.value)}
@@ -257,11 +257,11 @@ export default function SignatureSection({ signatures, onChange, facility, onOpe
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">
+            <label htmlFor="client-date" className="block text-xs font-semibold text-slate-700 mb-1">
               Receipt Date
             </label>
             <div className="relative">
-              <input
+              <input id="client-date"
                 type="date"
                 value={signatures.client?.date || facility.surveyDate || ''}
                 onChange={(e) => updateClient('date', e.target.value)}

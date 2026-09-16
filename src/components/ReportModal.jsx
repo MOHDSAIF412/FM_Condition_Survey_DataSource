@@ -30,11 +30,13 @@ import { formatMoney } from '../utils/currency';
 import { hydratePhotos } from '../utils/cloudSync';
 import { confirmReportReady } from '../utils/reportCompleteness';
 import NoReportAccess from './NoReportAccess';
+import { useEscapeKey } from '../utils/useEscapeKey';
 
 export default function ReportModal({ survey = {}, onClose, canDownloadReports = true }) {
   const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
   const [isGeneratingExcel, setIsGeneratingExcel] = useState(false);
   const [selectedFacility, setSelectedFacility] = useState('ALL');
+  useEscapeKey(() => { if (!isGeneratingPDF && !isGeneratingExcel) onClose?.(); });
 
   const allItems = survey?.items || [];
 
@@ -106,7 +108,12 @@ export default function ReportModal({ survey = {}, onClose, canDownloadReports =
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-900/80 backdrop-blur-sm overflow-y-auto flex flex-col items-center justify-start p-2 sm:p-6 print:p-0 print:bg-white">
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Audit report preview"
+      className="fixed inset-0 z-50 bg-slate-900/80 backdrop-blur-sm overflow-y-auto flex flex-col items-center justify-start p-2 sm:p-6 print:p-0 print:bg-white"
+    >
       {/* Top Floating Control Toolbar */}
       <div className="sticky top-2 z-50 w-full max-w-4xl bg-slate-900 text-white rounded-2xl p-3 sm:p-4 shadow-2xl border border-slate-800 flex items-center justify-between gap-2 mb-4 no-print">
         <div className="flex items-center space-x-2 min-w-0">

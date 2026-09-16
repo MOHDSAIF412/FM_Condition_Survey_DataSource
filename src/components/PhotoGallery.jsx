@@ -152,12 +152,14 @@ export default function PhotoGallery({ project, facilities = [], onOpenFacility 
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Search location or defect…"
+              aria-label="Search photos by location or defect"
               className="w-full pl-9 pr-3 py-2 rounded-xl border border-slate-300 text-xs focus:outline-none focus:ring-2 focus:ring-sky-500"
             />
           </div>
           <select
             value={facilityId}
             onChange={(e) => setFacilityId(e.target.value)}
+            aria-label="Filter by facility"
             className="px-2.5 py-2 rounded-xl border border-slate-300 text-xs font-semibold bg-white max-w-[200px]"
           >
             <option value="ALL">All facilities</option>
@@ -168,6 +170,7 @@ export default function PhotoGallery({ project, facilities = [], onOpenFacility 
           <select
             value={priority}
             onChange={(e) => setPriority(e.target.value)}
+            aria-label="Filter by priority"
             className="px-2.5 py-2 rounded-xl border border-slate-300 text-xs font-semibold bg-white"
           >
             <option value="ALL">All priorities</option>
@@ -345,7 +348,13 @@ function FullPhoto({ photo, facilityName, index, total, onClose, onPrev, onNext 
   }, [photo.storagePath]);
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/85 flex items-center justify-center p-4" onClick={onClose}>
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label={photo.description || 'Snag photo'}
+      className="fixed inset-0 z-50 bg-black/85 flex items-center justify-center p-4"
+      onClick={onClose}
+    >
       <div className="max-w-5xl w-full" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-start justify-between gap-3 mb-3">
           <div className="min-w-0">

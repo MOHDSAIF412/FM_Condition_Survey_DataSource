@@ -127,6 +127,7 @@ export default function QuickAddSnag({ items = [], onAdd }) {
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Search defects…"
+              aria-label="Search common defects"
               className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500"
             />
           </div>

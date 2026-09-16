@@ -118,8 +118,9 @@ export default function ReportDashboard({ projects = [], surveys = [], initialPr
 
       <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm space-y-5">
         <div>
-          <label className="block text-xs font-semibold text-slate-700 mb-1">Project</label>
+          <label htmlFor="report-project" className="block text-xs font-semibold text-slate-700 mb-1">Project</label>
           <select
+            id="report-project"
             value={projectId}
             onChange={(e) => setProjectId(e.target.value)}
             className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-sky-500 text-sm font-semibold bg-white"

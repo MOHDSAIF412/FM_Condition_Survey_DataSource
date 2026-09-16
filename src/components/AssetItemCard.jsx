@@ -271,13 +271,14 @@ function AssetItemCard({
           {/* Snag Location / Room / Area */}
           <div>
             <div className="flex items-center justify-between mb-1">
-              <label className="block text-[12px] font-bold uppercase text-slate-600 flex items-center gap-1.5">
+              <label htmlFor={`snag-location-${item.id}`} className="block text-[12px] font-bold uppercase text-slate-600 flex items-center gap-1.5">
                 <MapPin className="w-3.5 h-3.5 text-sky-600" />
                 Snag Location / Room / Area *
               </label>
             </div>
 
             <input
+              id={`snag-location-${item.id}`}
               type="text"
               value={item.location || ''}
               onChange={(e) => handleFieldChange('location', e.target.value)}
@@ -325,6 +326,7 @@ function AssetItemCard({
                     key={dKey}
                     type="button"
                     onClick={() => handleDepartmentSelect(dKey)}
+                    aria-pressed={isSelected}
                     className={`py-1.5 px-2 rounded-xl text-center font-bold truncate transition-all text-[12px] border ${
                       isSelected
                         ? `${dept.badgeSolid} border-transparent shadow-sm scale-[1.02]`
@@ -357,6 +359,7 @@ function AssetItemCard({
                   <button
                     key={pNum}
                     type="button"
+                    aria-pressed={isSelected}
                     onClick={() => handlePrioritySelect(pNum)}
                     className={`py-2 px-1 rounded-xl border flex flex-col items-center justify-center transition-all ${
                       isSelected
@@ -376,10 +379,11 @@ function AssetItemCard({
 
           {/* Observations & Defects */}
           <div>
-            <label className="block text-[12px] font-bold uppercase text-slate-600 mb-1">
+            <label htmlFor={`snag-defect-${item.id}`} className="block text-[12px] font-bold uppercase text-slate-600 mb-1">
               Observed Defects & Condition Notes
             </label>
             <textarea
+              id={`snag-defect-${item.id}`}
               rows={2}
               value={item.defectDescription || ''}
               onChange={(e) => handleFieldChange('defectDescription', e.target.value)}
@@ -390,11 +394,12 @@ function AssetItemCard({
           {/* Quantity and Estimated Cost */}
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-[12px] font-bold uppercase text-slate-600 mb-1">
+              <label htmlFor={`snag-cost-${item.id}`} className="block text-[12px] font-bold uppercase text-slate-600 mb-1">
                 Estimated Remediation Cost (AED)
               </label>
               <div className="relative">
                 <input
+                  id={`snag-cost-${item.id}`}
                   type="number"
                   min="0"
                   step="50"
@@ -408,10 +413,11 @@ function AssetItemCard({
             </div>
 
             <div>
-              <label className="block text-[12px] font-bold uppercase text-slate-600 mb-1">
+              <label htmlFor={`snag-qty-${item.id}`} className="block text-[12px] font-bold uppercase text-slate-600 mb-1">
                 Quantity
               </label>
               <input
+                id={`snag-qty-${item.id}`}
                 type="number"
                 min="1"
                 placeholder="1"
@@ -499,6 +505,7 @@ function AssetItemCard({
                         <div className="flex items-center space-x-1 w-full">
                           <input
                             type="text"
+                            aria-label="Photo caption"
                             value={photo.caption || ''}
                             onChange={(e) => handleUpdatePhotoCaption(photo.id, e.target.value)}
                             onBlur={() => setEditingCaptionId(null)}
@@ -676,6 +683,7 @@ function AssetItemCard({
                 <span className="font-semibold text-slate-400">Caption:</span>
                 <input
                   type="text"
+                  aria-label="Photo caption"
                   value={photosList[previewPhotoIndex].caption || ''}
                   onChange={(e) => handleUpdatePhotoCaption(photosList[previewPhotoIndex].id, e.target.value)}
                   className="px-2 py-1 rounded bg-slate-700 text-white border border-slate-600 text-xs flex-1 max-w-sm focus:outline-none"

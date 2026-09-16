@@ -53,6 +53,20 @@ export default function SavedFacilities({ surveys = [], currentId, onOpen, onDel
   const [viewer, setViewer] = useState(null); // { photos, index, label, location } for the full-size photo
   const panelRef = useRef(null);
 
+  // The full-size photo closes with Escape and pages with the arrow keys, the
+  // same as the project photo gallery.
+  useEffect(() => {
+    if (!viewer) return undefined;
+    const onKey = (e) => {
+      if (e.key === 'Escape') setViewer(null);
+      if (viewer.photos.length < 2) return;
+      if (e.key === 'ArrowRight') setViewer((v) => v && { ...v, index: (v.index + 1) % v.photos.length });
+      if (e.key === 'ArrowLeft') setViewer((v) => v && { ...v, index: (v.index - 1 + v.photos.length) % v.photos.length });
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [viewer]);
+
   /**
    * Applies a stat tile the user tapped above: narrows or reorders this list to
    * whatever that number counted, then brings the list into view. Keyed on
@@ -568,6 +582,7 @@ export default function SavedFacilities({ surveys = [], currentId, onOpen, onDel
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Search facility, ID or status…"
+              aria-label="Search facilities"
               className="w-full pl-9 pr-3 py-2 rounded-xl border border-slate-300 text-xs focus:outline-none focus:ring-2 focus:ring-sky-500"
             />
           </div>
@@ -674,6 +689,7 @@ export default function SavedFacilities({ surveys = [], currentId, onOpen, onDel
                     checked={allTicked}
                     onChange={toggleAll}
                     title="Tick every facility shown"
+                    aria-label="Tick every facility shown"
                     className="w-4 h-4 rounded border-slate-300 accent-ocs-600"
                   />
                 </th>
@@ -701,6 +717,7 @@ export default function SavedFacilities({ surveys = [], currentId, onOpen, onDel
                           type="checkbox"
                           checked={selected.includes(s.id)}
                           onChange={() => toggleOne(s.id)}
+                          aria-label={`Include ${describe(s)} in the combined report`}
                           className="w-4 h-4 rounded border-slate-300 accent-ocs-600"
                         />
                       </td>

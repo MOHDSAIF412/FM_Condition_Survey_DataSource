@@ -155,6 +155,15 @@ export async function deleteUser(userId) {
 }
 
 /**
+ * Gives a user a new generated password, shown to the admin once. The recovery
+ * route for someone locked out: it does not rely on email reaching them.
+ * @returns {{user, password}}
+ */
+export async function resetUserPassword(userId) {
+  return callAdminUsers('PATCH', { userId });
+}
+
+/**
  * Permissions for every user, keyed by id.
  *
  * Read straight from the table rather than through the admin-users function:

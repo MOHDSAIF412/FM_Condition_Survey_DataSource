@@ -101,10 +101,11 @@ export default function Login({ onSignedIn, online }) {
             )}
 
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1.5">Email</label>
+              <label htmlFor="login-email" className="block text-xs font-semibold text-slate-700 mb-1.5">Email</label>
               <div className="relative">
-                <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" aria-hidden="true" />
                 <input
+                  id="login-email"
                   type="email"
                   autoComplete="username"
                   value={email}
@@ -116,10 +117,11 @@ export default function Login({ onSignedIn, online }) {
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1.5">Password</label>
+              <label htmlFor="login-password" className="block text-xs font-semibold text-slate-700 mb-1.5">Password</label>
               <div className="relative">
-                <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" aria-hidden="true" />
                 <input
+                  id="login-password"
                   type="password"
                   autoComplete="current-password"
                   value={password}
@@ -130,8 +132,8 @@ export default function Login({ onSignedIn, online }) {
             </div>
 
             {error && (
-              <div className="flex items-start gap-2 p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-semibold">
-                <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+              <div role="alert" className="flex items-start gap-2 p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-semibold">
+                <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" aria-hidden="true" />
                 {error}
               </div>
             )}
@@ -147,6 +149,13 @@ export default function Login({ onSignedIn, online }) {
 
             <p className="text-[12px] text-slate-500 text-center pt-1">
               No account? Ask an administrator to create one for you.
+            </p>
+            {/* Recovery runs through an administrator rather than an emailed
+                link: it works for a surveyor on site without relying on email
+                setup, and matches how accounts are issued in the first place. */}
+            <p className="text-[12px] text-slate-500 text-center">
+              Forgot your password? An administrator can give you a new one from
+              Manage Users &amp; Access.
             </p>
           </form>
         </div>

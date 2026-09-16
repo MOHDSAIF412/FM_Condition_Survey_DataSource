@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { X, KeyRound, Loader2, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { changePassword } from '../utils/auth';
+import { useEscapeKey } from '../utils/useEscapeKey';
 
 export default function ChangePasswordModal({ onClose }) {
   const [password, setPassword] = useState('');
@@ -8,6 +9,7 @@ export default function ChangePasswordModal({ onClose }) {
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState(false);
+  useEscapeKey(() => { if (!busy) onClose(); });
 
   const submit = async (e) => {
     e.preventDefault();
@@ -29,20 +31,25 @@ export default function ChangePasswordModal({ onClose }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
-      <div className="w-full max-w-sm bg-white rounded-2xl shadow-xl p-5 space-y-4">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="change-password-title"
+        className="w-full max-w-sm bg-white rounded-2xl shadow-xl p-5 space-y-4"
+      >
         <div className="flex items-center justify-between">
-          <h3 className="text-sm font-bold uppercase tracking-wider text-slate-700 inline-flex items-center gap-2">
-            <KeyRound className="w-4 h-4 text-ocs-600" />
+          <h3 id="change-password-title" className="text-sm font-bold uppercase tracking-wider text-slate-700 inline-flex items-center gap-2">
+            <KeyRound className="w-4 h-4 text-ocs-600" aria-hidden="true" />
             Change Password
           </h3>
-          <button type="button" onClick={onClose} className="p-1 rounded-lg hover:bg-slate-100">
-            <X className="w-4 h-4 text-slate-500" />
+          <button type="button" onClick={onClose} aria-label="Close" className="p-1 rounded-lg hover:bg-slate-100">
+            <X className="w-4 h-4 text-slate-500" aria-hidden="true" />
           </button>
         </div>
 
         {done ? (
           <div className="space-y-4">
-            <div className="flex items-start gap-2 p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-semibold">
+            <div role="status" className="flex items-start gap-2 p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-semibold">
               <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5" />
               Password changed. Use it next time you sign in.
             </div>
@@ -57,8 +64,9 @@ export default function ChangePasswordModal({ onClose }) {
         ) : (
           <form onSubmit={submit} className="space-y-4">
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">New Password</label>
+              <label htmlFor="new-password" className="block text-xs font-semibold text-slate-700 mb-1">New Password</label>
               <input
+                id="new-password"
                 type="password"
                 autoComplete="new-password"
                 value={password}
@@ -68,8 +76,9 @@ export default function ChangePasswordModal({ onClose }) {
               />
             </div>
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">Confirm New Password</label>
+              <label htmlFor="confirm-password" className="block text-xs font-semibold text-slate-700 mb-1">Confirm New Password</label>
               <input
+                id="confirm-password"
                 type="password"
                 autoComplete="new-password"
                 value={confirm}
@@ -79,7 +88,7 @@ export default function ChangePasswordModal({ onClose }) {
             </div>
 
             {error && (
-              <div className="flex items-start gap-2 p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-semibold">
+              <div role="alert" className="flex items-start gap-2 p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-semibold">
                 <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
                 {error}
               </div>

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { UserPlus, Trash2, Loader2, ShieldCheck, User, Copy, Check, X, AlertCircle } from 'lucide-react';
-import { listUsers, createUser, deleteUser, listUserPermissions, setUserPermission } from '../utils/auth';
+import { UserPlus, Trash2, Loader2, ShieldCheck, User, Copy, Check, X, AlertCircle, KeyRound } from 'lucide-react';
+import { listUsers, createUser, deleteUser, resetUserPassword, listUserPermissions, setUserPermission } from '../utils/auth';
 
 /**
  * What an ordinary surveyor can be granted. Deliberately short: every entry
@@ -29,6 +29,7 @@ export default function UserManagement({ myId }) {
   const [deletingId, setDeletingId] = useState(null);
   const [perms, setPerms] = useState({});      // userId -> { role, permissions }
   const [savingKey, setSavingKey] = useState(null);
+  const [resettingId, setResettingId] = useState(null);
 
   const refresh = async () => {
     setLoading(true);
@@ -65,7 +66,7 @@ export default function UserManagement({ myId }) {
     setCreating(true);
     try {
       const result = await createUser(form);
-      setJustCreated({ email: result.user.email, password: result.password });
+      setJustCreated({ email: result.user.email, password: result.password, kind: 'created' });
       setForm({ email: '', fullName: '', role: 'user', password: '' });
       setShowForm(false);
       await refresh();
@@ -87,6 +88,27 @@ export default function UserManagement({ myId }) {
       setError(err.message || 'Could not remove the user.');
     } finally {
       setDeletingId(null);
+    }
+  };
+
+  const resetPassword = async (user) => {
+    if (!confirm(
+      `Give ${user.email} a new password?
+
+`
+      + 'Their current password stops working immediately. You will see the new one once, to pass on to them.'
+    )) return;
+    setResettingId(user.id);
+    setError('');
+    setShowForm(false);
+    try {
+      const result = await resetUserPassword(user.id);
+      setJustCreated({ email: result.user.email, password: result.password, kind: 'reset' });
+      setCopied(false);
+    } catch (err) {
+      setError(err.message || 'Could not reset that password.');
+    } finally {
+      setResettingId(null);
     }
   };
 
@@ -118,7 +140,9 @@ export default function UserManagement({ myId }) {
       {justCreated && (
         <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-5 space-y-2">
           <p className="text-sm font-bold text-emerald-800">
-            Account created for {justCreated.email}
+            {justCreated.kind === 'reset'
+              ? `New password for ${justCreated.email}`
+              : `Account created for ${justCreated.email}`}
           </p>
           <p className="text-xs text-emerald-700">
             Share this password with them now — it is shown only this once and cannot be retrieved later.
@@ -132,8 +156,9 @@ export default function UserManagement({ myId }) {
               onClick={copyPassword}
               className="px-3 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white shrink-0"
               title="Copy password"
+              aria-label={copied ? 'Password copied' : 'Copy password'}
             >
-              {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+              {copied ? <Check className="w-4 h-4" aria-hidden="true" /> : <Copy className="w-4 h-4" aria-hidden="true" />}
             </button>
           </div>
         </div>
@@ -279,17 +304,34 @@ export default function UserManagement({ myId }) {
                   </div>
                 </div>
 
+                {/* Your own password is changed from the account menu, which
+                    asks for the current one; resetting is for other people. */}
                 {u.id !== myId && (
-                  <button
-                    type="button"
-                    disabled={deletingId === u.id}
-                    onClick={() => remove(u)}
-                    className="px-2.5 py-1.5 rounded-lg bg-red-50 hover:bg-red-100 disabled:opacity-50 text-red-600 text-xs font-bold inline-flex items-center gap-1 border border-red-200"
-                  >
-                    {deletingId === u.id
-                      ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                      : <Trash2 className="w-3.5 h-3.5" />}
-                  </button>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      type="button"
+                      disabled={resettingId === u.id}
+                      onClick={() => resetPassword(u)}
+                      className="px-2.5 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 disabled:opacity-50 text-slate-700 text-xs font-bold inline-flex items-center gap-1.5 border border-slate-200"
+                    >
+                      {resettingId === u.id
+                        ? <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden="true" />
+                        : <KeyRound className="w-3.5 h-3.5" aria-hidden="true" />}
+                      Reset password
+                    </button>
+                    <button
+                      type="button"
+                      disabled={deletingId === u.id}
+                      onClick={() => remove(u)}
+                      title={`Remove ${u.email}`}
+                      aria-label={`Remove ${u.email}`}
+                      className="px-2.5 py-1.5 rounded-lg bg-red-50 hover:bg-red-100 disabled:opacity-50 text-red-600 text-xs font-bold inline-flex items-center gap-1 border border-red-200"
+                    >
+                      {deletingId === u.id
+                        ? <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden="true" />
+                        : <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />}
+                    </button>
+                  </div>
                 )}
               </li>
             ))}
