@@ -37,7 +37,8 @@ import {
   deleteSurveyPermanently,
   withTimeout,
   cachedSurveyList,
-  surveyExistsOnServer
+  surveyExistsOnServer,
+  hydratePhotos
 } from './utils/cloudSync';
 
 // How long a surveyor is kept waiting on the server before the app gets on
@@ -50,6 +51,7 @@ import { can } from './utils/auth';
 import { isAuthFailure } from './utils/syncErrors';
 import { chooseSurveyToOpen, mergeSurveyLists } from './utils/surveySelection';
 import { uploadSurveyRecord as uploadRecord } from './utils/uploadRecord';
+import { confirmReportReady } from './utils/reportCompleteness';
 import { initNetworkMonitor, onNetworkChange, isOnline } from './utils/network';
 import { PHOTO_SYNC, consumeCaptureReturn } from './utils/photoCapture';
 import {
@@ -189,6 +191,25 @@ export default function App({ currentUser = null, onSignOut } = {}) {
       if (!ok) return;
     }
     onSignOut();
+  }
+
+  /**
+   * "Download Excel Report" in the account menu.
+   *
+   * It skipped fetching photo files, so a facility opened from another device
+   * exported without its photos. It now goes through the same permission and
+   * completeness checks as every other export.
+   */
+  async function handleHeaderExcel() {
+    if (!mayDownloadReports || !surveyRef.current) return;
+    try {
+      const hydrated = await hydratePhotos(surveyRef.current);
+      if (!confirmReportReady(hydrated)) return;
+      await generateSurveyExcel(hydrated);
+    } catch (err) {
+      console.error('Excel report failed:', err);
+      alert('Could not build the Excel report: ' + (err.message || err));
+    }
   }
 
   /** One place that decides which unhappy sync state the header should show. */
@@ -1474,7 +1495,7 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
         onOpenReport={() => setShowReportModal(true)}
         onExportJSON={handleExportJSON}
         onImportJSON={handleImportJSON}
-        onExportExcel={() => generateSurveyExcel(survey || {})}
+        onExportExcel={handleHeaderExcel}
         lastSaved={lastSavedTime}
         syncState={syncState}
         online={online}
@@ -1641,6 +1662,7 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
               projects={projects}
               surveys={surveyList}
               initialProjectId={activeProject?.id || null}
+              canDownloadReports={mayDownloadReports}
             />
           </main>
         </>
@@ -1782,6 +1804,7 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
         <ReportModal
           survey={survey || {}}
           onClose={() => setShowReportModal(false)}
+          canDownloadReports={mayDownloadReports}
         />
       )}
       </div>

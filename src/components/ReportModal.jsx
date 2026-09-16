@@ -28,8 +28,10 @@ import { generateSurveyPDF } from '../utils/pdfGenerator';
 import { generateSurveyExcel } from '../utils/excelGenerator';
 import { formatMoney } from '../utils/currency';
 import { hydratePhotos } from '../utils/cloudSync';
+import { confirmReportReady } from '../utils/reportCompleteness';
+import NoReportAccess from './NoReportAccess';
 
-export default function ReportModal({ survey = {}, onClose }) {
+export default function ReportModal({ survey = {}, onClose, canDownloadReports = true }) {
   const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
   const [isGeneratingExcel, setIsGeneratingExcel] = useState(false);
   const [selectedFacility, setSelectedFacility] = useState('ALL');
@@ -49,10 +51,20 @@ export default function ReportModal({ survey = {}, onClose }) {
   const facility = survey?.facility || {};
   const googleLoc = facility?.googleLocation || {};
 
+  /** Only the snags the chosen location filter puts in the file are checked. */
+  const readyToExport = (hydrated) => confirmReportReady(
+    selectedFacility === 'ALL'
+      ? hydrated
+      : { ...hydrated, items: (hydrated.items || []).filter((i) => (i.location || 'General') === selectedFacility) }
+  );
+
   const handleExportExcel = async () => {
+    if (!canDownloadReports) return;
     setIsGeneratingExcel(true);
     try {
-      await generateSurveyExcel(await hydratePhotos(survey), selectedFacility);
+      const hydrated = await hydratePhotos(survey);
+      if (!readyToExport(hydrated)) return;
+      await generateSurveyExcel(hydrated, selectedFacility);
       confetti({
         particleCount: 60,
         spread: 60,
@@ -67,9 +79,12 @@ export default function ReportModal({ survey = {}, onClose }) {
   };
 
   const handleDownloadPDF = async () => {
+    if (!canDownloadReports) return;
     setIsGeneratingPDF(true);
     try {
-      await generateSurveyPDF(await hydratePhotos(survey), selectedFacility);
+      const hydrated = await hydratePhotos(survey);
+      if (!readyToExport(hydrated)) return;
+      await generateSurveyPDF(hydrated, selectedFacility);
       confetti({
         particleCount: 80,
         spread: 70,
@@ -83,7 +98,10 @@ export default function ReportModal({ survey = {}, onClose }) {
     }
   };
 
+  // Printing to PDF produces the same client-facing document, so it is gated
+  // the same way as the download buttons.
   const handlePrint = () => {
+    if (!canDownloadReports) return;
     window.print();
   };
 
@@ -104,6 +122,8 @@ export default function ReportModal({ survey = {}, onClose }) {
         </div>
 
         <div className="flex items-center space-x-2 shrink-0">
+          {canDownloadReports && (
+          <>
           <button
             onClick={handlePrint}
             className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold hidden sm:flex items-center gap-1.5 transition-colors"
@@ -151,13 +171,16 @@ export default function ReportModal({ survey = {}, onClose }) {
               </>
             )}
           </button>
+          </>
+          )}
 
           <button
             onClick={onClose}
             className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition-colors"
             title="Close Preview"
+            aria-label="Close report preview"
           >
-            <X className="w-5 h-5" />
+            <X className="w-5 h-5" aria-hidden="true" />
           </button>
         </div>
       </div>
@@ -563,7 +586,14 @@ export default function ReportModal({ survey = {}, onClose }) {
 
       </div>
 
+      {!canDownloadReports && (
+        <div className="w-full max-w-4xl mt-4 no-print pb-6">
+          <NoReportAccess />
+        </div>
+      )}
+
       {/* Bottom Floating Bar on Mobile */}
+      {canDownloadReports && (
       <div className="w-full max-w-4xl mt-4 sm:hidden grid grid-cols-2 gap-2 no-print pb-6">
         <button
           onClick={handleExportExcel}
@@ -591,6 +621,7 @@ export default function ReportModal({ survey = {}, onClose }) {
           <span>{isGeneratingPDF ? 'Compiling...' : 'Download PDF'}</span>
         </button>
       </div>
+      )}
     </div>
   );
 }

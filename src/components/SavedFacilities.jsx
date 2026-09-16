@@ -5,10 +5,11 @@ import {
   Building2, Factory, Trees, Wrench, Fan, Zap, Flame, Sparkles,
   Home, GraduationCap, ShoppingBag, Briefcase, Warehouse, Moon, Stethoscope, BedDouble, Trophy
 } from 'lucide-react';
-import { pullSurvey, hydratePhotos, mapWithConcurrency, collectKnownPhotos, withTimeout } from '../utils/cloudSync';
-import { getSurveyOffline } from '../utils/storage';
-import { sortDate, chooseSurveyToOpen } from '../utils/surveySelection';
-import { isOnline } from '../utils/network';
+import { hydratePhotos, mapWithConcurrency } from '../utils/cloudSync';
+import { sortDate } from '../utils/surveySelection';
+import { loadSurveyForReading } from '../utils/surveyLoader';
+import { confirmReportReady } from '../utils/reportCompleteness';
+import NoReportAccess from './NoReportAccess';
 import { generateSurveyPDF } from '../utils/pdfGenerator';
 import { generateSurveyExcel } from '../utils/excelGenerator';
 import { formatMoney } from '../utils/currency';
@@ -143,28 +144,7 @@ export default function SavedFacilities({ surveys = [], currentId, onOpen, onDel
     }
   };
 
-  /**
-   * The copy to read or report from -- the same rule as opening a facility.
-   *
-   * The device copy wins when it holds unsent edits: taking the server copy
-   * first meant a report exported from the phone silently left out every snag
-   * that had not uploaded yet. Otherwise the server copy, with the device copy
-   * as the fallback when there is no connection or it is too slow to answer.
-   */
-  const loadSurvey = async (surveyId) => {
-    const local = await getSurveyOffline(surveyId);
-
-    let remote = null;
-    if (!(local && local.pendingSync) && isOnline()) {
-      try {
-        const pull = pullSurvey(surveyId, collectKnownPhotos(local));
-        remote = local ? await withTimeout(pull, 8000, 'Loading facility') : await pull;
-      } catch (err) {
-        console.info('Server copy unavailable, using the one on this device:', err?.message);
-      }
-    }
-    return chooseSurveyToOpen(local, remote).survey;
-  };
+  const loadSurvey = (surveyId) => loadSurveyForReading(surveyId);
 
   /**
    * Toggles a row open and lazily fetches its snags the first time.
@@ -240,6 +220,7 @@ export default function SavedFacilities({ surveys = [], currentId, onOpen, onDel
         alert('None of the chosen facilities have snags to report yet.');
         return;
       }
+      if (!confirmReportReady(loaded)) return;
       setProgress({ done: wanted.length, total: wanted.length, building: true });
       await generateSurveyExcel(loaded, 'ALL');
       setSyncResult(`Combined Excel created for ${loaded.length} facilities.`);
@@ -261,6 +242,7 @@ export default function SavedFacilities({ surveys = [], currentId, onOpen, onDel
         return;
       }
       const ready = await hydratePhotos(survey);
+      if (!confirmReportReady(ready)) return;
       if (kind === 'pdf') await generateSurveyPDF(ready, 'ALL');
       else await generateSurveyExcel(ready, 'ALL');
     } catch (err) {
@@ -659,6 +641,12 @@ export default function SavedFacilities({ surveys = [], currentId, onOpen, onDel
           </select>
         </label>
       </div>
+
+      {!canDownloadReports && (
+        <div className="px-4 sm:px-6 py-3 border-b border-slate-200">
+          <NoReportAccess />
+        </div>
+      )}
 
       {syncResult && (
         <div className="px-6 py-2.5 bg-slate-50 border-b border-slate-200 text-[13px] text-slate-700">

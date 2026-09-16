@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { FileSpreadsheet, FileText, Loader2, CheckSquare, Square, AlertCircle } from 'lucide-react';
-import { pullSurvey, hydratePhotos } from '../utils/cloudSync';
-import { listAllSurveysOffline } from '../utils/storage';
+import { hydratePhotos, mapWithConcurrency } from '../utils/cloudSync';
+import { loadSurveyForReading } from '../utils/surveyLoader';
+import { confirmReportReady } from '../utils/reportCompleteness';
+import NoReportAccess from './NoReportAccess';
 import { generateSurveyExcel } from '../utils/excelGenerator';
 import { generateSurveyPDF } from '../utils/pdfGenerator';
 import { facilityCode, calculateSurveyStats } from '../types/survey';
@@ -15,7 +17,7 @@ import { formatMoney } from '../utils/currency';
  * selection rather than carrying ticks across to facilities the user cannot
  * see any more.
  */
-export default function ReportDashboard({ projects = [], surveys = [], initialProjectId = null }) {
+export default function ReportDashboard({ projects = [], surveys = [], initialProjectId = null, canDownloadReports = true }) {
   const [projectId, setProjectId] = useState(initialProjectId || projects[0]?.id || '');
   const [selected, setSelected] = useState(() => new Set());
   const [busy, setBusy] = useState('');
@@ -53,16 +55,8 @@ export default function ReportDashboard({ projects = [], surveys = [], initialPr
     return [code, name].filter(Boolean).join(' · ') || 'Unnamed facility';
   };
 
-  /** Server copy when there is one, otherwise this device's. */
-  const loadFull = async (id) => {
-    try {
-      const remote = await pullSurvey(id, {});
-      if (remote) return remote;
-    } catch { /* offline: fall through to the local copy */ }
-    return (await listAllSurveysOffline()).find((s) => s && s.id === id) || null;
-  };
-
   const generate = async (kind) => {
+    if (!canDownloadReports) return;
     if (!projectId) { setMessage('Please select a project first.'); return; }
     if (!selected.size) { setMessage('Please select at least one facility.'); return; }
 
@@ -70,23 +64,25 @@ export default function ReportDashboard({ projects = [], surveys = [], initialPr
     setMessage('');
     try {
       const chosen = facilities.filter((f) => selected.has(f.id));
-      const loaded = [];
-      for (const f of chosen) {
-        const full = await loadFull(f.id);
+      // Several at once: one after another, a whole project took minutes.
+      const results = await mapWithConcurrency(chosen, 4, async (f) => {
+        const full = await loadSurveyForReading(f.id);
         // Never trust the tick alone: confirm the loaded facility really does
         // belong to the chosen project before it goes into the report.
-        if (!full) continue;
+        if (!full) return null;
         if (full.projectId && full.projectId !== projectId) {
           console.warn('[report] skipped a facility that does not belong to this project:', f.id);
-          continue;
+          return null;
         }
-        if ((full.items || []).length) loaded.push(await hydratePhotos(full));
-      }
+        return (full.items || []).length ? hydratePhotos(full) : null;
+      });
+      const loaded = results.filter(Boolean);
 
       if (!loaded.length) {
         setMessage('The selected facilities have no snags to report yet.');
         return;
       }
+      if (!confirmReportReady(loaded)) return;
 
       if (kind === 'pdf') {
         // The PDF generator covers one facility at a time, so a multi-facility
@@ -196,6 +192,9 @@ export default function ReportDashboard({ projects = [], surveys = [], initialPr
               {preview.snags ? ` · ${preview.snags} snags` : ''}
             </p>
 
+            {!canDownloadReports ? (
+              <NoReportAccess className="mt-4" />
+            ) : (
             <div className="flex items-center gap-2 mt-4 flex-wrap">
               <button
                 type="button"
@@ -221,6 +220,7 @@ export default function ReportDashboard({ projects = [], surveys = [], initialPr
                 Generate PDF
               </button>
             </div>
+            )}
           </div>
         )}
 

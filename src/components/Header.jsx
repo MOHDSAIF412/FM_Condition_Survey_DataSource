@@ -109,9 +109,12 @@ export default function Header({
               onClick={onOpenReport}
               className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-flame-500 hover:bg-flame-600 active:scale-[0.97] text-white font-semibold text-xs sm:text-sm shadow-card transition-[background-color,transform] duration-150"
             >
-              <FileText className="w-4 h-4 shrink-0" />
-              <span className="sm:hidden">Reports</span>
-              <span className="hidden sm:inline">Reports (PDF/Excel)</span>
+              <FileText className="w-4 h-4 shrink-0" aria-hidden="true" />
+              <span className="sm:hidden">Report</span>
+              {/* Only promise downloads to someone who can make them. */}
+              <span className="hidden sm:inline">
+                {canDownloadReports ? 'Reports (PDF/Excel)' : 'View Report'}
+              </span>
             </button>
           )}
 
