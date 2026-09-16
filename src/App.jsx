@@ -15,6 +15,8 @@ import Breadcrumb from './components/Breadcrumb';
 import ProjectHero from './components/ProjectHero';
 import PhotoGallery from './components/PhotoGallery';
 import ReportDashboard from './components/ReportDashboard';
+import TemplateManager from './components/TemplateManager';
+import { listTemplates, cachedTemplates, applyTemplateToItems, isBlankSnag } from './utils/templates';
 import { createNewSurvey, calculateSurveyStats, facilityCode } from './types/survey';
 import {
   saveSurveyOffline,
@@ -116,6 +118,8 @@ export default function App({ currentUser = null, onSignOut } = {}) {
   const [view, setView] = useState('projects');
   const [projects, setProjects] = useState(() => cachedProjects());
   const [projectsLoading, setProjectsLoading] = useState(false);
+  // Inspection templates, cached so a surveyor with no signal can still start from one.
+  const [templates, setTemplates] = useState(() => cachedTemplates());
   const [activeProject, setActiveProject] = useState(null);
   const activeProjectRef = useRef(null);
   activeProjectRef.current = activeProject;
@@ -1206,6 +1210,51 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
     return true;
   }
 
+  useEffect(() => {
+    if (!isLoaded || !currentUser) return;
+    if (view !== 'survey' && view !== 'projects') return;
+    let cancelled = false;
+    listTemplates()
+      .then((list) => { if (!cancelled) setTemplates(list); })
+      .catch(() => { /* the cached list stays in use */ });
+    return () => { cancelled = true; };
+  }, [isLoaded, currentUser, view]);
+
+  /**
+   * The survey with a template's checklist added. Untouched blank snags are
+   * dropped and tombstoned so another device cannot bring them back; nothing
+   * the surveyor has written is changed. Returns null when nothing was added.
+   */
+  function withTemplateApplied(record, template) {
+    const applied = applyTemplateToItems(record.items || [], template);
+    if (!applied.added) return { record, applied };
+    return {
+      applied,
+      record: {
+        ...record,
+        items: applied.items,
+        deletedItemIds: [...new Set([...(record.deletedItemIds || []), ...applied.removedBlankIds])],
+        // The template a facility was started from; loading another later
+        // adds its snags but does not rewrite that history.
+        facility: record.facility?.templateId
+          ? record.facility
+          : { ...(record.facility || {}), templateId: template.id, templateName: template.name }
+      }
+    };
+  }
+
+  /** Survey Items tab: adds a template's checklist to the open facility. */
+  const handleApplyTemplate = (template) => {
+    const current = surveyRef.current;
+    if (!current || !template) return null;
+    const { record, applied } = withTemplateApplied(current, template);
+    if (applied.added) {
+      surveyRef.current = record;
+      setSurvey(record);   // autosave and upload follow as for any edit
+    }
+    return applied;
+  };
+
   const handleBackToProjects = async () => {
     if (view === 'survey' && !(await offerSubmitBeforeLeaving())) return;
     setView('projects');
@@ -1302,12 +1351,21 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
    * created locally and keeps a provisional number until it next syncs -- a
    * surveyor in a plant room must never be blocked from starting work.
    */
-  const handleCreateFacility = async () => {
+  const handleCreateFacility = async (template = null) => {
     const name = (surveyRef.current?.facility?.facilityName || '').trim();
     if (!name) return;
 
     setCreatingFacility(true);
     try {
+      // The template goes in before the first save, so the facility and its
+      // checklist snags reach the server together in one upload.
+      if (template) {
+        const { record, applied } = withTemplateApplied(surveyRef.current, template);
+        if (applied.added) {
+          surveyRef.current = record;
+          setSurvey(record);
+        }
+      }
       await saveSurveyOffline(surveyRef.current, { markPending: true });
       if (isCloudConfigured && isOnline()) {
         try {
@@ -1568,6 +1626,17 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
         </>
       )}
 
+      {/* Admin-only template manager. The database refuses template writes
+          from anyone else, so this check only decides what is offered. */}
+      {view === 'templates' && currentUser?.role === 'admin' && (
+        <main className="flex-1 w-full px-3 sm:px-8 pt-4 sm:pt-6 safe-area-content-pb md:pb-8">
+          <TemplateManager
+            facilities={surveyList}
+            projects={projects}
+          />
+        </main>
+      )}
+
       {/* Facilities inside the chosen project. */}
       {view === 'facilities' && activeProject && (
         <>
@@ -1756,6 +1825,10 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
             creating={creatingFacility}
             created={!!survey?.cloudRevision}
             onNewFacility={handleNewFacility}
+            templates={templates}
+            canStartFromTemplate={
+              !survey?.facility?.templateId && (survey?.items || []).every(isBlankSnag)
+            }
           />
         </TabPanel>
 
@@ -1766,6 +1839,10 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
             onUpdateItem={handleUpdateItem}
             onDeleteItem={handleDeleteItem}
             canDelete={mayDeleteSnags}
+            templates={templates}
+            facilityType={survey?.facility?.facilityType || ''}
+            appliedTemplateName={survey?.facility?.templateName || ''}
+            onApplyTemplate={handleApplyTemplate}
           />
         </TabPanel>
 

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Home, Building2, Camera, FileText, Settings } from 'lucide-react';
+import { Home, Building2, Camera, FileText, Settings, ClipboardList } from 'lucide-react';
 
 /**
  * Desktop-only navigation rail. Hidden below lg: the mobile survey flow
@@ -20,7 +20,12 @@ export default function Sidebar({ view, onNavigate, canOpenUsers, hasOpenProject
       { key: 'photos', label: 'Photos', icon: Camera }
     ] : []),
     { key: 'reports', label: 'Reports', icon: FileText },
-    ...(canOpenUsers ? [{ key: 'users', label: 'Settings', icon: Settings }] : [])
+    // Administrators only, and only here: the sidebar is the desktop web
+    // portal. Surveyors use templates from the facility screens instead.
+    ...(canOpenUsers ? [
+      { key: 'templates', label: 'Templates', icon: ClipboardList },
+      { key: 'users', label: 'Settings', icon: Settings }
+    ] : [])
   ];
 
   return (

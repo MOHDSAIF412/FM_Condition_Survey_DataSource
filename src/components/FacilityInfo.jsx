@@ -12,8 +12,10 @@ import {
 } from 'lucide-react';
 import { captureLocation, GPS_STATUS } from '../utils/geolocation';
 import { FACILITY_TYPES } from '../types/survey';
+import { CreateTemplatePicker } from './TemplatePicker';
 
-export default function FacilityInfo({ facility = {}, onChange, onCreate, creating, created, onNewFacility }) {
+export default function FacilityInfo({ facility = {}, onChange, onCreate, creating, created, onNewFacility, templates = [], canStartFromTemplate = false }) {
+  const [templateId, setTemplateId] = useState('');
   const [isGettingGps, setIsGettingGps] = useState(false);
   const [gpsError, setGpsError] = useState('');
   const [gpsStatus, setGpsStatus] = useState(GPS_STATUS.IDLE);
@@ -349,6 +351,18 @@ export default function FacilityInfo({ facility = {}, onChange, onCreate, creati
         </div>
       </div>
 
+      {/* Only while no snag has been written: autosave can upload the facility
+          seconds after its name is typed, so "not created yet" is the wrong
+          test. Later, templates are loaded from the Survey Items tab. */}
+      {canStartFromTemplate && (
+        <CreateTemplatePicker
+          templates={templates}
+          facilityType={facility.facilityType || ''}
+          value={templateId}
+          onChange={setTemplateId}
+        />
+      )}
+
       {/* Creating the facility is the deliberate step that fixes its reference
           number. Until then the code on screen is provisional. */}
       <div className="flex flex-col sm:flex-row sm:justify-end sm:items-center gap-2 pt-2">
@@ -358,7 +372,7 @@ export default function FacilityInfo({ facility = {}, onChange, onCreate, creati
           </p>
         )}
         <button
-          onClick={onCreate}
+          onClick={() => onCreate(canStartFromTemplate ? templates.find((t) => t.id === templateId) || null : null)}
           disabled={creating || !facility.facilityName?.trim()}
           className="w-full sm:w-auto px-6 py-3 rounded-xl bg-sky-600 hover:bg-sky-500 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold text-sm shadow-md transition-all flex items-center justify-center space-x-2"
         >

@@ -47,3 +47,6 @@ android-build-output/
 
 # local UI-test env (cloud disabled)
 .env.uitest
+
+# Local research notes and scanner, not part of the app. Kept out of the public repo.
+mitti clone/

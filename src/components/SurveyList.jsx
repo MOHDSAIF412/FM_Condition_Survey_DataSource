@@ -11,13 +11,18 @@ import {
 import AssetItemCard from './AssetItemCard';
 import { DEPARTMENTS, createDefaultAsset } from '../types/survey';
 import QuickAddSnag from './QuickAddSnag';
+import { ApplyTemplatePanel } from './TemplatePicker';
 
 export default function SurveyList({ 
   items = [], 
   onAddItem, 
   onUpdateItem, 
   onDeleteItem,
-  canDelete = true
+  canDelete = true,
+  templates = [],
+  facilityType = '',
+  appliedTemplateName = '',
+  onApplyTemplate
 }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedDept, setSelectedDept] = useState('ALL');
@@ -93,6 +98,21 @@ export default function SurveyList({
 
   return (
     <div className="max-w-4xl mx-auto space-y-4 pb-8">
+      {onApplyTemplate && (
+        <ApplyTemplatePanel
+          templates={templates}
+          facilityType={facilityType}
+          appliedTemplateName={appliedTemplateName}
+          onApply={(template) => {
+            // Snags the template adds must be visible straight away.
+            if (searchQuery) setSearchQuery('');
+            if (selectedPriority !== 'ALL') setSelectedPriority('ALL');
+            if (selectedDept !== 'ALL') setSelectedDept('ALL');
+            return onApplyTemplate(template);
+          }}
+        />
+      )}
+
       <QuickAddSnag items={items} onAdd={handleAddFromTemplate} />
 
       {/* Search and Filter Toolbar */}
