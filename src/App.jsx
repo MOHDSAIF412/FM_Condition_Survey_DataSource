@@ -33,10 +33,19 @@ import {
   collectKnownPhotos,
   subscribeToCloudChanges,
   listSurveys,
-  deleteSurveyPermanently
+  deleteSurveyPermanently,
+  withTimeout
 } from './utils/cloudSync';
+
+// How long a surveyor is kept waiting on the server before the app gets on
+// with what it already has on the device.
+const OPEN_WAIT_MS = 6000;
+const SIGN_OUT_UPLOAD_WAIT_MS = 6000;
 import { isCloudConfigured } from './utils/supabaseClient';
 import { can } from './utils/auth';
+import { isAuthFailure } from './utils/syncErrors';
+import { chooseSurveyToOpen, mergeSurveyLists } from './utils/surveySelection';
+import { uploadSurveyRecord as uploadRecord } from './utils/uploadRecord';
 import { initNetworkMonitor, onNetworkChange, isOnline } from './utils/network';
 import { PHOTO_SYNC, consumeCaptureReturn } from './utils/photoCapture';
 import {
@@ -110,6 +119,9 @@ export default function App({ currentUser = null, onSignOut } = {}) {
   const [lastSavedTime, setLastSavedTime] = useState('');
   const [isLoaded, setIsLoaded] = useState(false);
   const saveTimeoutRef = useRef(null);
+  // The survey waiting on the autosave timer, so it can still be written if
+  // the surveyor switches facility before the timer fires.
+  const pendingSaveRef = useRef(null);
   // Set when adopting data that came from elsewhere (another tab or another
   // device). Each consumer gets its own flag: a single shared boolean is
   // cleared by whichever effect runs first, so the other one never sees it and
@@ -127,20 +139,52 @@ export default function App({ currentUser = null, onSignOut } = {}) {
   }
 
   /**
-   * Tells a refused sign-in apart from a missing signal.
+   * Signs out, first saying plainly if work on this device has not uploaded.
    *
-   * Since the database started requiring a signed-in user, an expired session
-   * fails the push outright. Reporting that as "waiting to sync" would tell a
-   * surveyor their work is safely queued when in fact nothing will ever upload
-   * until they sign in again.
+   * The database now refuses uploads without a sign-in, so anything unsent
+   * stays on this device until someone signs in here again. Nothing is deleted
+   * either way; the warning is so nobody signs out believing it is on the server.
    */
-  function isAuthFailure(err) {
-    const code = String(err?.code || '');
-    const msg = String(err?.message || err || '').toLowerCase();
-    return err?.status === 401
-      || code === '42501' || code === 'PGRST301'
-      || msg.includes('jwt') || msg.includes('not authenticated')
-      || msg.includes('row-level security') || msg.includes('permission denied');
+  async function handleSignOut() {
+    if (pendingSaveRef.current) {
+      const outgoing = pendingSaveRef.current;
+      pendingSaveRef.current = null;
+      try { await saveSurveyOffline(outgoing); } catch { /* still in memory; warned below */ }
+    }
+
+    let unsent = [];
+    try {
+      unsent = (await listAllSurveysOffline()).filter((s) => s && s.pendingSync && surveyIsWorthSyncing(s));
+    } catch { /* cannot tell; sign out as asked */ }
+
+    if (unsent.length && isCloudConfigured && isOnline()) {
+      // A last upload attempt, capped: with weak signal it would otherwise hold
+      // the sign-out button for minutes. Whatever does not make it is listed.
+      try {
+        await withTimeout((async () => {
+          await flushPendingSurveys();
+          if (surveyRef.current && unsent.some((s) => s.id === surveyRef.current.id)) await pushAndSettle();
+        })(), SIGN_OUT_UPLOAD_WAIT_MS, 'Upload before sign-out');
+      } catch { /* report what is still unsent below */ }
+      try {
+        unsent = (await listAllSurveysOffline()).filter((s) => s && s.pendingSync && surveyIsWorthSyncing(s));
+      } catch { /* keep the earlier list */ }
+    }
+
+    if (unsent.length) {
+      const names = unsent
+        .slice(0, 5)
+        .map((s) => `• ${s.facility?.facilityName || s.facility?.facilityCode || 'Unnamed facility'}`)
+        .join('\n');
+      const more = unsent.length > 5 ? `\n…and ${unsent.length - 5} more` : '';
+      const ok = confirm(
+        `${unsent.length} ${unsent.length === 1 ? 'facility has' : 'facilities have'} not uploaded yet:\n\n`
+        + `${names}${more}\n\n`
+        + 'They stay safe on this device and will upload after someone signs in here again. Sign out anyway?'
+      );
+      if (!ok) return;
+    }
+    onSignOut();
   }
 
   /** One place that decides which unhappy sync state the header should show. */
@@ -262,11 +306,45 @@ export default function App({ currentUser = null, onSignOut } = {}) {
       return { skipped: true, reason: 'empty' };
     }
 
-    const pushResult = await pushSurvey(surveyRef.current);
+    let pushResult = await pushSurvey(surveyRef.current);
     applyPhotoSyncResult(pushResult);
 
-    // The server was ahead of us, so the push was refused rather than
-    // allowed to overwrite newer work. Take the server's copy instead.
+    // The server moved on while this device held unsent edits. This used to
+    // throw the edits away and adopt the server copy, while facilities not on
+    // screen (flushPendingSurveys) re-based and kept theirs. The push is an
+    // upsert with explicit deletions, so re-basing merges this device's work
+    // in without removing anything another device added.
+    if (pushResult && pushResult.conflict && pushResult.reason === 'stale'
+        && pushResult.serverRevision !== undefined) {
+      const pushed = surveyRef.current;
+      const rebased = await pushSurvey({ ...pushed, cloudRevision: pushResult.serverRevision });
+      applyPhotoSyncResult(rebased);
+
+      if (rebased && rebased.pushed) {
+        hasUnpushedEditsRef.current = false;
+        // Show the merged result -- unless the surveyor kept typing meanwhile,
+        // in which case keep their screen and let the next push build on the
+        // revision just written.
+        if (surveyRef.current === pushed) {
+          const merged = await pullSurvey(pushed.id, collectKnownPhotos(pushed));
+          if (merged && Array.isArray(merged.items)) {
+            markAsExternalChange();
+            setSurvey(merged);
+            await saveSurveyOffline(merged, { pendingSync: false });
+          }
+        } else {
+          setSurvey((prev) => (prev && prev.id === pushed.id
+            ? { ...prev, cloudRevision: rebased.cloudRevision }
+            : prev));
+        }
+        setSyncState('synced');
+        return rebased;
+      }
+      pushResult = rebased || pushResult;
+    }
+
+    // Still refused: this device holds far less than the server, so uploading
+    // would look like a mass deletion. The server copy is the complete one.
     if (pushResult && pushResult.conflict) {
       const current = surveyRef.current;
       const remote = await pullSurvey(current.id, collectKnownPhotos(current));
@@ -311,8 +389,13 @@ export default function App({ currentUser = null, onSignOut } = {}) {
     // local counter.
     if (pushResult && pushResult.cloudRevision !== undefined) {
       surveyRef.current = { ...surveyRef.current, cloudRevision: pushResult.cloudRevision };
-      skipLocalSaveRef.current = true;
-      skipCloudPushRef.current = true;
+      // Only suppress the follow-up save and push when nothing is waiting to be
+      // saved. If the surveyor typed while this push was in flight, skipping
+      // would cancel the save timer for that edit and it would never be written.
+      if (!pendingSaveRef.current) {
+        skipLocalSaveRef.current = true;
+        skipCloudPushRef.current = true;
+      }
       setSurvey(surveyRef.current);
     }
 
@@ -336,6 +419,10 @@ export default function App({ currentUser = null, onSignOut } = {}) {
    * and anything still unsent keeps its pendingSync flag so the next
    * connection retries it.
    */
+  function uploadSurveyRecord(record) {
+    return uploadRecord(record, { push: pushSurvey, markSynced: markSurveySynced });
+  }
+
   async function flushPendingSurveys() {
     if (!isCloudConfigured || !isOnline()) return { flushed: 0, failed: 0 };
 
@@ -349,6 +436,7 @@ export default function App({ currentUser = null, onSignOut } = {}) {
 
     let flushed = 0;
     let failed = 0;
+    let authError = null;
     const problems = [];
     for (const local of stored) {
       if (!local || !local.id || !local.pendingSync) continue;
@@ -358,21 +446,9 @@ export default function App({ currentUser = null, onSignOut } = {}) {
 
       const label = local.facility?.facilityName || local.facility?.buildingName || local.id;
       try {
-        let res = await pushSurvey(local);
-
-        // The server moved on while this device had no signal, so the push was
-        // refused to avoid overwriting work this client never saw. Left alone
-        // it stays "waiting to upload" forever -- which is exactly what a
-        // surveyor reported. Re-base onto the revision the server actually
-        // holds and push again: the push is an upsert with explicit tombstones,
-        // so merging in this device's work cannot delete anything already there.
-        if (res && res.conflict && res.reason === 'stale' && res.serverRevision !== undefined) {
-          console.info(`[sync] "${label}" was behind the server; re-basing and retrying`);
-          res = await pushSurvey({ ...local, cloudRevision: res.serverRevision });
-        }
+        const res = await uploadSurveyRecord(local);
 
         if (res && res.pushed) {
-          await markSurveySynced(local.id);
           flushed++;
         } else if (res && res.conflict) {
           // 'destructive': this device holds far less than the server. Refusing
@@ -382,6 +458,7 @@ export default function App({ currentUser = null, onSignOut } = {}) {
         }
       } catch (err) {
         failed++;
+        if (isAuthFailure(err)) authError = err;
         problems.push(`${label}: ${err.message}`);
         console.info('[sync] still pending, will retry on the next connection:', local.id, err.message);
       }
@@ -391,7 +468,7 @@ export default function App({ currentUser = null, onSignOut } = {}) {
       console.info(`[sync] uploaded ${flushed} facility(ies) recorded offline`);
     }
     if (flushed || failed) await refreshSurveyList();
-    return { flushed, failed, problems };
+    return { flushed, failed, problems, authError };
   }
 
   /**
@@ -409,20 +486,37 @@ export default function App({ currentUser = null, onSignOut } = {}) {
 
     setSyncState('syncing');
     let pushedCurrent = false;
+    // The open facility failing used to be logged and then ignored: with the
+    // server unreachable this reported "All data synced" and "everything is
+    // already uploaded".
+    let currentError = null;
     try {
       if (surveyRef.current) {
         const res = await pushAndSettle();
         pushedCurrent = Boolean(res && res.pushed);
       }
     } catch (err) {
+      currentError = err;
       console.info('Sync of the open facility deferred:', err.message);
     }
 
-    const { flushed, failed, problems } = await flushPendingSurveys();
+    const { flushed, failed, problems, authError } = await flushPendingSurveys();
     await refreshSurveyList();
-    setSyncState(failed ? 'offline' : 'synced');
 
-    if (failed) return { message: `${flushed} uploaded, ${failed} could not: ${problems.join('; ')}` };
+    const signInError = [currentError, authError].find((e) => e && isAuthFailure(e));
+    if (signInError) setSyncState('unauthorized');
+    else if (currentError || failed) setSyncState('offline');
+    else setSyncState('synced');
+
+    if (signInError) {
+      return { message: 'Sign in again to upload. Your work is saved on this device.' };
+    }
+    if (currentError || failed) {
+      const parts = [];
+      if (currentError) parts.push(`the open facility: ${currentError.message}`);
+      parts.push(...problems);
+      return { message: `${flushed} uploaded. Still waiting — ${parts.join('; ')}. Your work is saved on this device and will retry.` };
+    }
     if (flushed) return { message: `${flushed} facility(ies) uploaded.` };
     if (pushedCurrent) return { message: 'Up to date. Everything is on the server.' };
     return { message: 'Nothing waiting — everything is already uploaded.' };
@@ -527,6 +621,20 @@ export default function App({ currentUser = null, onSignOut } = {}) {
   useEffect(() => {
     if (!isLoaded) return;
 
+    // Switching facility cancels the previous save timer, so an edit made just
+    // before the switch was never written anywhere. Save the outgoing facility
+    // now, before the early return below (opening another facility marks the
+    // change as external), then upload it once it is stored.
+    const outgoing = pendingSaveRef.current;
+    if (outgoing && outgoing.id !== survey?.id) {
+      pendingSaveRef.current = null;
+      saveSurveyOffline(outgoing)
+        .then(() => {
+          if (isCloudConfigured && isOnline()) flushPendingSurveys().catch(() => {});
+        })
+        .catch((err) => console.error('Could not save the facility being left:', err));
+    }
+
     // This change came from another tab, so it is already saved.
     if (skipLocalSaveRef.current) {
       skipLocalSaveRef.current = false;
@@ -534,12 +642,14 @@ export default function App({ currentUser = null, onSignOut } = {}) {
     }
 
     hasUnpushedEditsRef.current = true;
+    pendingSaveRef.current = survey;
 
     if (saveTimeoutRef.current) {
       clearTimeout(saveTimeoutRef.current);
     }
 
     saveTimeoutRef.current = setTimeout(async () => {
+      if (pendingSaveRef.current === survey) pendingSaveRef.current = null;
       try {
         const result = await saveSurveyOffline(survey);
 
@@ -579,7 +689,6 @@ export default function App({ currentUser = null, onSignOut } = {}) {
         // Offline is the normal case on site, not an error worth shouting about.
         console.info('Cloud push deferred:', err.message);
         reportSyncFailure(err);
-        setSyncState('offline');
       }
     }, 1500);
 
@@ -666,9 +775,10 @@ export default function App({ currentUser = null, onSignOut } = {}) {
     if (isCloudConfigured && isOnline()) {
       try {
         setSyncState('syncing');
-        await pushSurvey(submitted);
-        await markSurveySynced(submitted.id);
-        setSyncState('synced');
+        const res = await uploadSurveyRecord(submitted);
+        // A refused push (the server holds far more) is not an upload; the
+        // facility stays flagged unsent so it is not quietly dropped.
+        setSyncState(res && res.pushed ? 'synced' : 'offline');
       } catch (err) {
         console.info('Submitted facility will upload when there is a connection:', err.message);
         reportSyncFailure(err);
@@ -760,9 +870,10 @@ It stays available in the facility list for reports.`)) {
     if (isCloudConfigured && isOnline()) {
       try {
         setSyncState('syncing');
-        await pushSurvey(submitted);
-        await markSurveySynced(submitted.id);
-        setSyncState('synced');
+        const res = await uploadSurveyRecord(submitted);
+        // A refused push (the server holds far more) is not an upload; the
+        // facility stays flagged unsent so it is not quietly dropped.
+        setSyncState(res && res.pushed ? 'synced' : 'offline');
       } catch (err) {
         console.info('Submitted facility will upload when there is a connection:', err.message);
         reportSyncFailure(err);
@@ -853,29 +964,85 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
   }, [isLoaded]);
 
   /** Opens a previously submitted facility so its report can be generated. */
+  /**
+   * Opens a facility from the list.
+   *
+   * The device copy is checked first. If it holds edits that never uploaded it
+   * is opened as it is and left to upload: taking the server copy here and
+   * saving it over the device copy as "synced" permanently destroyed those
+   * edits. With no connection the device copy is opened instead of refusing.
+   */
   const handleOpenSurvey = async (surveyId) => {
     if (surveyId === survey?.id) return;
+    setSyncState('syncing');
+
+    let local = null;
     try {
-      setSyncState('syncing');
-      const loaded = await pullSurvey(surveyId, {});
-      if (loaded) {
-        // A facility recorded before projects existed has no project. Adopt it
-        // into the one being worked in rather than leaving it unreachable.
-        const project = activeProjectRef.current;
-        if (project && !loaded.projectId) {
-          loaded.projectId = project.id;
-          assignFacilityToProject(loaded.id, project.id).catch(() => { /* retried on next push */ });
-        }
-        markAsExternalChange();
-        setSurvey(loaded);
-        await saveSurveyOffline(loaded, { pendingSync: false });
-        setView('survey');
+      local = (await listAllSurveysOffline()).find((s) => s && s.id === surveyId) || null;
+    } catch { /* no readable device copy */ }
+
+    let remote = null;
+    let remoteError = null;
+    // An unsent device copy is opened as it is, so the server copy (and all its
+    // photos) would be downloaded only to be thrown away. When a device copy
+    // exists, the server gets a few seconds and no more: with weak signal a
+    // request takes ~16s to fail, and the surveyor is standing there waiting.
+    if (!(local && local.pendingSync) && isCloudConfigured && isOnline()) {
+      try {
+        const pull = pullSurvey(surveyId, collectKnownPhotos(local));
+        remote = local ? await withTimeout(pull, OPEN_WAIT_MS, 'Opening facility') : await pull;
+      } catch (err) {
+        remoteError = err;
       }
-      setSyncState('synced');
-    } catch (err) {
-      alert('Could not open that facility: ' + err.message);
-      setSyncState('offline');
+    } else if (!isOnline() && !local) {
+      remoteError = new Error('offline');
     }
+
+    const { survey: chosen, source, reason } = chooseSurveyToOpen(local, remote);
+
+    if (!chosen) {
+      if (remoteError && isAuthFailure(remoteError)) {
+        setSyncState('unauthorized');
+        alert('Your sign-in has expired. Sign in again to open this facility.');
+      } else if (remoteError || !isOnline()) {
+        setSyncState('offline');
+        alert('This facility has not been downloaded to this device yet. Connect to the internet to open it.');
+      } else {
+        setSyncState('idle');
+        alert('That facility could not be found. It may have been deleted on another device.');
+      }
+      return;
+    }
+
+    // A facility recorded before projects existed has no project. Adopt it
+    // into the one being worked in rather than leaving it unreachable.
+    const project = activeProjectRef.current;
+    if (project && !chosen.projectId) {
+      chosen.projectId = project.id;
+      if (source === 'remote') {
+        assignFacilityToProject(chosen.id, project.id).catch(() => { /* retried on next push */ });
+      }
+    }
+
+    if (source === 'remote') {
+      markAsExternalChange();
+      setSurvey(chosen);
+      await saveSurveyOffline(chosen, { pendingSync: false });
+      setSyncState('synced');
+    } else if (reason === 'unsent-edits') {
+      // Already stored exactly as it is, so skip the local save -- but let the
+      // upload run, because none of this has reached the server.
+      skipLocalSaveRef.current = true;
+      hasUnpushedEditsRef.current = true;
+      setSurvey(chosen);
+      setSyncState(isOnline() ? 'syncing' : 'offline');
+    } else {
+      markAsExternalChange();
+      setSurvey(chosen);
+      if (!remoteError) setSyncState('idle');
+      else reportSyncFailure(remoteError);
+    }
+    setView('survey');
   };
 
   /**
@@ -1316,7 +1483,7 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
         showReports={view === 'survey'}
         onOpenUsers={() => setView('users')}
         onChangePassword={() => setShowPasswordModal(true)}
-        onSignOut={onSignOut}
+        onSignOut={onSignOut ? handleSignOut : undefined}
       />
 
       {showPasswordModal && (

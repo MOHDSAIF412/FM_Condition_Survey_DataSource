@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { pullSurvey, hydratePhotos, mapWithConcurrency } from '../utils/cloudSync';
 import { listAllSurveysOffline } from '../utils/storage';
+import { sortDate } from '../utils/surveySelection';
 import { generateSurveyPDF } from '../utils/pdfGenerator';
 import { generateSurveyExcel } from '../utils/excelGenerator';
 import { formatMoney } from '../utils/currency';
@@ -23,19 +24,6 @@ const TYPE_ICONS = {
 // its photos in parallel, so this stays modest to avoid stacking the two.
 const FACILITY_FETCH_CONCURRENCY = 4;
 
-/**
- * The date a row is both shown and sorted by.
- *
- * Must stay the submitted date where there is one. Sorting on `updatedAt`
- * alone put facilities at the top of "Newest first" that the row itself
- * described as weeks old: every re-sync stamps `updated_at`, so a facility
- * submitted on the 8th but pushed again on the 15th sorted as the 15th while
- * reading "Submitted 08/09".
- */
-function sortDate(s) {
-  const t = Date.parse(s?.submittedAt || s?.updatedAt || '');
-  return Number.isNaN(t) ? 0 : t;
-}
 
 /**
  * Every facility that has been saved, expandable to its snag list, with a

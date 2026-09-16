@@ -11,7 +11,8 @@
     "android:open": "vite build && cap sync android && cap open android",
     "android:build": "vite build && cap sync android && cd android && gradlew.bat assembleDebug",
     "build:web": "vite build",
-    "ship": "node scripts/ship.mjs"
+    "ship": "node scripts/ship.mjs",
+    "test": "vitest run"
   },
   "dependencies": {
     "@capacitor/android": "^8.5.1",
@@ -39,6 +40,7 @@
     "jszip": "^3.10.1",
     "postcss": "^8.4.49",
     "tailwindcss": "^3.4.17",
-    "vite": "^5.4.14"
+    "vite": "^5.4.14",
+    "vitest": "^2.1.9"
   }
 }

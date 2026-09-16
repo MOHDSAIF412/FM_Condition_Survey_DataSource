@@ -672,6 +672,26 @@ export async function mapWithConcurrency(entries, limit, task) {
   return results;
 }
 
+/**
+ * Rejects if `promise` has not settled within `ms`.
+ *
+ * For anything a surveyor is actively waiting on. With weak signal the phone
+ * still reports being online while a single request takes around 16 seconds to
+ * fail, so opening a facility or signing out appeared frozen. The original
+ * promise keeps running; only the wait is abandoned.
+ */
+export function withTimeout(promise, ms, label = 'Request') {
+  let timer;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => {
+      const err = new Error(`${label} timed out after ${Math.round(ms / 1000)}s`);
+      err.timeout = true;
+      reject(err);
+    }, ms);
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
+
 export async function hydratePhotos(survey) {
   if (!isCloudConfigured || !survey) return survey;
 
