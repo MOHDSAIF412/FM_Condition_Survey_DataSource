@@ -66,3 +66,13 @@ test('time ago and greeting', () => {
   expect(greeting(new Date(2026, 8, 16, 14))).toBe('Good afternoon');
   expect(greeting(new Date(2026, 8, 16, 20))).toBe('Good evening');
 });
+
+test('daily series buckets real dates and ignores anything outside the window', async () => {
+  const { dailySeries } = await import('../portal/portalData');
+  const list = [{ d: daysAgo(1) }, { d: daysAgo(1.5) }, { d: daysAgo(29) }, { d: daysAgo(45) }, { d: null }];
+  const series = dailySeries(list, (s) => s.d, { days: 30, buckets: 15, now: NOW });
+  expect(series).toHaveLength(15);
+  expect(series[14]).toBe(2);
+  expect(series[0]).toBe(1);
+  expect(series.reduce((a, b) => a + b, 0)).toBe(3);
+});

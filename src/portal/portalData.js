@@ -159,3 +159,20 @@ export function greeting(date = new Date()) {
   if (h < 17) return 'Good afternoon';
   return 'Good evening';
 }
+
+/**
+ * Counts per time bucket over the last `days`, oldest first, for the small
+ * trend lines on the dashboard cards. `dateOf` picks which date a survey counts
+ * on (created, submitted, last updated).
+ */
+export function dailySeries(surveys = [], dateOf, { days = 30, buckets = 15, now = Date.now() } = {}) {
+  const size = (days * DAY) / buckets;
+  const start = now - days * DAY;
+  const out = new Array(buckets).fill(0);
+  for (const s of surveys) {
+    const t = new Date(dateOf(s) || 0).getTime();
+    if (!Number.isFinite(t) || t < start || t > now) continue;
+    out[Math.min(buckets - 1, Math.floor((t - start) / size))] += 1;
+  }
+  return out;
+}

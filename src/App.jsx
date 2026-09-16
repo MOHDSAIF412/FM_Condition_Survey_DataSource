@@ -16,7 +16,7 @@ import PhotoGallery from './components/PhotoGallery';
 import ReportDashboard from './components/ReportDashboard';
 import AdminDashboard from './admin/AdminDashboard';
 import PortalSidebar from './portal/PortalSidebar';
-import PortalHome, { ProjectPickerDialog } from './portal/PortalHome';
+import PortalHome from './portal/PortalHome';
 import GlobalSearch from './portal/GlobalSearch';
 import { Capacitor } from '@capacitor/core';
 import { listTemplates, cachedTemplates, applyTemplateToItems, isBlankSnag } from './utils/templates';
@@ -123,7 +123,7 @@ export default function App({ currentUser = null, onSignOut } = {}) {
   // The web portal opens on its dashboard; the phone app keeps opening on the project list.
   const [view, setView] = useState(() => (Capacitor.isNativePlatform() ? 'projects' : 'home'));
   const [navOpen, setNavOpen] = useState(false);
-  const [pickProjectOpen, setPickProjectOpen] = useState(false);
+  const [createProjectSignal, setCreateProjectSignal] = useState(0);
   // The Admin Dashboard is part of the web portal only; the phone app never offers it.
   const isWebPortal = !Capacitor.isNativePlatform();
   const [adminModule, setAdminModule] = useState('forms');
@@ -1316,22 +1316,25 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
     await handleOpenSurvey(surveyId);
   };
 
-  const startSurveyInProject = async (project) => {
+  /** Dashboard "Create New Project": the project list with its form open. */
+  const openCreateProject = () => {
+    setCreateProjectSignal(Date.now());
+    setView('projects');
+  };
+
+  /**
+   * Opens the facility list a dashboard tile or chart counted, already filtered
+   * ('all', 'submitted', 'draft', 'snags', 'photos'). Facilities live inside a
+   * project: with several projects and none open, the project list comes first.
+   */
+  const openFacilityList = (key) => {
+    const project = activeProjectRef.current || (projects.length === 1 ? projects[0] : null);
+    if (!project) { setView('projects'); return; }
     activeProjectRef.current = project;
     setActiveProject(project);
     setActiveProjectId(project.id);
-    await handleAddFacilityToProject();
-  };
-
-  /** Every facility belongs to a project, so a new survey starts by choosing one. */
-  const createSurveyFromPortal = () => {
-    if (!projects.length) {
-      alert('Create a project first — every survey belongs to a project.');
-      setView('projects');
-      return;
-    }
-    if (projects.length === 1) { startSurveyInProject(projects[0]); return; }
-    setPickProjectOpen(true);
+    setView('facilities');
+    setListFocus({ key, nonce: Date.now() });
   };
 
   const handleBackToProjects = async () => {
@@ -1680,7 +1683,7 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
 
       {/* Web portal dashboard. */}
       {view === 'home' && isWebPortal && (
-        <main className="flex-1 w-full px-3 sm:px-8 pt-5 sm:pt-7 md:pb-8">
+        <main className="flex-1 w-full px-3 sm:px-5 pt-4 md:pb-6">
           <PortalHome
             currentUser={currentUser}
             surveys={surveyList}
@@ -1689,20 +1692,14 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
             formsVersion={formsVersion}
             templates={templates}
             loading={projectsLoading}
-            onCreateSurvey={createSurveyFromPortal}
+            onCreateProject={openCreateProject}
+            onOpenList={openFacilityList}
             onViewReports={() => setView('reports')}
             onOpenSurvey={openSurveyFromPortal}
             onOpenProject={handleOpenProject}
             onNavigate={navigatePortal}
           />
         </main>
-      )}
-      {pickProjectOpen && (
-        <ProjectPickerDialog
-          projects={projects}
-          onPick={(p) => { setPickProjectOpen(false); startSurveyInProject(p); }}
-          onClose={() => setPickProjectOpen(false)}
-        />
       )}
 
       {/* Project picker: nothing project-specific is reachable until one is chosen. */}
@@ -1715,6 +1712,7 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
             onOpenProject={handleOpenProject}
             onCreateProject={handleCreateProject}
             onRefresh={refreshProjects}
+            openCreateSignal={createProjectSignal}
           />
         </main>
       )}

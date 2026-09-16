@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import {
-  Home, LayoutList, FileText, Users, FolderKanban, Workflow, Sparkles, History, ScrollText, Settings,
-  ChevronDown, X, Lock
+  Home, LayoutList, FileText, Users, FolderKanban, History, ScrollText, Settings,
+  ChevronDown, X
 } from 'lucide-react';
 import { useEscapeKey } from '../utils/useEscapeKey';
 
@@ -19,17 +19,9 @@ function buildNav({ isAdmin, hasOpenProject }) {
   const soon = (label, stage) => ({ label, disabled: true, stage });
   return [
     { key: 'home', label: 'Dashboard', icon: Home, target: { view: 'home' } },
-    isAdmin && {
-      key: 'builder', label: 'Survey Builder', icon: LayoutList,
-      children: [
-        { label: 'Forms', target: { admin: 'forms' } },
-        { label: 'Sections', target: { admin: 'forms' } },
-        { label: 'Fields', target: { admin: 'forms' } },
-        { label: 'Dropdown Options', target: { admin: 'forms' } },
-        { label: 'Inspection Templates', target: { admin: 'templates' } },
-        soon('Conditional Rules', 'Next stage')
-      ]
-    },
+    // One entry: forms, sections, fields and dropdown options are all edited on
+    // the same Survey Builder page, so separate links went nowhere new.
+    isAdmin && { key: 'builder', label: 'Survey Builder', icon: LayoutList, target: { admin: 'forms' } },
     {
       key: 'reports', label: 'Reports', icon: FileText,
       children: [
@@ -51,11 +43,14 @@ function buildNav({ isAdmin, hasOpenProject }) {
         ...(hasOpenProject ? [
           { label: 'Facilities', target: { view: 'facilities' } },
           { label: 'Photos', target: { view: 'photos' } }
+        ] : []),
+        ...(isAdmin ? [
+          { label: 'Inspection Templates', target: { admin: 'templates' } },
+          soon('Workflows', 'Stage 6'),
+          soon('AI Assistant', 'Not enabled')
         ] : [])
       ]
     },
-    isAdmin && { key: 'workflows', label: 'Workflows', icon: Workflow, disabled: true, stage: 'Stage 6' },
-    isAdmin && { key: 'ai', label: 'AI Assistant', icon: Sparkles, disabled: true, stage: 'Not enabled' },
     isAdmin && { key: 'versions', label: 'Version History', icon: History, target: { admin: 'versions' } },
     isAdmin && { key: 'audit', label: 'Audit Logs', icon: ScrollText, target: { admin: 'audit' } },
     isAdmin && { key: 'settings', label: 'Settings', icon: Settings, disabled: true, stage: 'Later stage' }
@@ -69,7 +64,7 @@ export default function PortalSidebar({
 }) {
   const nav = buildNav({ isAdmin, hasOpenProject });
   const groupOf = (target) => nav.find((g) => g.children?.some((c) => sameTarget(c.target, target)))?.key;
-  const [expanded, setExpanded] = useState(() => new Set([groupOf(current), 'builder', 'reports'].filter(Boolean)));
+  const [expanded, setExpanded] = useState(() => new Set([groupOf(current), 'reports', 'users', 'projects'].filter(Boolean)));
 
   // The group holding the current page opens itself.
   useEffect(() => {
@@ -133,7 +128,7 @@ export default function PortalSidebar({
                                 : c.disabled ? 'text-sky-100/35 cursor-not-allowed'
                                   : 'text-sky-100/70 hover:text-white hover:bg-white/10'}`}>
                             <span className="flex-1 truncate">{c.label}</span>
-                            {c.disabled && <span className="text-[10px] inline-flex items-center gap-0.5 shrink-0"><Lock className="w-2.5 h-2.5" />{c.stage}</span>}
+                            {c.disabled && <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-white/10 text-sky-100/60 shrink-0">{c.stage}</span>}
                           </button>
                         </li>
                       );
@@ -148,22 +143,27 @@ export default function PortalSidebar({
             <button key={item.key} type="button" disabled={item.disabled} onClick={() => go(item.target)}
               aria-current={active ? 'page' : undefined}
               className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-[14px] font-semibold transition-colors ${
-                active ? 'bg-flame-500 text-white shadow-md'
+                active ? 'bg-flame-500 text-white shadow-lg shadow-flame-900/30'
                   : item.disabled ? 'text-sky-100/35 cursor-not-allowed'
                     : 'text-sky-100/80 hover:bg-white/10 hover:text-white'}`}>
               <Icon className="w-[18px] h-[18px] shrink-0" />
               <span className="flex-1 text-left">{item.label}</span>
-              {item.disabled && <span className="text-[10px] inline-flex items-center gap-0.5"><Lock className="w-2.5 h-2.5" />{item.stage}</span>}
+              {item.disabled && <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-white/10 text-sky-100/60">{item.stage}</span>}
             </button>
           );
         })}
       </nav>
 
-      <div className="px-5 py-4 border-t border-white/10 flex items-center gap-3">
-        <img src="/ocs-logo-white.png" alt="" aria-hidden="true" className="h-6 w-auto opacity-80" onError={(e) => { e.target.style.display = 'none'; }} />
-        <div className="text-[11px] leading-tight text-sky-100/60">
-          <p>FM Condition Survey</p>
-          <p>v{APP_VERSION}</p>
+      <div className="p-3">
+        <div className="relative overflow-hidden rounded-xl border border-white/10 bg-gradient-to-br from-white/10 to-white/0 px-4 py-3 flex items-center gap-3">
+          <img src="/ocs-logo-white.png" alt="" aria-hidden="true" className="h-7 w-auto" onError={(e) => { e.target.style.display = 'none'; }} />
+          <div className="text-[11px] leading-tight text-sky-100/75">
+            <p className="font-semibold">FM Condition Survey</p>
+            <p>v{APP_VERSION}</p>
+          </div>
+          <svg aria-hidden="true" viewBox="0 0 120 40" className="absolute -right-2 -bottom-2 w-28 h-10 opacity-40">
+            <path d="M0 40 Q30 5 60 22 T120 12 V40 Z" fill="#3b5697" />
+          </svg>
         </div>
       </div>
     </div>

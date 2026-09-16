@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   FolderPlus,
   Building2,
@@ -35,9 +35,15 @@ export default function ProjectDashboard({
   online = true,
   onOpenProject,
   onCreateProject,
-  onRefresh
+  onRefresh,
+  openCreateSignal = 0
 }) {
   const [showForm, setShowForm] = useState(false);
+
+  // "Create New Project" on the dashboard lands here with the form already open.
+  useEffect(() => {
+    if (openCreateSignal) setShowForm(true);
+  }, [openCreateSignal]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [form, setForm] = useState({ name: '', client: '', location: '', notes: '' });
