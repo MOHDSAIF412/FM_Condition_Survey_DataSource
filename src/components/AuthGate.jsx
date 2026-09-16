@@ -3,8 +3,26 @@ import { Loader2 } from 'lucide-react';
 import App from '../App';
 import Login from './Login';
 import { isCloudConfigured } from '../utils/supabaseClient';
-import { getSession, onAuthChange, getMyProfile, signOut } from '../utils/auth';
+import { getSession, onAuthChange, getMyProfile, signOut, cachedProfile, clearCachedProfile } from '../utils/auth';
 import { isOnline, initNetworkMonitor, onNetworkChange } from '../utils/network';
+import { withTimeout } from '../utils/cloudSync';
+
+/**
+ * The profile for a session: fresh when the server answers within a few
+ * seconds, otherwise the last one this device loaded for the same account.
+ * With weak signal the request takes ~16s to fail, and the app sat on a
+ * spinner for all of it before letting anyone in.
+ */
+async function loadProfile(session) {
+  const userId = session?.user?.id;
+  if (isOnline()) {
+    try {
+      const fresh = await withTimeout(getMyProfile(), 6000, 'Loading profile');
+      if (fresh) return fresh;
+    } catch { /* fall back to the cached profile */ }
+  }
+  return cachedProfile(userId);
+}
 
 /**
  * Everything in the app sits behind this. There is no route, tab, or view
@@ -37,13 +55,13 @@ export default function AuthGate() {
       const existing = await getSession();
       if (cancelled) return;
       setSession(existing);
-      if (existing) setProfile(await getMyProfile());
+      if (existing) setProfile(await loadProfile(existing));
       setChecking(false);
     })();
 
     const unsubscribe = onAuthChange(async (next) => {
       setSession(next);
-      setProfile(next ? await getMyProfile() : null);
+      setProfile(next ? await loadProfile(next) : null);
     });
 
     return () => { cancelled = true; unsubscribe(); };
@@ -70,7 +88,7 @@ export default function AuthGate() {
   return (
     <App
       currentUser={profile ? { ...profile, sessionEmail: session.user?.email } : { id: session.user?.id, email: session.user?.email, role: 'user' }}
-      onSignOut={async () => { await signOut(); setSession(null); setProfile(null); }}
+      onSignOut={async () => { await signOut(); clearCachedProfile(); setSession(null); setProfile(null); }}
     />
   );
 }

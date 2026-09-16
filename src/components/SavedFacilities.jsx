@@ -5,9 +5,10 @@ import {
   Building2, Factory, Trees, Wrench, Fan, Zap, Flame, Sparkles,
   Home, GraduationCap, ShoppingBag, Briefcase, Warehouse, Moon, Stethoscope, BedDouble, Trophy
 } from 'lucide-react';
-import { pullSurvey, hydratePhotos, mapWithConcurrency } from '../utils/cloudSync';
-import { listAllSurveysOffline } from '../utils/storage';
-import { sortDate } from '../utils/surveySelection';
+import { pullSurvey, hydratePhotos, mapWithConcurrency, collectKnownPhotos, withTimeout } from '../utils/cloudSync';
+import { getSurveyOffline } from '../utils/storage';
+import { sortDate, chooseSurveyToOpen } from '../utils/surveySelection';
+import { isOnline } from '../utils/network';
 import { generateSurveyPDF } from '../utils/pdfGenerator';
 import { generateSurveyExcel } from '../utils/excelGenerator';
 import { formatMoney } from '../utils/currency';
@@ -23,7 +24,6 @@ const TYPE_ICONS = {
 // Facilities pulled at once for a combined report. Each one is itself fetching
 // its photos in parallel, so this stays modest to avoid stacking the two.
 const FACILITY_FETCH_CONCURRENCY = 4;
-
 
 /**
  * Every facility that has been saved, expandable to its snag list, with a
@@ -144,20 +144,26 @@ export default function SavedFacilities({ surveys = [], currentId, onOpen, onDel
   };
 
   /**
-   * The server copy where there is one, otherwise this device's.
+   * The copy to read or report from -- the same rule as opening a facility.
    *
-   * A facility submitted with no signal is not on the server yet, but the
-   * device holds it in full -- photo bytes included -- so its report can still
-   * be produced rather than refused.
+   * The device copy wins when it holds unsent edits: taking the server copy
+   * first meant a report exported from the phone silently left out every snag
+   * that had not uploaded yet. Otherwise the server copy, with the device copy
+   * as the fallback when there is no connection or it is too slow to answer.
    */
   const loadSurvey = async (surveyId) => {
-    try {
-      const remote = await pullSurvey(surveyId, {});
-      if (remote) return remote;
-    } catch (err) {
-      console.info('Server copy unavailable, using the one on this device:', err?.message);
+    const local = await getSurveyOffline(surveyId);
+
+    let remote = null;
+    if (!(local && local.pendingSync) && isOnline()) {
+      try {
+        const pull = pullSurvey(surveyId, collectKnownPhotos(local));
+        remote = local ? await withTimeout(pull, 8000, 'Loading facility') : await pull;
+      } catch (err) {
+        console.info('Server copy unavailable, using the one on this device:', err?.message);
+      }
     }
-    return (await listAllSurveysOffline()).find((s) => s && s.id === surveyId) || null;
+    return chooseSurveyToOpen(local, remote).survey;
   };
 
   /**
@@ -744,6 +750,14 @@ export default function SavedFacilities({ surveys = [], currentId, onOpen, onDel
                                   <CloudOff className="w-3 h-3" /> Waiting
                                 </span>
                               )}
+                              {s.cached && !s.onDevice && (
+                                <span
+                                  title="Known from the last list downloaded, but not stored on this device. Connect to the internet to open it."
+                                  className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-500 border border-slate-200 shrink-0"
+                                >
+                                  Not on this device
+                                </span>
+                              )}
                             </div>
                             <p className="text-[11px] text-slate-400 mt-0.5">
                               {s.submittedAt ? 'Submitted ' : 'Updated '}
@@ -819,6 +833,14 @@ export default function SavedFacilities({ surveys = [], currentId, onOpen, onDel
                           className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-amber-50 text-amber-700 border border-amber-200 inline-flex items-center gap-1 shrink-0"
                         >
                           <CloudOff className="w-3 h-3" /> Waiting to upload
+                        </span>
+                      )}
+                      {s.cached && !s.onDevice && (
+                        <span
+                          title="Known from the last list downloaded, but not stored on this device. Connect to the internet to open it."
+                          className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-slate-100 text-slate-500 border border-slate-200 shrink-0"
+                        >
+                          Not on this device
                         </span>
                       )}
                     </div>

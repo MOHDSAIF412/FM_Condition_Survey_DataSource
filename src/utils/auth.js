@@ -56,6 +56,31 @@ export async function signOut() {
   await supabase.auth.signOut();
 }
 
+const PROFILE_CACHE_KEY = 'fm_profile_cache';
+
+/**
+ * The profile last loaded for this account, for use with no connection.
+ *
+ * Without it, opening the app offline left even an administrator with no role
+ * and no permissions, so reports and deletion vanished exactly when working
+ * from the device copy mattered most. Only returned for the same account id.
+ * Deletion is still enforced by the database once back online; this restores
+ * what the screen offers, not what the server allows.
+ */
+export function cachedProfile(userId) {
+  if (!userId) return null;
+  try {
+    const cached = JSON.parse(localStorage.getItem(PROFILE_CACHE_KEY) || 'null');
+    return cached && cached.id === userId ? cached : null;
+  } catch {
+    return null;
+  }
+}
+
+export function clearCachedProfile() {
+  try { localStorage.removeItem(PROFILE_CACHE_KEY); } catch { /* nothing cached */ }
+}
+
 /** This device's own row in fm_survey_users -- name, role, active flag. */
 export async function getMyProfile() {
   if (!isCloudConfigured) return null;
@@ -72,6 +97,9 @@ export async function getMyProfile() {
     console.warn('[auth] could not load profile:', error.message);
     return null;
   }
+  if (data) {
+    try { localStorage.setItem(PROFILE_CACHE_KEY, JSON.stringify(data)); } catch { /* storage unavailable */ }
+  }
   return data;
 }
 
@@ -81,7 +109,8 @@ export async function getMyProfile() {
  * so the tick boxes only ever describe ordinary surveyors.
  */
 export function can(user, permission) {
-  if (!user) return false;
+  // Matches the database's fm_can(), which refuses deactivated accounts too.
+  if (!user || user.is_active === false) return false;
   if (user.role === 'admin') return true;
   return user.permissions?.[permission] === true;
 }

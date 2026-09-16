@@ -202,6 +202,25 @@ export async function saveSurveyOffline(survey, options = {}) {
   }
 }
 
+/**
+ * One facility from this device, or null. Reads a single record: opening a
+ * facility or building a report for many of them must not load every stored
+ * facility's photos each time.
+ */
+export async function getSurveyOffline(id) {
+  if (!id) return null;
+  try {
+    const db = await openDB();
+    return await new Promise((resolve) => {
+      const req = db.transaction(STORE_SURVEYS, 'readonly').objectStore(STORE_SURVEYS).get(id);
+      req.onsuccess = () => resolve(req.result || null);
+      req.onerror = () => resolve(null);
+    });
+  } catch {
+    return null;
+  }
+}
+
 export async function loadCurrentSurveyOffline(defaultId = 'active_survey') {
   try {
     const activeId = localStorage.getItem('fm_active_survey_id') || defaultId;

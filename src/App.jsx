@@ -22,7 +22,8 @@ import {
   subscribeToSurveyChanges,
   markSurveySynced,
   deleteSurveyOffline,
-  listAllSurveysOffline
+  listAllSurveysOffline,
+  getSurveyOffline
 } from './utils/storage';
 import { generateSurveyExcel } from './utils/excelGenerator';
 import { saveText } from './utils/fileSaver';
@@ -34,12 +35,15 @@ import {
   subscribeToCloudChanges,
   listSurveys,
   deleteSurveyPermanently,
-  withTimeout
+  withTimeout,
+  cachedSurveyList,
+  surveyExistsOnServer
 } from './utils/cloudSync';
 
 // How long a surveyor is kept waiting on the server before the app gets on
 // with what it already has on the device.
 const OPEN_WAIT_MS = 6000;
+const LIST_WAIT_MS = 8000;
 const SIGN_OUT_UPLOAD_WAIT_MS = 6000;
 import { isCloudConfigured } from './utils/supabaseClient';
 import { can } from './utils/auth';
@@ -512,10 +516,23 @@ export default function App({ currentUser = null, onSignOut } = {}) {
       return { message: 'Sign in again to upload. Your work is saved on this device.' };
     }
     if (currentError || failed) {
-      const parts = [];
-      if (currentError) parts.push(`the open facility: ${currentError.message}`);
-      parts.push(...problems);
-      return { message: `${flushed} uploaded. Still waiting — ${parts.join('; ')}. Your work is saved on this device and will retry.` };
+      const unreachable = (msg) => /failed to fetch|network|timed out|load failed/i.test(String(msg || ''));
+      // Count facilities actually holding unsent work, not upload attempts --
+      // the open facility is always attempted even when it has nothing new.
+      let stillWaiting = (currentError ? 1 : 0) + failed;
+      try {
+        stillWaiting = (await listAllSurveysOffline())
+          .filter((s) => s && s.pendingSync && surveyIsWorthSyncing(s)).length;
+      } catch { /* keep the attempt count */ }
+      const why = [currentError?.message, ...problems].some(unreachable)
+        ? 'The server could not be reached.'
+        : [currentError && `The open facility: ${currentError.message}`, ...problems].filter(Boolean).join('; ') + '.';
+      if (!stillWaiting) {
+        return { message: `Nothing on this device is waiting to upload. ${why} Changes made on other devices may not show until it can be reached.` };
+      }
+      return {
+        message: `${flushed} uploaded, ${stillWaiting} still waiting. ${why} Your work is saved on this device and will upload automatically.`
+      };
     }
     if (flushed) return { message: `${flushed} facility(ies) uploaded.` };
     if (pushedCurrent) return { message: 'Up to date. Everything is on the server.' };
@@ -906,46 +923,38 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
    * vanished". Local copies are merged in and flagged so the surveyor can see
    * it is saved and waiting to upload.
    */
+  /**
+   * The facility list: the server's, merged with whatever is on this device.
+   *
+   * With no connection it used to show nothing at all -- the device rows lost
+   * their projectId in the merge, so the project screen filtered every one out,
+   * and only after waiting ~16s for the request to fail. It now uses the last
+   * downloaded list straight away when offline, and within a few seconds when
+   * the signal is too weak to answer.
+   */
   const refreshSurveyList = async () => {
     let remote = [];
+    let remoteIsCached = false;
+
     if (isCloudConfigured) {
-      try { remote = await listSurveys(); } catch { /* offline: local only */ }
+      if (isOnline()) {
+        try {
+          remote = await withTimeout(listSurveys(), LIST_WAIT_MS, 'Loading facilities');
+        } catch (err) {
+          if (isAuthFailure(err)) setSyncState('unauthorized');
+          remote = cachedSurveyList();
+          remoteIsCached = true;
+        }
+      } else {
+        remote = cachedSurveyList();
+        remoteIsCached = true;
+      }
     }
 
     let local = [];
-    try { local = await listAllSurveysOffline(); } catch { /* ignore */ }
+    try { local = await listAllSurveysOffline(); } catch { /* list what the server has */ }
 
-    const merged = new Map(remote.map((s) => [s.id, { ...s, pendingSync: false }]));
-    for (const l of local) {
-      if (!l || !l.id) continue;
-      // Blank, never-submitted scratch surveys are noise in this list.
-      if (!l.submittedAt && !(l.items || []).length) continue;
-
-      const existing = merged.get(l.id);
-      if (existing) {
-        // On the server already, but this device still has unsent edits.
-        if (l.pendingSync) merged.set(l.id, { ...existing, pendingSync: true });
-        continue;
-      }
-      merged.set(l.id, {
-        id: l.id,
-        title: l.title,
-        facility: l.facility || {},
-        facilityName: l.facility?.facilityName || l.facility?.buildingName || '',
-        itemCount: (l.items || []).length,
-        status: l.status || 'draft',
-        submittedAt: l.submittedAt || null,
-        updatedAt: l.updatedAt || new Date().toISOString(),
-        pendingSync: !!l.pendingSync,
-        localOnly: true
-      });
-    }
-
-    setSurveyList(
-      [...merged.values()].sort(
-        (a, b) => new Date(b.submittedAt || b.updatedAt || 0) - new Date(a.submittedAt || a.updatedAt || 0)
-      )
-    );
+    setSurveyList(mergeSurveyLists(remote, local, { remoteIsCached }));
   };
 
   // On launch, upload anything left unsent by an earlier offline session --
@@ -976,10 +985,7 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
     if (surveyId === survey?.id) return;
     setSyncState('syncing');
 
-    let local = null;
-    try {
-      local = (await listAllSurveysOffline()).find((s) => s && s.id === surveyId) || null;
-    } catch { /* no readable device copy */ }
+    const local = await getSurveyOffline(surveyId);
 
     let remote = null;
     let remoteError = null;
@@ -989,8 +995,12 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
     // request takes ~16s to fail, and the surveyor is standing there waiting.
     if (!(local && local.pendingSync) && isCloudConfigured && isOnline()) {
       try {
-        const pull = pullSurvey(surveyId, collectKnownPhotos(local));
-        remote = local ? await withTimeout(pull, OPEN_WAIT_MS, 'Opening facility') : await pull;
+        if (local) {
+          remote = await withTimeout(pullSurvey(surveyId, collectKnownPhotos(local)), OPEN_WAIT_MS, 'Opening facility');
+        } else if (await withTimeout(surveyExistsOnServer(surveyId), OPEN_WAIT_MS, 'Reaching the server')) {
+          // Nothing to fall back on, so the download itself is waited out.
+          remote = await pullSurvey(surveyId, {});
+        }
       } catch (err) {
         remoteError = err;
       }

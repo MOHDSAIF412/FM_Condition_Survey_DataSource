@@ -301,6 +301,24 @@ export async function pushSurvey(survey) {
  * `knownPhotos` maps photo id to dataUrl, so images already held locally are
  * not downloaded again on every sync.
  */
+/**
+ * Whether the server holds this facility, with one tiny query.
+ *
+ * Lets a caller with nothing on the device find out quickly that the server is
+ * unreachable, without capping the full download -- which, for a facility with
+ * many photos on a slow link, can legitimately take a while.
+ */
+export async function surveyExistsOnServer(surveyId) {
+  if (!isCloudConfigured) return false;
+  const { data, error } = await supabase
+    .from('condition_surveys')
+    .select('id')
+    .eq('id', surveyId)
+    .limit(1);
+  if (error) throw error;
+  return !!(data && data.length);
+}
+
 export async function pullSurvey(surveyId, knownPhotos = {}) {
   if (!isCloudConfigured) return null;
 
@@ -326,22 +344,29 @@ export async function pullSurvey(surveyId, knownPhotos = {}) {
     .eq('survey_id', surveyId);
   if (photoResult.error) throw photoResult.error;
 
-  const photosByItem = {};
-  for (const p of photoResult.data || []) {
-    let dataUrl = knownPhotos[p.id];
-    if (!dataUrl) {
-      try {
-        dataUrl = await downloadPhoto(p.storage_path);
-      } catch (err) {
-        // Keep the photo record even though the bytes did not arrive. Dropping
-        // it here used to delete the photo from the server on this client's
-        // next push, because that push replaced the item list wholesale -- one
-        // flaky download permanently destroyed the picture. Retaining the row
-        // with its storagePath means it can be fetched again later.
-        console.warn('Photo bytes unavailable, keeping reference:', p.storage_path, err?.message);
-        dataUrl = null;
-      }
+  // Photos the device already holds are reused; the rest download in parallel.
+  // One after another, a facility with forty photos took long enough to open
+  // on a phone that it looked stuck.
+  const photoRows = photoResult.data || [];
+  const withBytes = await mapWithConcurrency(photoRows, PHOTO_FETCH_CONCURRENCY, async (p) => {
+    if (knownPhotos[p.id]) return knownPhotos[p.id];
+    try {
+      return await downloadPhoto(p.storage_path);
+    } catch (err) {
+      // Keep the photo record even though the bytes did not arrive. Dropping
+      // it here used to delete the photo from the server on this client's
+      // next push, because that push replaced the item list wholesale -- one
+      // flaky download permanently destroyed the picture. Retaining the row
+      // with its storagePath means it can be fetched again later.
+      console.warn('Photo bytes unavailable, keeping reference:', p.storage_path, err?.message);
+      return null;
     }
+  });
+
+  const photosByItem = {};
+  for (let idx = 0; idx < photoRows.length; idx++) {
+    const p = photoRows[idx];
+    const dataUrl = withBytes[idx];
     if (!photosByItem[p.item_id]) photosByItem[p.item_id] = [];
     photosByItem[p.item_id].push({
       id: p.id,
@@ -386,16 +411,34 @@ export async function pullSurvey(surveyId, knownPhotos = {}) {
  * Every survey on the server, newest first - the facility list. Cheap: reads
  * only the summary columns, never the photo payloads.
  */
+const SURVEY_LIST_CACHE_KEY = 'fm_survey_list_cache';
+
+/**
+ * The facility list as last downloaded, for showing with no connection.
+ * Summaries only -- no snags or photos -- so it stays small.
+ */
+export function cachedSurveyList() {
+  try {
+    const raw = localStorage.getItem(SURVEY_LIST_CACHE_KEY);
+    const list = raw ? JSON.parse(raw) : [];
+    return Array.isArray(list) ? list : [];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Throws when the list cannot be fetched. It used to return an empty list,
+ * which made "no connection" indistinguishable from "no facilities" and left
+ * the caller nothing to fall back on.
+ */
 export async function listSurveys() {
   if (!isCloudConfigured) return [];
   const { data, error } = await supabase
     .from('condition_surveys')
     .select('id, title, facility, facility_name, status, submitted_at, updated_at, revision, project_id')
     .order('updated_at', { ascending: false });
-  if (error) {
-    console.warn('Could not list surveys:', error.message);
-    return [];
-  }
+  if (error) throw error;
   const surveys = data || [];
   const ids = surveys.map((r) => r.id);
 
@@ -406,7 +449,7 @@ export async function listSurveys() {
     countRowsBySurvey('survey_photos', ids)
   ]);
 
-  return surveys.map((r) => ({
+  const list = surveys.map((r) => ({
     id: r.id,
     title: r.title,
     projectId: r.project_id || null,
@@ -418,6 +461,11 @@ export async function listSurveys() {
     submittedAt: r.submitted_at,
     updatedAt: r.updated_at
   }));
+
+  try {
+    localStorage.setItem(SURVEY_LIST_CACHE_KEY, JSON.stringify(list));
+  } catch { /* storage full or unavailable; the live list still works */ }
+  return list;
 }
 
 /**
