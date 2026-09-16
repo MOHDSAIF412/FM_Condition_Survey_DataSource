@@ -23,6 +23,7 @@ import { compressImage } from '../utils/imageCompressor';
 import { formatMoney } from '../utils/currency';
 import { Capacitor } from '@capacitor/core';
 import { captureFromCamera, pickFromGallery, photosFromFiles, PHOTO_SYNC } from '../utils/photoCapture';
+import { CustomFieldList, CustomSections, useSystemFields } from './CustomFields';
 
 const PHOTO_PRESET_TAGS = [
   'Defect Close-up',
@@ -79,6 +80,13 @@ function AssetItemCard({
   const handleFieldChange = (field, value) => {
     const updateFn = onUpdate || onUpdateItem;
     if (typeof updateFn === 'function') updateFn({ ...item, [field]: value });
+  };
+
+  // Names and visibility of built-in fields, and custom fields, from the Admin Dashboard.
+  const sys = useSystemFields('snag', item);
+  const f = (key, fallback) => sys.get(key, fallback);
+  const handleCustomChange = (key, value) => {
+    handleFieldChange('customValues', { ...(item.customValues || {}), [key]: value });
   };
 
   // Multi-photo upload / Camera append
@@ -273,7 +281,7 @@ function AssetItemCard({
             <div className="flex items-center justify-between mb-1">
               <label htmlFor={`snag-location-${item.id}`} className="block text-[12px] font-bold uppercase text-slate-600 flex items-center gap-1.5">
                 <MapPin className="w-3.5 h-3.5 text-sky-600" />
-                Snag Location / Room / Area *
+                {f('location', 'Snag Location / Room / Area').label} *
               </label>
             </div>
 
@@ -310,7 +318,7 @@ function AssetItemCard({
             <div className="flex items-center justify-between mb-1.5">
               <label className="block text-[12px] font-bold uppercase text-slate-600 flex items-center gap-1.5">
                 <Wrench className="w-3.5 h-3.5 text-sky-600" />
-                Department / Trade *
+                {f('department', 'Department / Trade').label} *
               </label>
               <span className="text-xs font-semibold text-slate-600">
                 {currentDept.name}
@@ -344,7 +352,7 @@ function AssetItemCard({
           <div>
             <div className="flex items-center justify-between mb-1.5">
               <label className="block text-[12px] font-bold uppercase text-slate-600">
-                Remedial Priority (1 - 4)
+                {f('priority', 'Remedial Priority (1 - 4)').label}
               </label>
               <span className="text-xs font-semibold text-slate-500">
                 {currentPriority.timeframe}
@@ -380,7 +388,7 @@ function AssetItemCard({
           {/* Observations & Defects */}
           <div>
             <label htmlFor={`snag-defect-${item.id}`} className="block text-[12px] font-bold uppercase text-slate-600 mb-1">
-              Observed Defects & Condition Notes
+              {f('defectDescription', 'Observed Defects & Condition Notes').label}
             </label>
             <textarea
               id={`snag-defect-${item.id}`}
@@ -392,10 +400,11 @@ function AssetItemCard({
           </div>
 
           {/* Quantity and Estimated Cost */}
+          {(f('estimatedCost').visible || f('quantity').visible) && (
           <div className="grid grid-cols-2 gap-3">
-            <div>
+            {f('estimatedCost').visible && <div>
               <label htmlFor={`snag-cost-${item.id}`} className="block text-[12px] font-bold uppercase text-slate-600 mb-1">
-                Estimated Remediation Cost (AED)
+                {f('estimatedCost', 'Estimated Remediation Cost (AED)').label}
               </label>
               <div className="relative">
                 <input
@@ -410,11 +419,11 @@ function AssetItemCard({
                 />
                 <DollarSign className="w-4 h-4 text-slate-400 absolute left-2.5 top-2.5" />
               </div>
-            </div>
+            </div>}
 
-            <div>
+            {f('quantity').visible && <div>
               <label htmlFor={`snag-qty-${item.id}`} className="block text-[12px] font-bold uppercase text-slate-600 mb-1">
-                Quantity
+                {f('quantity', 'Quantity').label}
               </label>
               <input
                 id={`snag-qty-${item.id}`}
@@ -425,8 +434,21 @@ function AssetItemCard({
                 onChange={(e) => handleFieldChange('quantity', parseInt(e.target.value) || 1)}
                 className="w-full px-3 py-2 text-sm rounded-xl border border-slate-300 focus:ring-2 focus:ring-sky-500 focus:outline-none"
               />
-            </div>
+            </div>}
           </div>
+          )}
+
+          {/* Fields added in the Admin Dashboard: this section's, then whole new sections. */}
+          <CustomFieldList scope="snag" sectionId="snag_details" record={item}
+            onChangeValue={handleCustomChange} idPrefix={`snag-${item.id}`} />
+
+          <CustomSections scope="snag" record={item} onChangeValue={handleCustomChange} idPrefix={`snag-${item.id}`}
+            renderSection={(section, body) => (
+              <div className="pt-3 border-t border-slate-200 space-y-3">
+                <p className="text-xs font-bold text-slate-700 uppercase">{section.label}</p>
+                {body}
+              </div>
+            )} />
 
           {/* Photos & Evidence Section (Multi-Photo) */}
           <div className="pt-3 border-t border-slate-200">
@@ -434,7 +456,8 @@ function AssetItemCard({
               <div className="flex items-center space-x-2">
                 <Camera className="w-4 h-4 text-sky-600" />
                 <span className="text-xs font-bold text-slate-700 uppercase">
-                  Snag Photos & Evidence ({photosList.length} Attached)
+                  {sys.sectionLabel('snag_photos', 'Snag Photos & Evidence')} ({photosList.length} Attached)
+                  {f('photos').required && <span className="text-rose-600"> * required</span>}
                 </span>
               </div>
             </div>

@@ -15,8 +15,11 @@ import Breadcrumb from './components/Breadcrumb';
 import ProjectHero from './components/ProjectHero';
 import PhotoGallery from './components/PhotoGallery';
 import ReportDashboard from './components/ReportDashboard';
-import TemplateManager from './components/TemplateManager';
+import AdminDashboard from './admin/AdminDashboard';
+import { Capacitor } from '@capacitor/core';
 import { listTemplates, cachedTemplates, applyTemplateToItems, isBlankSnag } from './utils/templates';
+import { useFormsConfig } from './config/FormsConfigContext';
+import { submissionProblems } from './config/rulesEngine';
 import { createNewSurvey, calculateSurveyStats, facilityCode } from './types/survey';
 import {
   saveSurveyOffline,
@@ -116,8 +119,31 @@ export default function App({ currentUser = null, onSignOut } = {}) {
    *   'survey'     the existing five tabs, always for one chosen facility
    */
   const [view, setView] = useState('projects');
+  // The Admin Dashboard is part of the web portal only; the phone app never offers it.
+  const isWebPortal = !Capacitor.isNativePlatform();
+  const [adminModule, setAdminModule] = useState('forms');
+  const openAdmin = (module) => { setAdminModule(module); setView('admin'); };
   const [projects, setProjects] = useState(() => cachedProjects());
   const [projectsLoading, setProjectsLoading] = useState(false);
+  // Fields, sections and rules published from the Admin Dashboard.
+  const { config: formsConfig, platform, refresh: refreshFormsConfig } = useFormsConfig();
+  const formsConfigRef = useRef(formsConfig);
+  formsConfigRef.current = formsConfig;
+
+  /**
+   * Required fields (including ones a rule makes required) are enforced here,
+   * at submit -- never while saving -- so unfinished or offline work is always
+   * kept. Returns true when submission must stop.
+   */
+  function blockedByRequiredFields(record) {
+    const problems = submissionProblems(formsConfigRef.current, record, platform);
+    if (!problems.length) return false;
+    const name = (record?.facility?.facilityName || 'This facility').trim();
+    const shown = problems.slice(0, 10).map((p) => `• ${p}`).join('\n');
+    const more = problems.length > 10 ? `\n…and ${problems.length - 10} more` : '';
+    alert(`"${name}" cannot be submitted yet. These required fields are empty:\n\n${shown}${more}\n\nIt is saved as a draft.`);
+    return true;
+  }
   // Inspection templates, cached so a surveyor with no signal can still start from one.
   const [templates, setTemplates] = useState(() => cachedTemplates());
   const [activeProject, setActiveProject] = useState(null);
@@ -796,6 +822,7 @@ export default function App({ currentUser = null, onSignOut } = {}) {
    * because the facility is already saved as pending and flushes on reconnect.
    */
   async function submitSurveyRecord(record) {
+    if (blockedByRequiredFields(record)) return false;
     const submitted = {
       ...record,
       status: 'submitted',
@@ -855,6 +882,8 @@ export default function App({ currentUser = null, onSignOut } = {}) {
       alert('Add at least one snag before submitting this facility.');
       return;
     }
+    // Before the confirmation, so nobody confirms a submission that is then refused.
+    if (blockedByRequiredFields(record)) return;
     if (!confirm(`Submit "${name || 'this facility'}"?\n\nIt stays available in the list for reports.`)) return;
 
     await submitSurveyRecord(record);
@@ -885,6 +914,10 @@ export default function App({ currentUser = null, onSignOut } = {}) {
     );
     if (!hasRealSnag) {
       alert('Add at least one snag before submitting this facility.');
+      setActiveTab('items');
+      return;
+    }
+    if (blockedByRequiredFields(current)) {
       setActiveTab('items');
       return;
     }
@@ -1532,7 +1565,7 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
     <div className="min-h-screen bg-[#f4f8fd] flex font-sans">
       <Sidebar
         view={view}
-        canOpenUsers={currentUser?.role === 'admin'}
+        canOpenUsers={currentUser?.role === 'admin' && isWebPortal}
         /* Only once you are actually inside a project. The last project stays
            remembered so reopening it is one tap, but on the project list itself
            a "Facilities" entry would point at a project you have not chosen. */
@@ -1570,7 +1603,7 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
         // Reports need a facility behind them, so the shortcut only belongs on
         // the survey screens; the hub screens have their own Reports entry.
         showReports={view === 'survey'}
-        onOpenUsers={() => setView('users')}
+        onOpenUsers={() => (isWebPortal ? openAdmin('users') : setView('users'))}
         onChangePassword={() => setShowPasswordModal(true)}
         onSignOut={onSignOut ? handleSignOut : undefined}
       />
@@ -1626,13 +1659,18 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
         </>
       )}
 
-      {/* Admin-only template manager. The database refuses template writes
-          from anyone else, so this check only decides what is offered. */}
-      {view === 'templates' && currentUser?.role === 'admin' && (
+      {/* Admin / Developer Dashboard: web portal, administrators only. The
+          database refuses configuration, template and user changes from anyone
+          else, so these checks only decide what is offered. */}
+      {view === 'admin' && isWebPortal && currentUser?.role === 'admin' && (
         <main className="flex-1 w-full px-3 sm:px-8 pt-4 sm:pt-6 safe-area-content-pb md:pb-8">
-          <TemplateManager
+          <AdminDashboard
+            module={adminModule}
+            onModuleChange={setAdminModule}
+            currentUser={currentUser}
             facilities={surveyList}
             projects={projects}
+            onConfigPublished={refreshFormsConfig}
           />
         </main>
       )}

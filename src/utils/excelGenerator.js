@@ -4,6 +4,7 @@
    downloads on first open -- including the ones who never build a report that
    day, on a phone, on site. */
 import { PRIORITY_LEVELS, DEPARTMENTS, calculateSurveyStats, snagLabel } from '../types/survey.js';
+import { reportFieldsFor, reportValue } from '../config/reportFields';
 import { OCS_LOGO_BASE64 } from '../assets/logoDataUrl.js';
 import { saveBlob } from './fileSaver.js';
 import { formatMoney, EXCEL_MONEY_FORMAT } from './currency.js';
@@ -337,6 +338,8 @@ export async function generateSurveyExcel(input, selectedFacility = 'ALL') {
     ['Gross Internal Area (GIA)', facility.grossInternalArea || 'N/A'],
     ['Building Age / Year Built', facility.buildingAge || 'N/A'],
     ['Building Levels & Floors', facility.floorsCount || 'N/A'],
+    // Facility fields added in the Admin Dashboard with "Excel report" on.
+    ...reportFieldsFor('facility', 'excel', [facility]).map((f) => [f.label, reportValue(f, facility, 'facility') || 'N/A']),
     ['Report Scope', selectedFacility === 'ALL' ? 'Comprehensive facility-wide audit' : `Facility-specific audit for ${selectedFacility}`]
   ];
 
@@ -566,7 +569,10 @@ export async function generateSurveyExcel(input, selectedFacility = 'ALL') {
     qty: 9,
     cost: 10
   };
-  const lastCol = COL.cost;
+  // Snag fields added in the Admin Dashboard with "Excel report" on, after the built-in columns.
+  const customSnagFields = reportFieldsFor('snag', 'excel', groups.flatMap((g) => g.items || []));
+  const customCol = (idx) => COL.cost + 1 + idx;
+  const lastCol = COL.cost + customSnagFields.length;
 
   wsSnags.columns = [
     { width: 8 },                // Snag #
@@ -578,7 +584,8 @@ export async function generateSurveyExcel(input, selectedFacility = 'ALL') {
     { width: 14 },               // Priority
     { width: 48 },               // Observed Defects & Notes
     { width: 10 },               // Quantity
-    { width: 18 }                // Est. Cost (AED)
+    { width: 18 },               // Est. Cost (AED)
+    ...customSnagFields.map((f) => ({ width: f.type === 'textarea' ? 40 : 22 }))
   ];
 
   const letterFor = (n) => wsSnags.getColumn(n).letter;
@@ -605,7 +612,8 @@ export async function generateSurveyExcel(input, selectedFacility = 'ALL') {
     'Priority',
     'Observed Defects & Notes',
     'Quantity',
-    'Est. Cost (AED)'
+    'Est. Cost (AED)',
+    ...customSnagFields.map((f) => f.label)
   ];
 
   const headerRow = wsSnags.getRow(3);
@@ -667,6 +675,11 @@ export async function generateSurveyExcel(input, selectedFacility = 'ALL') {
         row.getCell(COL.dept).value = dept.name;
         row.getCell(COL.priority).value = `P${item.priority}`;
         row.getCell(COL.defect).value = item.defectDescription || 'No defect observed.';
+        customSnagFields.forEach((f, idx) => {
+          const c = row.getCell(customCol(idx));
+          c.value = reportValue(f, item, 'snag');
+          c.alignment = { vertical: 'middle', wrapText: true };
+        });
 
         // Only once per snag -- see the COL comment above.
         if (isFirstRowOfSnag) {

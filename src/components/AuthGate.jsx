@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { FormsConfigProvider } from '../config/FormsConfigContext';
 import { Loader2 } from 'lucide-react';
 import App from '../App';
 import Login from './Login';
@@ -67,7 +68,7 @@ export default function AuthGate() {
     return () => { cancelled = true; unsubscribe(); };
   }, []);
 
-  if (!isCloudConfigured) return <App />;
+  if (!isCloudConfigured) return <FormsConfigProvider enabled={false}><App /></FormsConfigProvider>;
 
   if (checking) {
     return (
@@ -85,10 +86,14 @@ export default function AuthGate() {
   // launch, or the row is still being created). Rather than lock the
   // surveyor out of an app they are correctly signed into, let them in with
   // no role assumed -- the admin-only screen simply will not offer itself.
+  // The published form configuration (fields and rules set in the Admin
+  // Dashboard) is loaded once signed in and cached for offline use.
   return (
-    <App
-      currentUser={profile ? { ...profile, sessionEmail: session.user?.email } : { id: session.user?.id, email: session.user?.email, role: 'user' }}
-      onSignOut={async () => { await signOut(); clearCachedProfile(); setSession(null); setProfile(null); }}
-    />
+    <FormsConfigProvider enabled>
+      <App
+        currentUser={profile ? { ...profile, sessionEmail: session.user?.email } : { id: session.user?.id, email: session.user?.email, role: 'user' }}
+        onSignOut={async () => { await signOut(); clearCachedProfile(); setSession(null); setProfile(null); }}
+      />
+    </FormsConfigProvider>
   );
 }

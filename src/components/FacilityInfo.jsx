@@ -13,12 +13,20 @@ import {
 import { captureLocation, GPS_STATUS } from '../utils/geolocation';
 import { FACILITY_TYPES } from '../types/survey';
 import { CreateTemplatePicker } from './TemplatePicker';
+import { CustomFieldList, CustomSections, FacilitySectionCard, useSystemFields } from './CustomFields';
 
 export default function FacilityInfo({ facility = {}, onChange, onCreate, creating, created, onNewFacility, templates = [], canStartFromTemplate = false }) {
   const [templateId, setTemplateId] = useState('');
   const [isGettingGps, setIsGettingGps] = useState(false);
   const [gpsError, setGpsError] = useState('');
   const [gpsStatus, setGpsStatus] = useState(GPS_STATUS.IDLE);
+
+  // Names and visibility of the built-in fields, from the Admin Dashboard.
+  const sys = useSystemFields('facility', facility);
+  const f = (key, fallback) => sys.get(key, fallback);
+  const updateCustom = (key, value) => {
+    onChange({ ...facility, custom: { ...(facility.custom || {}), [key]: value } });
+  };
 
   const updateField = (field, value) => {
     onChange({
@@ -131,14 +139,14 @@ export default function FacilityInfo({ facility = {}, onChange, onCreate, creati
         <div className="flex items-center justify-between flex-wrap gap-2">
           <h3 className="text-sm font-bold uppercase tracking-wider text-slate-500 flex items-center gap-2">
             <Building className="w-4 h-4 text-sky-600" />
-            Facility & Complex Identification
+            {sys.sectionLabel('facility_identification', 'Facility & Complex Identification')}
           </h3>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
           <div>
             <label htmlFor="facility-name" className="block text-xs font-semibold text-slate-700 mb-1">
-              Facilities Name / Complex Name *
+              {f('facilityName', 'Facilities Name / Complex Name').label} *
             </label>
             <input
               id="facility-name"
@@ -159,9 +167,9 @@ export default function FacilityInfo({ facility = {}, onChange, onCreate, creati
             />
           </div>
 
-          <div>
+          {f('facilityType').visible && <div>
             <label htmlFor="facility-type" className="block text-xs font-semibold text-slate-700 mb-1">
-              Facility Type
+              {f('facilityType', 'Facility Type').label}
             </label>
             <select
               id="facility-type"
@@ -174,11 +182,11 @@ export default function FacilityInfo({ facility = {}, onChange, onCreate, creati
                 <option key={t.id} value={t.id}>{t.name}</option>
               ))}
             </select>
-          </div>
+          </div>}
 
-          <div>
+          {f('grossInternalArea').visible && <div>
             <label htmlFor="facility-gia" className="block text-xs font-semibold text-slate-700 mb-1">
-              Gross Internal Area (GIA)
+              {f('grossInternalArea', 'Gross Internal Area (GIA)').label}
             </label>
             <input
               id="facility-gia"
@@ -187,8 +195,11 @@ export default function FacilityInfo({ facility = {}, onChange, onCreate, creati
               onChange={(e) => updateField('grossInternalArea', e.target.value)}
               className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-sky-500 text-sm"
             />
-          </div>
+          </div>}
         </div>
+
+        <CustomFieldList scope="facility" sectionId="facility_identification" record={facility}
+          onChangeValue={updateCustom} idPrefix="facility" />
       </div>
 
       {/* Google Location & GPS Details */}
@@ -196,7 +207,7 @@ export default function FacilityInfo({ facility = {}, onChange, onCreate, creati
         <div className="flex items-center justify-between flex-wrap gap-2">
           <h3 className="text-sm font-bold uppercase tracking-wider text-slate-500 flex items-center gap-2">
             <Compass className="w-4 h-4 text-emerald-600" />
-            Google Location & GPS Coordinates
+            {sys.sectionLabel('facility_location', 'Google Location & GPS Coordinates')}
           </h3>
 
           {/* GPS Auto-detect Button */}
@@ -264,9 +275,9 @@ export default function FacilityInfo({ facility = {}, onChange, onCreate, creati
         )}
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div className="sm:col-span-2">
+          {f('address').visible && <div className="sm:col-span-2">
             <label htmlFor="facility-address" className="block text-xs font-semibold text-slate-700 mb-1">
-              Google Maps Location Address
+              {f('address', 'Google Maps Location Address').label}
             </label>
             <div className="relative">
               <input
@@ -281,11 +292,11 @@ export default function FacilityInfo({ facility = {}, onChange, onCreate, creati
               />
               <MapPin className="w-4 h-4 text-emerald-600 absolute left-3 top-3.5" />
             </div>
-          </div>
+          </div>}
 
-          <div>
+          {f('latitude').visible && <div>
             <label htmlFor="facility-lat" className="block text-xs font-semibold text-slate-700 mb-1">
-              GPS Latitude
+              {f('latitude', 'GPS Latitude').label}
             </label>
             <input
               id="facility-lat"
@@ -294,11 +305,11 @@ export default function FacilityInfo({ facility = {}, onChange, onCreate, creati
               onChange={(e) => updateGoogleLocation('latitude', e.target.value)}
               className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-sky-500 text-sm font-mono"
             />
-          </div>
+          </div>}
 
-          <div>
+          {f('longitude').visible && <div>
             <label htmlFor="facility-lng" className="block text-xs font-semibold text-slate-700 mb-1">
-              GPS Longitude
+              {f('longitude', 'GPS Longitude').label}
             </label>
             <input
               id="facility-lng"
@@ -307,7 +318,7 @@ export default function FacilityInfo({ facility = {}, onChange, onCreate, creati
               onChange={(e) => updateGoogleLocation('longitude', e.target.value)}
               className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-sky-500 text-sm font-mono"
             />
-          </div>
+          </div>}
 
           {/* Google Maps Link Preview */}
           {googleLoc.mapsUrl && (
@@ -328,18 +339,22 @@ export default function FacilityInfo({ facility = {}, onChange, onCreate, creati
           )}
 
         </div>
+
+        <CustomFieldList scope="facility" sectionId="facility_location" record={facility}
+          onChangeValue={updateCustom} idPrefix="facility" />
       </div>
 
       {/* Scope Details */}
+      {(f('scopeNotes').visible || sys.hasVisibleCustom('facility_scope')) && (
       <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm space-y-4">
         <h3 className="text-sm font-bold uppercase tracking-wider text-slate-500 flex items-center gap-2">
           <FileText className="w-4 h-4 text-sky-600" />
-          Survey Scope & Methodology
+          {sys.sectionLabel('facility_scope', 'Survey Scope & Methodology')}
         </h3>
 
-        <div>
+        {f('scopeNotes').visible && <div>
           <label htmlFor="facility-scope" className="block text-xs font-semibold text-slate-700 mb-1">
-            Audit Scope Description
+            {f('scopeNotes', 'Audit Scope Description').label}
           </label>
           <textarea
               id="facility-scope"
@@ -348,8 +363,16 @@ export default function FacilityInfo({ facility = {}, onChange, onCreate, creati
             onChange={(e) => updateField('scopeNotes', e.target.value)}
             className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-sky-500 text-sm"
           />
-        </div>
+        </div>}
+
+        <CustomFieldList scope="facility" sectionId="facility_scope" record={facility}
+          onChangeValue={updateCustom} idPrefix="facility" />
       </div>
+      )}
+
+      {/* Sections added in the Admin Dashboard. */}
+      <CustomSections scope="facility" record={facility} onChangeValue={updateCustom} idPrefix="facility"
+        renderSection={(section, body) => <FacilitySectionCard section={section}>{body}</FacilitySectionCard>} />
 
       {/* Only while no snag has been written: autosave can upload the facility
           seconds after its name is typed, so "not created yet" is the wrong

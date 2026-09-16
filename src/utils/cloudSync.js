@@ -251,23 +251,36 @@ export async function pushSurvey(survey) {
   }
 
   if (items.length) {
-    const { error: itemErr } = await supabase.from('survey_items').upsert(
-      items.map((item, position) => ({
-        id: item.id,
-        survey_id: survey.id,
-        position,
-        asset_name: item.assetName || null,
-        department: item.department || null,
-        location: item.location || null,
-        priority: item.priority == null ? 2 : item.priority,
-        defect_description: item.defectDescription || null,
-        estimated_cost: parseFloat(item.estimatedCost) || 0,
-        quantity: parseFloat(item.quantity) || 1,
-        unit: item.unit || null,
-        updated_at: new Date().toISOString()
-      }))
-    );
-    if (itemErr) throw itemErr;
+    const rows = items.map((item, position) => ({
+      id: item.id,
+      survey_id: survey.id,
+      position,
+      asset_name: item.assetName || null,
+      department: item.department || null,
+      location: item.location || null,
+      priority: item.priority == null ? 2 : item.priority,
+      defect_description: item.defectDescription || null,
+      estimated_cost: parseFloat(item.estimatedCost) || 0,
+      quantity: parseFloat(item.quantity) || 1,
+      unit: item.unit || null,
+      updated_at: new Date().toISOString(),
+      ...(item.customValues && typeof item.customValues === 'object'
+        ? { custom_values: item.customValues }
+        : {})
+    }));
+
+    // Two batches on purpose. A batch upsert writes every column any row in it
+    // names, so one snag carrying custom values would reset them to empty on
+    // every other snag in the batch that does not. Snags with no customValues
+    // at all (made before custom fields existed, or by an older app version)
+    // are sent without the column, which leaves whatever the server holds.
+    const withCustom = rows.filter((r) => 'custom_values' in r);
+    const withoutCustom = rows.filter((r) => !('custom_values' in r));
+    for (const batch of [withCustom, withoutCustom]) {
+      if (!batch.length) continue;
+      const { error: itemErr } = await supabase.from('survey_items').upsert(batch);
+      if (itemErr) throw itemErr;
+    }
   }
 
   if (photoRows.length) {
@@ -402,6 +415,7 @@ export async function pullSurvey(surveyId, knownPhotos = {}) {
       estimatedCost: Number(it.estimated_cost) || 0,
       quantity: Number(it.quantity) || 1,
       unit: it.unit || 'Unit',
+      customValues: it.custom_values && typeof it.custom_values === 'object' ? it.custom_values : {},
       photos: photosByItem[it.id] || []
     }))
   };

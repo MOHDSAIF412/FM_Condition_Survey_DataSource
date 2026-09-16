@@ -3,6 +3,7 @@
    bulk of the bundle every surveyor downloaded before they could record a
    single snag. */
 import { PRIORITY_LEVELS, DEPARTMENTS, calculateSurveyStats, snagLabel } from '../types/survey';
+import { reportFieldsFor, reportValue } from '../config/reportFields';
 import { OCS_LOGO_TRIMMED, OCS_LOGO_WHITE, OCS_LOGO_TRIMMED_RATIO } from '../assets/logoTrimmed';
 import { formatMoney } from './currency';
 
@@ -222,7 +223,9 @@ export async function generateSurveyPDF(survey, selectedFacility = 'ALL') {
     ['Weather / Temp:', facility.weatherCondition],
     ['Facility Mgr:', facility.facilityManager],
     ['Total Snags:', `${stats.total} Snags`],
-    ['GPS Accuracy:', googleLoc.accuracy ? `${googleLoc.accuracy} m` : null]
+    ['GPS Accuracy:', googleLoc.accuracy ? `${googleLoc.accuracy} m` : null],
+    // Facility fields added in the Admin Dashboard with "PDF report" on.
+    ...reportFieldsFor('facility', 'pdf', [facility]).map((f) => [`${f.label.length > 18 ? f.label.slice(0, 16) + '..' : f.label}:`, reportValue(f, facility, 'facility')])
   ].filter(([, v]) => v !== null && v !== undefined && String(v).trim() !== '');
 
   metaPairs.forEach(([label, value], i) => {
@@ -432,15 +435,22 @@ export async function generateSurveyPDF(survey, selectedFacility = 'ALL') {
   const assetSchedulePage = doc.internal.getNumberOfPages();
   renderHeader(scheduleTitle);
 
+  // Snag fields added in the Admin Dashboard with "PDF report" on. They are
+  // printed under the observations, so the table keeps its page-fitted widths.
+  const customSnagFields = reportFieldsFor('snag', 'pdf', itemsToReport);
   const assetTableRows = itemsToReport.map((item, index) => {
     const deptName = (DEPARTMENTS[item.department]?.name || 'General').split('&')[0];
+    const extra = customSnagFields
+      .map((f) => [f.label, reportValue(f, item, 'snag')])
+      .filter(([, v]) => v)
+      .map(([l, v]) => `${l}: ${v}`);
     return [
       String(index + 1),
       snagLabel(item, index),
       item.location || 'General Site Area',
       deptName,
       `P${item.priority}`,
-      item.defectDescription || 'No significant defect identified.',
+      [item.defectDescription || 'No significant defect identified.', ...extra].join('\n'),
       formatMoney(item.estimatedCost)
     ];
   });
