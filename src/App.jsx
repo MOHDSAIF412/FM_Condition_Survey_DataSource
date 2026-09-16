@@ -8,7 +8,6 @@ import SignatureSection from './components/SignatureSection';
 import ReportModal from './components/ReportModal';
 import SavedFacilities from './components/SavedFacilities';
 import ProjectDashboard from './components/ProjectDashboard';
-import Sidebar from './components/Sidebar';
 import UserManagement from './components/UserManagement';
 import ChangePasswordModal from './components/ChangePasswordModal';
 import Breadcrumb from './components/Breadcrumb';
@@ -16,6 +15,9 @@ import ProjectHero from './components/ProjectHero';
 import PhotoGallery from './components/PhotoGallery';
 import ReportDashboard from './components/ReportDashboard';
 import AdminDashboard from './admin/AdminDashboard';
+import PortalSidebar from './portal/PortalSidebar';
+import PortalHome, { ProjectPickerDialog } from './portal/PortalHome';
+import GlobalSearch from './portal/GlobalSearch';
 import { Capacitor } from '@capacitor/core';
 import { listTemplates, cachedTemplates, applyTemplateToItems, isBlankSnag } from './utils/templates';
 import { useFormsConfig } from './config/FormsConfigContext';
@@ -118,7 +120,10 @@ export default function App({ currentUser = null, onSignOut } = {}) {
    *   'facilities' pick or create a facility inside that project
    *   'survey'     the existing five tabs, always for one chosen facility
    */
-  const [view, setView] = useState('projects');
+  // The web portal opens on its dashboard; the phone app keeps opening on the project list.
+  const [view, setView] = useState(() => (Capacitor.isNativePlatform() ? 'projects' : 'home'));
+  const [navOpen, setNavOpen] = useState(false);
+  const [pickProjectOpen, setPickProjectOpen] = useState(false);
   // The Admin Dashboard is part of the web portal only; the phone app never offers it.
   const isWebPortal = !Capacitor.isNativePlatform();
   const [adminModule, setAdminModule] = useState('forms');
@@ -126,7 +131,7 @@ export default function App({ currentUser = null, onSignOut } = {}) {
   const [projects, setProjects] = useState(() => cachedProjects());
   const [projectsLoading, setProjectsLoading] = useState(false);
   // Fields, sections and rules published from the Admin Dashboard.
-  const { config: formsConfig, platform, refresh: refreshFormsConfig } = useFormsConfig();
+  const { config: formsConfig, version: formsVersion, platform, refresh: refreshFormsConfig } = useFormsConfig();
   const formsConfigRef = useRef(formsConfig);
   formsConfigRef.current = formsConfig;
 
@@ -496,8 +501,10 @@ export default function App({ currentUser = null, onSignOut } = {}) {
     for (const local of stored) {
       if (!local || !local.id || !local.pendingSync) continue;
       if (local.id === surveyRef.current?.id) continue;   // pushAndSettle owns this one
-      // An untouched blank survey is not worth a round trip.
-      if (!local.submittedAt && !(local.items || []).length) continue;
+      // An untouched blank survey is not worth a round trip. Checked by content,
+      // not snag count: every new facility starts with one empty snag, so
+      // "has no snags" let blank facilities through and they reached the server.
+      if (!local.submittedAt && !surveyIsWorthSyncing(local)) continue;
 
       const label = local.facility?.facilityName || local.facility?.buildingName || local.id;
       try {
@@ -1245,7 +1252,7 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
 
   useEffect(() => {
     if (!isLoaded || !currentUser) return;
-    if (view !== 'survey' && view !== 'projects') return;
+    if (view !== 'survey' && view !== 'projects' && view !== 'home') return;
     let cancelled = false;
     listTemplates()
       .then((list) => { if (!cancelled) setTemplates(list); })
@@ -1286,6 +1293,45 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
       setSurvey(record);   // autosave and upload follow as for any edit
     }
     return applied;
+  };
+
+  /** Where a web portal menu, search result or dashboard link leads. */
+  const navigatePortal = (target) => {
+    if (!target) return;
+    if (target.admin) { openAdmin(target.admin); return; }
+    if (target.view === 'facilities' && !activeProjectRef.current) { setView('projects'); return; }
+    if (target.view === 'home') refreshSurveyList();
+    setView(target.view);
+  };
+
+  /** Opens a facility from the dashboard or search, with its project as context. */
+  const openSurveyFromPortal = async (surveyId) => {
+    const row = surveyList.find((s) => s.id === surveyId);
+    const project = row?.projectId ? projects.find((p) => p.id === row.projectId) : null;
+    if (project) {
+      activeProjectRef.current = project;
+      setActiveProject(project);
+      setActiveProjectId(project.id);
+    }
+    await handleOpenSurvey(surveyId);
+  };
+
+  const startSurveyInProject = async (project) => {
+    activeProjectRef.current = project;
+    setActiveProject(project);
+    setActiveProjectId(project.id);
+    await handleAddFacilityToProject();
+  };
+
+  /** Every facility belongs to a project, so a new survey starts by choosing one. */
+  const createSurveyFromPortal = () => {
+    if (!projects.length) {
+      alert('Create a project first — every survey belongs to a project.');
+      setView('projects');
+      return;
+    }
+    if (projects.length === 1) { startSurveyInProject(projects[0]); return; }
+    setPickProjectOpen(true);
   };
 
   const handleBackToProjects = async () => {
@@ -1563,21 +1609,18 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
 
   return (
     <div className="min-h-screen bg-[#f4f8fd] flex font-sans">
-      <Sidebar
-        view={view}
-        canOpenUsers={currentUser?.role === 'admin' && isWebPortal}
-        /* Only once you are actually inside a project. The last project stays
-           remembered so reopening it is one tap, but on the project list itself
-           a "Facilities" entry would point at a project you have not chosen. */
-        hasOpenProject={!!activeProject && view !== 'projects'}
-        onNavigate={(target) => {
-          if (target === 'facilities') {
-            setView(activeProject ? 'facilities' : 'projects');
-          } else {
-            setView(target);
-          }
-        }}
-      />
+      {isWebPortal && (
+        <PortalSidebar
+          current={view === 'admin' ? { admin: adminModule } : { view }}
+          isAdmin={currentUser?.role === 'admin'}
+          /* Only once a project is open: on the project list a "Facilities"
+             entry would point at a project nobody has chosen. */
+          hasOpenProject={!!activeProject && view !== 'projects'}
+          onNavigate={navigatePortal}
+          open={navOpen}
+          onClose={() => setNavOpen(false)}
+        />
+      )}
       <div className="min-h-screen flex-1 flex flex-col min-w-0">
       {/* Top Header */}
       <Header
@@ -1604,6 +1647,17 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
         // the survey screens; the hub screens have their own Reports entry.
         showReports={view === 'survey'}
         onOpenUsers={() => (isWebPortal ? openAdmin('users') : setView('users'))}
+        onOpenNav={isWebPortal ? () => setNavOpen(true) : undefined}
+        searchSlot={isWebPortal ? (
+          <GlobalSearch
+            surveys={surveyList}
+            projects={projects}
+            isAdmin={currentUser?.role === 'admin'}
+            onOpenSurvey={openSurveyFromPortal}
+            onOpenProject={handleOpenProject}
+            onNavigate={navigatePortal}
+          />
+        ) : null}
         onChangePassword={() => setShowPasswordModal(true)}
         onSignOut={onSignOut ? handleSignOut : undefined}
       />
@@ -1621,6 +1675,33 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
           setActiveTab={handleTabChange}
           itemsCount={(survey?.items || []).length}
           urgentCount={urgentCount}
+        />
+      )}
+
+      {/* Web portal dashboard. */}
+      {view === 'home' && isWebPortal && (
+        <main className="flex-1 w-full px-3 sm:px-8 pt-5 sm:pt-7 md:pb-8">
+          <PortalHome
+            currentUser={currentUser}
+            surveys={surveyList}
+            projects={projects}
+            formsConfig={formsConfig}
+            formsVersion={formsVersion}
+            templates={templates}
+            loading={projectsLoading}
+            onCreateSurvey={createSurveyFromPortal}
+            onViewReports={() => setView('reports')}
+            onOpenSurvey={openSurveyFromPortal}
+            onOpenProject={handleOpenProject}
+            onNavigate={navigatePortal}
+          />
+        </main>
+      )}
+      {pickProjectOpen && (
+        <ProjectPickerDialog
+          projects={projects}
+          onPick={(p) => { setPickProjectOpen(false); startSurveyInProject(p); }}
+          onClose={() => setPickProjectOpen(false)}
         />
       )}
 
@@ -1665,6 +1746,7 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
       {view === 'admin' && isWebPortal && currentUser?.role === 'admin' && (
         <main className="flex-1 w-full px-3 sm:px-8 pt-4 sm:pt-6 safe-area-content-pb md:pb-8">
           <AdminDashboard
+            embedded
             module={adminModule}
             onModuleChange={setAdminModule}
             currentUser={currentUser}

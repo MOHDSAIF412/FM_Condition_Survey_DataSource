@@ -1,6 +1,6 @@
 import React from 'react';
 import {
-  LayoutList, GitBranch, FileText, Users, ShieldCheck, ClipboardList, Workflow, Settings, History, Sparkles, Lock
+  LayoutList, GitBranch, FileText, Users, ShieldCheck, ClipboardList, Workflow, Settings, History, Sparkles, Lock, ScrollText
 } from 'lucide-react';
 import FormBuilder from './FormBuilder';
 import AuditLog from './AuditLog';
@@ -23,16 +23,18 @@ export const ADMIN_MODULES = [
   { key: 'templates', label: 'Inspection Templates', hint: 'Standard checklists', icon: ClipboardList, ready: true },
   { key: 'workflows', label: 'Workflows', hint: 'Status stages and approvals', icon: Workflow, ready: false, stage: 'Stage 6' },
   { key: 'settings', label: 'Settings', hint: 'Application settings', icon: Settings, ready: false, stage: 'Later stage' },
-  { key: 'audit', label: 'Audit Log', hint: 'Who changed what, and when', icon: History, ready: true },
+  { key: 'versions', label: 'Version History', hint: 'Published versions, rollback', icon: History, ready: true },
+  { key: 'audit', label: 'Audit Log', hint: 'Who changed what, and when', icon: ScrollText, ready: true },
   { key: 'ai', label: 'AI Assistant', hint: 'Not enabled', icon: Sparkles, ready: false, stage: 'Not enabled' }
 ];
 
-export default function AdminDashboard({ module = 'forms', onModuleChange, currentUser, facilities, projects, onConfigPublished }) {
+export default function AdminDashboard({ module = 'forms', onModuleChange, currentUser, facilities, projects, onConfigPublished, embedded = false }) {
   const active = ADMIN_MODULES.find((m) => m.key === module && m.ready) || ADMIN_MODULES[0];
 
   return (
-    <div className="max-w-7xl mx-auto grid gap-5 lg:grid-cols-[240px_1fr]">
-      <nav aria-label="Admin modules" className="bg-white rounded-2xl border border-slate-200 shadow-sm p-2 self-start lg:sticky lg:top-4">
+    <div className={`max-w-7xl mx-auto grid gap-5 ${embedded ? '' : 'lg:grid-cols-[240px_1fr]'}`}>
+      {/* Inside the web portal the main sidebar lists these modules already. */}
+      {!embedded && <nav aria-label="Admin modules" className="bg-white rounded-2xl border border-slate-200 shadow-sm p-2 self-start lg:sticky lg:top-4">
         <p className="px-3 pt-2 pb-3 text-[11px] font-bold uppercase tracking-wider text-slate-500">Admin Dashboard</p>
         <ul className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-1 gap-1">
           {ADMIN_MODULES.map((m) => {
@@ -63,10 +65,11 @@ export default function AdminDashboard({ module = 'forms', onModuleChange, curre
             );
           })}
         </ul>
-      </nav>
+      </nav>}
 
       <section aria-label={active.label} className="min-w-0">
-        {active.key === 'forms' && <FormBuilder onPublished={onConfigPublished} />}
+        {active.key === 'forms' && <FormBuilder key="forms" onPublished={onConfigPublished} />}
+        {active.key === 'versions' && <FormBuilder key="versions" onPublished={onConfigPublished} openHistory />}
         {active.key === 'users' && <UserManagement myId={currentUser?.id} />}
         {active.key === 'templates' && <TemplateManager facilities={facilities} projects={projects} />}
         {active.key === 'audit' && <AuditLog />}

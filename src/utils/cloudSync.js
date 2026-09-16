@@ -450,7 +450,7 @@ export async function listSurveys() {
   if (!isCloudConfigured) return [];
   const { data, error } = await supabase
     .from('condition_surveys')
-    .select('id, title, facility, facility_name, status, submitted_at, updated_at, revision, project_id')
+    .select('id, title, facility, facility_name, status, submitted_at, updated_at, created_at, revision, project_id')
     .order('updated_at', { ascending: false });
   if (error) throw error;
   const surveys = data || [];
@@ -473,7 +473,8 @@ export async function listSurveys() {
     photoCount: photoCounts[r.id] || 0,
     status: r.status || 'draft',
     submittedAt: r.submitted_at,
-    updatedAt: r.updated_at
+    updatedAt: r.updated_at,
+    createdAt: r.created_at
   }));
 
   try {
@@ -572,7 +573,7 @@ export async function listProjectEvidence(surveyIds = []) {
 }
 
 /** Pages through one table for a set of surveys, same reason as the counts do. */
-async function fetchAllPages(table, columns, surveyIds) {
+export async function fetchAllPages(table, columns, surveyIds) {
   const out = [];
   const PAGE = 1000;
   for (let from = 0; ; from += PAGE) {

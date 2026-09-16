@@ -10,6 +10,7 @@ import {
   LogOut,
   KeyRound,
   Bell,
+  Menu,
   User,
 } from 'lucide-react';
 
@@ -38,6 +39,8 @@ export default function Header({
   contextLabel = '',
   showReports = true,
   onOpenUsers,
+  onOpenNav,
+  searchSlot,
   onChangePassword,
   onSignOut,
   canDownloadReports = true
@@ -77,8 +80,18 @@ export default function Header({
     <header className="sticky top-0 z-30 bg-white border-b border-slate-200 safe-area-pt">
       <div className="px-4 sm:px-6 py-3 flex items-center justify-between gap-3">
 
+        {/* Web portal: menu button (narrow screens) and search. The sidebar
+            carries the logo and title on wide screens, so they step aside. */}
+        {onOpenNav && (
+          <button type="button" onClick={onOpenNav} aria-label="Open menu"
+            className="lg:hidden p-2 -ml-2 rounded-lg text-slate-600 hover:bg-slate-100 shrink-0">
+            <Menu className="w-5 h-5" />
+          </button>
+        )}
+        {searchSlot && <div className="hidden md:flex flex-1 min-w-0 max-w-xl">{searchSlot}</div>}
+
         {/* Left: title + current context */}
-        <div className="flex items-center gap-3 min-w-0">
+        <div className={`flex items-center gap-3 min-w-0 ${searchSlot ? 'md:hidden' : ''}`}>
           {/* Only on narrow screens -- the sidebar carries the mark on desktop. */}
           <img
             src="/ocs-logo.png"
@@ -104,6 +117,12 @@ export default function Header({
 
         {/* Right: reports, notifications, account */}
         <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+          {searchSlot && (
+            <span className={`hidden md:inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-semibold border ${sync.cls}`}>
+              <span aria-hidden="true" className={`w-1.5 h-1.5 rounded-full mr-1.5 ${sync.dot}`} />
+              {sync.label}
+            </span>
+          )}
           {showReports && (
             <button
               onClick={onOpenReport}

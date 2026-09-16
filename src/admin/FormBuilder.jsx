@@ -30,7 +30,7 @@ const fmtDate = (d) => (d ? new Date(d).toLocaleString([], { dateStyle: 'medium'
  * any of them can be rolled back to. Fields and options are archived, never
  * deleted, so recorded answers always keep their meaning.
  */
-export default function FormBuilder({ onPublished }) {
+export default function FormBuilder({ onPublished, openHistory = false }) {
   const [loading, setLoading] = useState(true);
   const [versions, setVersions] = useState([]);
   const [working, setWorking] = useState(null);
@@ -42,7 +42,7 @@ export default function FormBuilder({ onPublished }) {
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [showPublish, setShowPublish] = useState(false);
-  const [showHistory, setShowHistory] = useState(false);
+  const [showHistory, setShowHistory] = useState(openHistory);
   const [preview, setPreview] = useState(null); // 'web' | 'mobile' | null
 
   const published = versions.find((v) => v.status === 'published') || null;

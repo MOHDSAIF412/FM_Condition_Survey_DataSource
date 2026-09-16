@@ -1,0 +1,186 @@
+import React, { useEffect, useState } from 'react';
+import {
+  Home, LayoutList, FileText, Users, FolderKanban, Workflow, Sparkles, History, ScrollText, Settings,
+  ChevronDown, X, Lock
+} from 'lucide-react';
+import { useEscapeKey } from '../utils/useEscapeKey';
+
+export const APP_VERSION = '1.0.0';
+
+/**
+ * Web portal navigation. A fixed rail on wide screens; a slide-in drawer from
+ * the header menu button on narrower ones.
+ *
+ * Items for modules not built yet are shown as such (never faked), so the
+ * portal is honest about what it does today. Administrator sections are left
+ * out entirely for everyone else -- the database refuses their actions anyway.
+ */
+function buildNav({ isAdmin, hasOpenProject }) {
+  const soon = (label, stage) => ({ label, disabled: true, stage });
+  return [
+    { key: 'home', label: 'Dashboard', icon: Home, target: { view: 'home' } },
+    isAdmin && {
+      key: 'builder', label: 'Survey Builder', icon: LayoutList,
+      children: [
+        { label: 'Forms', target: { admin: 'forms' } },
+        { label: 'Sections', target: { admin: 'forms' } },
+        { label: 'Fields', target: { admin: 'forms' } },
+        { label: 'Dropdown Options', target: { admin: 'forms' } },
+        { label: 'Inspection Templates', target: { admin: 'templates' } },
+        soon('Conditional Rules', 'Next stage')
+      ]
+    },
+    {
+      key: 'reports', label: 'Reports', icon: FileText,
+      children: [
+        { label: 'Generate Reports', target: { view: 'reports' } },
+        ...(isAdmin ? [soon('Report Builder', 'Stage 4'), soon('Report Templates', 'Stage 4')] : [])
+      ]
+    },
+    isAdmin && {
+      key: 'users', label: 'Users', icon: Users,
+      children: [
+        { label: 'Users', target: { admin: 'users' } },
+        soon('Roles & Permissions', 'Stage 5')
+      ]
+    },
+    {
+      key: 'projects', label: 'Projects', icon: FolderKanban,
+      children: [
+        { label: 'All Projects', target: { view: 'projects' } },
+        ...(hasOpenProject ? [
+          { label: 'Facilities', target: { view: 'facilities' } },
+          { label: 'Photos', target: { view: 'photos' } }
+        ] : [])
+      ]
+    },
+    isAdmin && { key: 'workflows', label: 'Workflows', icon: Workflow, disabled: true, stage: 'Stage 6' },
+    isAdmin && { key: 'ai', label: 'AI Assistant', icon: Sparkles, disabled: true, stage: 'Not enabled' },
+    isAdmin && { key: 'versions', label: 'Version History', icon: History, target: { admin: 'versions' } },
+    isAdmin && { key: 'audit', label: 'Audit Logs', icon: ScrollText, target: { admin: 'audit' } },
+    isAdmin && { key: 'settings', label: 'Settings', icon: Settings, disabled: true, stage: 'Later stage' }
+  ].filter(Boolean);
+}
+
+const sameTarget = (a, b) => !!a && !!b && a.view === b.view && a.admin === b.admin;
+
+export default function PortalSidebar({
+  current, isAdmin, hasOpenProject, onNavigate, open, onClose
+}) {
+  const nav = buildNav({ isAdmin, hasOpenProject });
+  const groupOf = (target) => nav.find((g) => g.children?.some((c) => sameTarget(c.target, target)))?.key;
+  const [expanded, setExpanded] = useState(() => new Set([groupOf(current), 'builder', 'reports'].filter(Boolean)));
+
+  // The group holding the current page opens itself.
+  useEffect(() => {
+    const g = groupOf(current);
+    if (g) setExpanded((prev) => (prev.has(g) ? prev : new Set([...prev, g])));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [current?.view, current?.admin]);
+
+  useEscapeKey(onClose, open);
+
+  const go = (target) => {
+    onNavigate(target);
+    onClose?.();
+  };
+
+  const toggle = (key) => setExpanded((prev) => {
+    const next = new Set(prev);
+    if (next.has(key)) next.delete(key); else next.add(key);
+    return next;
+  });
+
+  const content = (
+    <div className="h-full flex flex-col bg-gradient-to-b from-[#0f2557] via-ocs-800 to-[#0a1c42] text-white">
+      <div className="px-5 pt-6 pb-5 border-b border-white/10 flex items-start gap-3">
+        <div className="flex-1 min-w-0">
+          <img src="/ocs-logo-white.png" alt="OCS" className="h-9 w-auto" onError={(e) => { e.target.style.display = 'none'; }} />
+          <p className="text-[15px] font-bold mt-3 leading-tight">FM Condition Survey</p>
+          <p className="text-[11px] text-sky-200/60">Facility Management</p>
+        </div>
+        <button type="button" onClick={onClose} aria-label="Close menu" className="lg:hidden p-1.5 rounded-lg hover:bg-white/10">
+          <X className="w-5 h-5" />
+        </button>
+      </div>
+
+      <nav aria-label="Main" className="flex-1 overflow-y-auto px-3 py-4 space-y-1">
+        {nav.map((item) => {
+          const Icon = item.icon;
+          if (item.children) {
+            const isOpen = expanded.has(item.key);
+            const hasActive = item.children.some((c) => sameTarget(c.target, current));
+            return (
+              <div key={item.key}>
+                <button type="button" onClick={() => toggle(item.key)} aria-expanded={isOpen}
+                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-[14px] font-semibold transition-colors ${hasActive ? 'text-white' : 'text-sky-100/80 hover:bg-white/10 hover:text-white'}`}>
+                  <Icon className="w-[18px] h-[18px] shrink-0" />
+                  <span className="flex-1 text-left">{item.label}</span>
+                  <ChevronDown className={`w-4 h-4 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+                </button>
+                {isOpen && (
+                  <ul className="mt-0.5 mb-1.5 ml-[30px] space-y-0.5">
+                    {item.children.map((c) => {
+                      const active = !c.disabled && sameTarget(c.target, current)
+                        // Several builder entries open the same page; highlight only the first.
+                        && item.children.find((x) => sameTarget(x.target, current)) === c;
+                      return (
+                        <li key={c.label}>
+                          <button type="button" disabled={c.disabled} onClick={() => go(c.target)}
+                            aria-current={active ? 'page' : undefined}
+                            className={`w-full text-left px-3 py-1.5 rounded-lg text-[13px] flex items-center gap-2 transition-colors ${
+                              active ? 'bg-white/15 text-white font-semibold'
+                                : c.disabled ? 'text-sky-100/35 cursor-not-allowed'
+                                  : 'text-sky-100/70 hover:text-white hover:bg-white/10'}`}>
+                            <span className="flex-1 truncate">{c.label}</span>
+                            {c.disabled && <span className="text-[10px] inline-flex items-center gap-0.5 shrink-0"><Lock className="w-2.5 h-2.5" />{c.stage}</span>}
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+              </div>
+            );
+          }
+          const active = !item.disabled && sameTarget(item.target, current);
+          return (
+            <button key={item.key} type="button" disabled={item.disabled} onClick={() => go(item.target)}
+              aria-current={active ? 'page' : undefined}
+              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-[14px] font-semibold transition-colors ${
+                active ? 'bg-flame-500 text-white shadow-md'
+                  : item.disabled ? 'text-sky-100/35 cursor-not-allowed'
+                    : 'text-sky-100/80 hover:bg-white/10 hover:text-white'}`}>
+              <Icon className="w-[18px] h-[18px] shrink-0" />
+              <span className="flex-1 text-left">{item.label}</span>
+              {item.disabled && <span className="text-[10px] inline-flex items-center gap-0.5"><Lock className="w-2.5 h-2.5" />{item.stage}</span>}
+            </button>
+          );
+        })}
+      </nav>
+
+      <div className="px-5 py-4 border-t border-white/10 flex items-center gap-3">
+        <img src="/ocs-logo-white.png" alt="" aria-hidden="true" className="h-6 w-auto opacity-80" onError={(e) => { e.target.style.display = 'none'; }} />
+        <div className="text-[11px] leading-tight text-sky-100/60">
+          <p>FM Condition Survey</p>
+          <p>v{APP_VERSION}</p>
+        </div>
+      </div>
+    </div>
+  );
+
+  return (
+    <>
+      {/* Fixed rather than sticky: sticky let the rail scroll up with the last
+          40px of a long page, clipping the logo. The spacer keeps its width. */}
+      <div aria-hidden="true" className="hidden lg:block w-64 shrink-0" />
+      <aside className="hidden lg:block fixed inset-y-0 left-0 w-64 z-30">{content}</aside>
+      {open && (
+        <div className="lg:hidden fixed inset-0 z-50 flex" role="dialog" aria-modal="true" aria-label="Menu">
+          <div className="w-72 max-w-[85vw] h-full shadow-2xl">{content}</div>
+          <button type="button" aria-label="Close menu" className="flex-1 bg-slate-900/50" onClick={onClose} />
+        </div>
+      )}
+    </>
+  );
+}
