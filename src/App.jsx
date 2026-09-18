@@ -17,6 +17,8 @@ import ReportDashboard from './components/ReportDashboard';
 import AdminDashboard from './admin/AdminDashboard';
 import PortalSidebar from './portal/PortalSidebar';
 import PortalHome from './portal/PortalHome';
+import AllFacilities from './portal/AllFacilities';
+import { facilityListFilter } from './portal/portalData';
 import GlobalSearch from './portal/GlobalSearch';
 import { Capacitor } from '@capacitor/core';
 import { listTemplates, cachedTemplates, applyTemplateToItems, isBlankSnag } from './utils/templates';
@@ -260,6 +262,8 @@ export default function App({ currentUser = null, onSignOut } = {}) {
   // Which stat tile was last tapped. The nonce lets the same tile be tapped
   // twice and still scroll the list back into view.
   const [listFocus, setListFocus] = useState(null);
+  // What the dashboard number that opened All Facilities counted.
+  const [portalListFilter, setPortalListFilter] = useState(() => ({ ...facilityListFilter('all'), nonce: 0 }));
   const [online, setOnline] = useState(isOnline());
   const surveyRef = useRef(null);
   const pushTimeoutRef = useRef(null);
@@ -1299,6 +1303,7 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
   const navigatePortal = (target) => {
     if (!target) return;
     if (target.admin) { openAdmin(target.admin); return; }
+    if (target.view === 'allFacilities') { openFacilityList('all'); return; }
     if (target.view === 'facilities' && !activeProjectRef.current) { setView('projects'); return; }
     if (target.view === 'home') refreshSurveyList();
     setView(target.view);
@@ -1323,19 +1328,23 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
   };
 
   /**
-   * Opens the facility list a dashboard tile or chart counted, already filtered
-   * ('all', 'submitted', 'draft', 'snags', 'photos'). Facilities live inside a
-   * project: with several projects and none open, the project list comes first.
+   * Opens All Facilities filtered to exactly what a dashboard number counted:
+   * 'all' / 'submitted' / 'draft', or { priority, evidence, projectId }. The
+   * dashboard counts across every project, so the list does too -- a list of
+   * one project could never add up to the number that was clicked.
    */
-  const openFacilityList = (key) => {
-    const project = activeProjectRef.current || (projects.length === 1 ? projects[0] : null);
-    if (!project) { setView('projects'); return; }
-    activeProjectRef.current = project;
-    setActiveProject(project);
-    setActiveProjectId(project.id);
-    setView('facilities');
-    setListFocus({ key, nonce: Date.now() });
+  const openFacilityList = (target) => {
+    setPortalListFilter({ ...facilityListFilter(target), nonce: Date.now() });
+    setView('allFacilities');
   };
+
+  const dashboardCrumb = isWebPortal ? () => navigatePortal({ view: 'home' }) : undefined;
+
+  // A new screen starts at its top, with its breadcrumb in view -- not at the
+  // scroll position the previous screen was left at.
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [view]);
 
   const handleBackToProjects = async () => {
     if (view === 'survey' && !(await offerSubmitBeforeLeaving())) return;
@@ -1755,6 +1764,32 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
         </main>
       )}
 
+      {/* Every facility across projects: where the dashboard's numbers lead. */}
+      {view === 'allFacilities' && isWebPortal && (
+        <>
+          <div className="bg-white border-b border-slate-200">
+            <div className="max-w-6xl mx-auto px-3 sm:px-6 py-2">
+              <Breadcrumb moduleName="All Facilities" onDashboard={dashboardCrumb} onHome={handleBackToProjects} />
+            </div>
+          </div>
+          <main className="flex-1 w-full px-3 sm:px-8 pt-4 sm:pt-6 safe-area-content-pb md:pb-8">
+            <AllFacilities
+              surveys={surveyList}
+              projects={projects}
+              filter={portalListFilter}
+              onClearNarrow={() => setPortalListFilter((f) => ({ ...f, priority: null, evidence: null }))}
+              currentId={survey?.id}
+              onOpen={openSurveyFromPortal}
+              onDelete={mayDeleteSnags ? handleDeleteSurvey : null}
+              canDownloadReports={mayDownloadReports}
+              onRefresh={refreshSurveyList}
+              onSyncNow={handleSyncNow}
+              onSubmit={handleSubmitFromList}
+            />
+          </main>
+        </>
+      )}
+
       {/* Facilities inside the chosen project. */}
       {view === 'facilities' && activeProject && (
         <>
@@ -1763,6 +1798,7 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
               <Breadcrumb
                 project={activeProject}
                 onHome={handleBackToProjects}
+                onDashboard={dashboardCrumb}
                 onProject={() => setView('facilities')}
               />
             </div>
@@ -1817,6 +1853,7 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
                 project={activeProject}
                 moduleName="Photos"
                 onHome={handleBackToProjects}
+                onDashboard={dashboardCrumb}
                 onProject={() => setView('facilities')}
               />
             </div>
@@ -1840,6 +1877,7 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
                 project={activeProject}
                 moduleName="Reports"
                 onHome={handleBackToProjects}
+                onDashboard={dashboardCrumb}
                 onProject={() => setView('facilities')}
               />
             </div>
@@ -1920,6 +1958,7 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
                 : activeTab === 'signatures' ? 'Sign-Off' : null
               }
               onHome={handleBackToProjects}
+              onDashboard={dashboardCrumb}
               onProject={() => setView('facilities')}
             />
           </div>

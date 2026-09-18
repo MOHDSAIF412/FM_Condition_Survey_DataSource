@@ -65,6 +65,7 @@ export default function PortalHome({
   }, [idsKey]);
 
   const stats = useMemo(() => dashboardStats(surveys, now.getTime()), [surveys, now]);
+  const knownSurveys = useMemo(() => new Set(surveys.map((s) => s.id)), [surveys]);
   const recent = useMemo(() => recentSurveys(surveys, 6), [surveys]);
   const config = useMemo(() => configurationStatus(formsConfig, templates), [formsConfig, templates]);
   const series = useMemo(() => ({
@@ -164,7 +165,7 @@ export default function PortalHome({
         <div className={`${card} p-5`}>
           <Title title="Snags by Priority" sub="The app’s severity scale, across all facilities — click a bar to see the facilities" />
           <Bars data={PRIORITY_BARS.map((b) => ({ ...b, value: priorities?.[b.p] ?? 0 }))} empty={!priorities}
-            onBar={() => onOpenList('snags')} />
+            onBar={(p) => onOpenList({ priority: p })} />
         </div>
 
         <div className={`${card} p-5 lg:col-span-2 2xl:col-span-1`}>
@@ -204,7 +205,7 @@ export default function PortalHome({
             )}
           </div>
           <Activity rows={activity} loading={activityLoading && !activity.length} now={now}
-            onOpenSurvey={onOpenSurvey} onNavigate={onNavigate} isAdmin={isAdmin} />
+            knownSurveys={knownSurveys} onOpenSurvey={onOpenSurvey} onNavigate={onNavigate} isAdmin={isAdmin} />
         </div>
 
         {isAdmin ? (
@@ -226,8 +227,8 @@ export default function PortalHome({
             <IconTitle icon={ClipboardCheck} title="Evidence Check" sub="Worth finishing before reports go to the client" />
             <ul className="divide-y divide-slate-100 mt-2 text-sm">
               <EvidenceRow icon={Clock3} tone="text-amber-500" label="Drafts not yet submitted" value={stats.drafts} onClick={() => onOpenList('draft')} />
-              <EvidenceRow icon={Camera} tone="text-rose-500" label="Completed facilities with no photos" value={stats.noPhotoFacilities} onClick={() => onOpenList('photos')} />
-              <EvidenceRow icon={AlertTriangle} tone="text-rose-600" label="Urgent (P1) snags" value={priorities?.[1] ?? '—'} onClick={() => onOpenList('snags')} />
+              <EvidenceRow icon={Camera} tone="text-rose-500" label="Completed facilities with no photos" value={stats.noPhotoFacilities} onClick={() => onOpenList({ evidence: 'noPhotos' })} />
+              <EvidenceRow icon={AlertTriangle} tone="text-rose-600" label="Urgent (P1) snags" value={priorities?.[1] ?? '—'} onClick={() => onOpenList({ priority: 1 })} />
             </ul>
           </div>
         )}
@@ -368,7 +369,7 @@ function Bars({ data, empty, onBar }) {
           ))}
           <div className="absolute inset-0 flex items-end justify-around px-3">
             {data.map((d) => (
-              <button key={d.p} type="button" onClick={onBar} title={`${d.label}: ${d.value} — open facilities`}
+              <button key={d.p} type="button" onClick={() => onBar(d.p)} title={`${d.label}: ${d.value} — open the facilities with these snags`}
                 className="group flex flex-col items-center justify-end h-full w-1/5 focus:outline-none">
                 <span className="text-xs font-bold text-slate-700 mb-1">{empty ? '—' : d.value}</span>
                 <span className="block w-full max-w-[64px] rounded-t-lg group-hover:opacity-80 transition-opacity"
@@ -529,7 +530,7 @@ function describeActivity(row) {
   return { icon: FileText, cls: 'bg-slate-100 text-slate-600', title: row.summary || 'Change', detail: '', open: { admin: 'audit' } };
 }
 
-function Activity({ rows, loading, now, onOpenSurvey, onNavigate, isAdmin }) {
+function Activity({ rows, loading, now, knownSurveys, onOpenSurvey, onNavigate, isAdmin }) {
   if (loading) return <p className="py-8 text-center text-slate-400 text-sm"><Loader2 className="w-4 h-4 animate-spin inline mr-1" /> Loading…</p>;
   if (!rows.length) {
     return (
@@ -548,7 +549,8 @@ function Activity({ rows, loading, now, onOpenSurvey, onNavigate, isAdmin }) {
       {rows.map((r) => {
         const a = describeActivity(r);
         const Icon = a.icon;
-        const canOpen = a.open && (a.open.survey || isAdmin);
+        // A facility deleted since has nothing to open; admin links need an admin.
+        const canOpen = a.open && (a.open.survey ? knownSurveys.has(a.open.survey) : isAdmin);
         const go = () => {
           if (!canOpen) return;
           if (a.open.survey) onOpenSurvey(a.open.survey); else onNavigate(a.open);

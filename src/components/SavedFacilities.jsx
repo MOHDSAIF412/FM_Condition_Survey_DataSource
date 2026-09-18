@@ -3,7 +3,8 @@ import {
   FileText, FileSpreadsheet, FolderOpen, CheckCircle2, Loader2, Trash2, CloudOff, RefreshCw,
   ChevronDown, ClipboardList, MapPin, Camera, DollarSign, Search, Calendar, Clock,
   Building2, Factory, Trees, Wrench, Fan, Zap, Flame, Sparkles,
-  Home, GraduationCap, ShoppingBag, Briefcase, Warehouse, Moon, Stethoscope, BedDouble, Trophy
+  Home, GraduationCap, ShoppingBag, Briefcase, Warehouse, Moon, Stethoscope, BedDouble, Trophy,
+  Filter, X, FolderKanban
 } from 'lucide-react';
 import { hydratePhotos, mapWithConcurrency } from '../utils/cloudSync';
 import { sortDate } from '../utils/surveySelection';
@@ -38,8 +39,15 @@ const FACILITY_FETCH_CONCURRENCY = 4;
  * Desktop gets a table; a phone keeps the stacked rows. The surveyor's real
  * day-to-day screen is the phone, and a 5-column table there would either
  * shrink past reading size or need sideways scrolling to reach the buttons.
+ *
+ * Given `projects`, the list spans projects: each row names its project and a
+ * project filter appears. `narrow` ({ label, test, note }) limits the list to
+ * what a dashboard number counted, shown as a chip that can be removed.
  */
-export default function SavedFacilities({ surveys = [], currentId, onOpen, onDelete, onRefresh, onSyncNow, onSubmit, focus, canDownloadReports = true }) {
+export default function SavedFacilities({
+  surveys = [], currentId, onOpen, onDelete, onRefresh, onSyncNow, onSubmit, focus, canDownloadReports = true,
+  projects = null, narrow = null, onClearNarrow, title = 'Saved Facilities', scrollOnFocus = true
+}) {
   const [busy, setBusy] = useState(null);
   const [syncing, setSyncing] = useState(false);
   const [syncResult, setSyncResult] = useState('');
@@ -47,6 +55,7 @@ export default function SavedFacilities({ surveys = [], currentId, onOpen, onDel
   const [detailsById, setDetailsById] = useState({}); // id -> { items } | { error } | 'loading'
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState('all'); // all | submitted | draft | open
+  const [projectFilter, setProjectFilter] = useState('all');
   const [sort, setSort] = useState('newest');
   const [selected, setSelected] = useState([]); // facility ids ticked for the combined report
   const [progress, setProgress] = useState(null); // { done, total, building } while a combined report builds
@@ -79,8 +88,9 @@ export default function SavedFacilities({ surveys = [], currentId, onOpen, onDel
     else if (focus.key === 'snags') { setFilter('all'); setSort('snags'); }
     else if (focus.key === 'photos') { setFilter('all'); setSort('photos'); }
     else { setFilter('all'); setSort('newest'); }
+    if (projects) setProjectFilter(focus.projectId || 'all');
     setQuery('');
-    panelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    if (scrollOnFocus) panelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }, [focus?.nonce, focus?.key]);
 
   const waiting = surveys.filter((s) => s.pendingSync).length;
@@ -100,16 +110,29 @@ export default function SavedFacilities({ surveys = [], currentId, onOpen, onDel
     return `Unnamed facility (${n} snag${n === 1 ? '' : 's'})`;
   };
 
+  const projectById = useMemo(() => new Map((projects || []).map((p) => [p.id, p])), [projects]);
+  const projectLabel = (s) => {
+    const p = projectById.get(s.projectId);
+    return p ? [p.projectNumber, p.name].filter(Boolean).join(' · ') : 'No project';
+  };
+
+  // The project and dashboard filters come first, so the pill counts describe
+  // exactly the facilities that can be shown.
+  const base = useMemo(() => surveys.filter((s) => {
+    if (projects && projectFilter !== 'all' && s.projectId !== projectFilter) return false;
+    return !narrow || narrow.test(s);
+  }), [surveys, projects, projectFilter, narrow]);
+
   const counts = {
-    all: surveys.length,
-    submitted: surveys.filter((s) => s.status === 'submitted').length,
-    draft: surveys.filter((s) => s.status !== 'submitted').length,
-    open: surveys.filter((s) => s.id === currentId).length
+    all: base.length,
+    submitted: base.filter((s) => s.status === 'submitted').length,
+    draft: base.filter((s) => s.status !== 'submitted').length,
+    open: base.filter((s) => s.id === currentId).length
   };
 
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
-    let rows = surveys.filter((s) => {
+    let rows = base.filter((s) => {
       if (filter === 'submitted' && s.status !== 'submitted') return false;
       if (filter === 'draft' && s.status === 'submitted') return false;
       if (filter === 'open' && s.id !== currentId) return false;
@@ -119,6 +142,7 @@ export default function SavedFacilities({ surveys = [], currentId, onOpen, onDel
         describe(s),
         s.status === 'submitted' ? 'submitted' : 'draft',
         type?.name || '',
+        projects ? projectLabel(s) : '',
         s.id === currentId ? 'open now' : ''
       ].join(' ').toLowerCase();
       return haystack.includes(q);
@@ -132,7 +156,8 @@ export default function SavedFacilities({ surveys = [], currentId, onOpen, onDel
       return sortDate(b) - sortDate(a); // newest first
     });
     return rows;
-  }, [surveys, query, filter, sort, currentId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [base, query, filter, sort, currentId]);
 
   const visibleIds = visible.map((s) => s.id);
   const selectedVisible = selected.filter((id) => visibleIds.includes(id));
@@ -200,7 +225,8 @@ export default function SavedFacilities({ surveys = [], currentId, onOpen, onDel
   };
 
   /**
-   * One workbook containing the ticked facilities, or all of them when none are.
+   * One workbook containing the ticked facilities, or every facility shown when
+   * none are -- never ones a filter has hidden.
    *
    * Facilities are fetched several at a time. Doing them strictly one after
    * another meant a 67-facility report spent minutes waiting on round trips
@@ -209,7 +235,7 @@ export default function SavedFacilities({ surveys = [], currentId, onOpen, onDel
   const downloadAll = async () => {
     const wanted = selectedVisible.length
       ? surveys.filter((s) => selectedVisible.includes(s.id))
-      : surveys;
+      : visible;
     setBusy('all:excel');
     setSyncResult('');
     setProgress({ done: 0, total: wanted.length });
@@ -555,7 +581,9 @@ export default function SavedFacilities({ surveys = [], currentId, onOpen, onDel
 
   const excelLabel = selectedVisible.length
     ? `Selected in one Excel (${selectedVisible.length})`
-    : `All in one Excel (${surveys.length})`;
+    : visible.length === surveys.length
+      ? `All in one Excel (${visible.length})`
+      : `Shown in one Excel (${visible.length})`;
 
   // A 67-facility report takes a while whatever happens, so say where it is up
   // to rather than showing an unchanging "Building…".
@@ -571,7 +599,7 @@ export default function SavedFacilities({ surveys = [], currentId, onOpen, onDel
       <div className="px-4 sm:px-6 py-4 border-b border-slate-200 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
         <h3 className="text-base font-bold text-slate-800 whitespace-nowrap inline-flex items-center gap-2">
           <Building2 className="w-4 h-4 text-ocs-600" />
-          Saved Facilities <span className="text-slate-400 font-semibold">({surveys.length})</span>
+          {title} <span className="text-slate-400 font-semibold">({surveys.length})</span>
         </h3>
 
         <div className="flex items-center gap-2 flex-wrap lg:justify-end">
@@ -593,7 +621,7 @@ export default function SavedFacilities({ surveys = [], currentId, onOpen, onDel
           >
             Refresh
           </button>
-          {surveys.length > 1 && canDownloadReports && (
+          {visible.length > 1 && canDownloadReports && (
             <button
               type="button"
               disabled={busy !== null}
@@ -639,8 +667,36 @@ export default function SavedFacilities({ surveys = [], currentId, onOpen, onDel
               {p.label} <span className={filter === p.key ? 'text-sky-200' : 'text-slate-400'}>({p.n})</span>
             </button>
           ))}
+          {narrow && (
+            <span className="pl-3 pr-1 py-1 rounded-full text-xs font-bold bg-rose-50 text-rose-700 border border-rose-200 inline-flex items-center gap-1.5">
+              <Filter className="w-3.5 h-3.5" />
+              {narrow.label}
+              {onClearNarrow && (
+                <button type="button" onClick={onClearNarrow} aria-label={`Remove filter: ${narrow.label}`}
+                  className="p-0.5 rounded-full hover:bg-rose-100">
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </span>
+          )}
         </div>
 
+        <div className="flex items-center gap-3 flex-wrap">
+        {projects && (
+          <label className="inline-flex items-center gap-2 text-xs text-slate-500 font-semibold">
+            Project:
+            <select
+              value={projectFilter}
+              onChange={(e) => setProjectFilter(e.target.value)}
+              className="max-w-[220px] px-2.5 py-1.5 rounded-lg border border-slate-300 text-xs font-semibold text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-sky-500"
+            >
+              <option value="all">All projects</option>
+              {projects.map((p) => (
+                <option key={p.id} value={p.id}>{[p.projectNumber, p.name].filter(Boolean).join(' · ')}</option>
+              ))}
+            </select>
+          </label>
+        )}
         <label className="inline-flex items-center gap-2 text-xs text-slate-500 font-semibold">
           Sort by:
           <select
@@ -655,7 +711,14 @@ export default function SavedFacilities({ surveys = [], currentId, onOpen, onDel
             <option value="photos">Most photos</option>
           </select>
         </label>
+        </div>
       </div>
+
+      {narrow?.note && (
+        <div className="px-4 sm:px-6 py-2 border-b border-slate-200 bg-rose-50/40 text-[13px] text-slate-700">
+          {narrow.note(visible)}
+        </div>
+      )}
 
       {!canDownloadReports && (
         <div className="px-4 sm:px-6 py-3 border-b border-slate-200">
@@ -764,6 +827,11 @@ export default function SavedFacilities({ surveys = [], currentId, onOpen, onDel
                                 </span>
                               )}
                             </div>
+                            {projects && (
+                              <p className="text-[11px] text-ocs-600 font-semibold mt-0.5 inline-flex items-center gap-1">
+                                <FolderKanban className="w-3 h-3" /> {projectLabel(s)}
+                              </p>
+                            )}
                             <p className="text-[11px] text-slate-400 mt-0.5">
                               {s.submittedAt ? 'Submitted ' : 'Updated '}
                               {new Date(when).toLocaleString()}
@@ -851,6 +919,11 @@ export default function SavedFacilities({ surveys = [], currentId, onOpen, onDel
                     </div>
                     <div className="flex items-center gap-2 mt-1.5 flex-wrap">
                       <TypeBadge facility={s.facility} />
+                      {projects && (
+                        <span className="text-[12px] text-ocs-600 font-semibold inline-flex items-center gap-1">
+                          <FolderKanban className="w-3.5 h-3.5" /> {projectLabel(s)}
+                        </span>
+                      )}
                     </div>
                     <p className="text-xs text-slate-500 mt-1.5">
                       {s.submittedAt

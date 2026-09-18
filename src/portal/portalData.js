@@ -12,6 +12,7 @@ import { sectionsForScope, fieldsForSection, activeOptions } from '../config/for
 
 const DAY = 24 * 60 * 60 * 1000;
 const PRIORITY_CACHE_KEY = 'fm_portal_priority_cache';
+const PRIORITY_BY_SURVEY_KEY = 'fm_portal_priority_by_survey';
 const ACTIVITY_CACHE_KEY = 'fm_portal_activity_cache';
 
 const inWindow = (iso, from, to) => {
@@ -29,11 +30,19 @@ export function trendPercent(current, previous) {
   return Math.round(((current - previous) / previous) * 100);
 }
 
+export const isSubmitted = (s) => s.status === 'submitted';
+
+/** A finished facility with snags but not one photo -- weak evidence for a client report. */
+export const missingPhotos = (s) => isSubmitted(s) && (s.itemCount || 0) > 0 && !(s.photoCount || 0);
+
+/** Anything outside P1-P4 counts as P2, the app's default for a new snag. */
+export const normalisePriority = (p) => ([1, 2, 3, 4].includes(Number(p)) ? Number(p) : 2);
+
 export function dashboardStats(surveys = [], now = Date.now()) {
   const last = [now - 30 * DAY, now + DAY];
   const prev = [now - 60 * DAY, now - 30 * DAY];
-  const submitted = surveys.filter((s) => s.status === 'submitted');
-  const drafts = surveys.filter((s) => s.status !== 'submitted');
+  const submitted = surveys.filter(isSubmitted);
+  const drafts = surveys.filter((s) => !isSubmitted(s));
   const created = (w) => surveys.filter((s) => inWindow(s.createdAt || s.updatedAt, ...w)).length;
   const completed = (w) => submitted.filter((s) => inWindow(s.submittedAt, ...w)).length;
   const snags = surveys.reduce((n, s) => n + (s.itemCount || 0), 0);
@@ -51,7 +60,7 @@ export function dashboardStats(surveys = [], now = Date.now()) {
     draftsWithSnags: drafts.filter((s) => (s.itemCount || 0) > 0).length,
     snags,
     photos,
-    noPhotoFacilities: submitted.filter((s) => (s.itemCount || 0) > 0 && !(s.photoCount || 0)).length,
+    noPhotoFacilities: surveys.filter(missingPhotos).length,
     statusBreakdown: [
       { key: 'submitted', label: 'Completed', count: submitted.length, percent: pct(submitted.length) },
       { key: 'draft', label: 'Draft (in progress)', count: drafts.length, percent: pct(drafts.length) }
@@ -95,20 +104,108 @@ export function cachedPriorityCounts() {
   return readCache(PRIORITY_CACHE_KEY, null);
 }
 
-/** Snags per priority across the given facilities. Falls back to the last known counts offline. */
-export async function loadPriorityCounts(surveyIds = []) {
-  if (!isCloudConfigured || !surveyIds.length) return cachedPriorityCounts();
-  const counts = { 1: 0, 2: 0, 3: 0, 4: 0 };
+/** Snags per priority for each facility, as last loaded: { surveyId: { 1: n, 2: n, ... } }. */
+export function cachedPriorityBySurvey() {
+  return readCache(PRIORITY_BY_SURVEY_KEY, null);
+}
+
+/** Adds up the per-facility counts. The dashboard totals are always this sum. */
+export function priorityTotals(bySurvey = {}) {
+  const totals = { 1: 0, 2: 0, 3: 0, 4: 0 };
+  for (const counts of Object.values(bySurvey || {})) {
+    for (const p of [1, 2, 3, 4]) totals[p] += counts?.[p] || 0;
+  }
+  return totals;
+}
+
+/**
+ * Snags per priority, per facility and in total. The totals are summed from the
+ * per-facility counts, so the facilities a bar opens always add up to the bar.
+ * Falls back to the last known counts offline.
+ */
+export async function loadPriorityBreakdown(surveyIds = []) {
+  if (!isCloudConfigured || !surveyIds.length) {
+    const bySurvey = cachedPriorityBySurvey();
+    return bySurvey ? { bySurvey, totals: priorityTotals(bySurvey) } : null;
+  }
+  const bySurvey = {};
   // Chunked so a large portfolio never builds an over-long request URL.
   for (let i = 0; i < surveyIds.length; i += 150) {
     const rows = await fetchAllPages('survey_items', 'survey_id, priority', surveyIds.slice(i, i + 150));
     for (const r of rows) {
-      const p = [1, 2, 3, 4].includes(Number(r.priority)) ? Number(r.priority) : 2;
-      counts[p] += 1;
+      const counts = bySurvey[r.survey_id] || (bySurvey[r.survey_id] = { 1: 0, 2: 0, 3: 0, 4: 0 });
+      counts[normalisePriority(r.priority)] += 1;
     }
   }
-  writeCache(PRIORITY_CACHE_KEY, counts);
-  return counts;
+  const totals = priorityTotals(bySurvey);
+  writeCache(PRIORITY_BY_SURVEY_KEY, bySurvey);
+  writeCache(PRIORITY_CACHE_KEY, totals);
+  return { bySurvey, totals };
+}
+
+/** Snags per priority across the given facilities. */
+export async function loadPriorityCounts(surveyIds = []) {
+  const breakdown = await loadPriorityBreakdown(surveyIds);
+  return breakdown ? breakdown.totals : cachedPriorityCounts();
+}
+
+export const PRIORITY_NAMES = { 1: 'P1 Urgent', 2: 'P2 Essential', 3: 'P3 Desirable', 4: 'P4 Long term' };
+
+/**
+ * What a dashboard number counted, as a filter for the facility list.
+ *
+ * Accepts the short keys the tiles use ('all', 'submitted', 'draft') or an
+ * object: { status, priority: 1-4, evidence: 'noPhotos', projectId }.
+ */
+export function facilityListFilter(target = 'all') {
+  const t = typeof target === 'string' ? { status: target } : (target || {});
+  return {
+    status: ['submitted', 'draft'].includes(t.status) ? t.status : 'all',
+    priority: [1, 2, 3, 4].includes(Number(t.priority)) ? Number(t.priority) : null,
+    evidence: t.evidence === 'noPhotos' ? 'noPhotos' : null,
+    projectId: t.projectId || null
+  };
+}
+
+/**
+ * The part of a filter that goes beyond submitted/draft, as a removable chip on
+ * the list: its wording, the test each facility must pass, and a line that
+ * ties the list back to the number that was clicked.
+ */
+export function narrowFor(filter, bySurvey) {
+  if (filter?.priority) {
+    const p = filter.priority;
+    const name = PRIORITY_NAMES[p];
+    const countOf = (s) => bySurvey?.[s.id]?.[p] || 0;
+    return {
+      label: `Facilities with ${name} snags`,
+      test: (s) => countOf(s) > 0,
+      note: (rows) => {
+        if (!bySurvey) return 'Counting snags…';
+        const snags = rows.reduce((n, s) => n + countOf(s), 0);
+        return `${snags} ${name} snag${snags === 1 ? '' : 's'} in ${rows.length} facilit${rows.length === 1 ? 'y' : 'ies'}`;
+      }
+    };
+  }
+  if (filter?.evidence === 'noPhotos') {
+    return {
+      label: 'Completed facilities with no photos',
+      test: missingPhotos,
+      note: (rows) => `${rows.length} submitted facilit${rows.length === 1 ? 'y has' : 'ies have'} snags but no photos`
+    };
+  }
+  return null;
+}
+
+/** The facilities a filter selects -- the same rules the list screen applies. */
+export function applyFacilityFilter(surveys = [], filter = facilityListFilter(), bySurvey = null) {
+  const narrow = narrowFor(filter, bySurvey);
+  return surveys.filter((s) => {
+    if (filter.projectId && s.projectId !== filter.projectId) return false;
+    if (filter.status === 'submitted' && !isSubmitted(s)) return false;
+    if (filter.status === 'draft' && isSubmitted(s)) return false;
+    return !narrow || narrow.test(s);
+  });
 }
 
 export function cachedActivity() {

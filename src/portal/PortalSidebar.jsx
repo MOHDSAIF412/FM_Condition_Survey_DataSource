@@ -40,6 +40,7 @@ function buildNav({ isAdmin, hasOpenProject }) {
       key: 'projects', label: 'Projects', icon: FolderKanban,
       children: [
         { label: 'All Projects', target: { view: 'projects' } },
+        { label: 'All Facilities', target: { view: 'allFacilities' } },
         ...(hasOpenProject ? [
           { label: 'Facilities', target: { view: 'facilities' } },
           { label: 'Photos', target: { view: 'photos' } }
