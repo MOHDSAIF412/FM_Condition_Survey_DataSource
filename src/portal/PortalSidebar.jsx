@@ -47,8 +47,9 @@ function buildNav({ access = {}, hasOpenProject }) {
           { label: 'Facilities', target: { view: 'facilities' } },
           { label: 'Photos', target: { view: 'photos' } }
         ] : []),
+        ...(access.review ? [{ label: 'Review & Approval', target: { view: 'review' } }] : []),
         ...(access.templates ? [{ label: 'Inspection Templates', target: { admin: 'templates' } }] : []),
-        ...(isAdmin ? [soon('Workflows', 'Stage 6'), soon('AI Assistant', 'Not enabled')] : [])
+        ...(isAdmin ? [soon('AI Assistant', 'Not enabled')] : [])
       ]
     },
     access.config && { key: 'versions', label: 'Version History', icon: History, target: { admin: 'versions' } },

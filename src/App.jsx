@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import Header from './components/Header';
 import Navigation from './components/Navigation';
 import FacilityInfo from './components/FacilityInfo';
@@ -19,6 +19,11 @@ import AdminDashboard from './admin/AdminDashboard';
 import PortalSidebar from './portal/PortalSidebar';
 import PortalHome from './portal/PortalHome';
 import AllFacilities from './portal/AllFacilities';
+import ReviewApproval from './portal/ReviewApproval';
+import {
+  withDueDates, stageOf, isLocked, workflowActions, moveFacility, ACTION_LABELS, STAGE_BY_KEY, isLockedRefusal,
+  workflowBackendReady
+} from './utils/workflow';
 import { facilityListFilter } from './portal/portalData';
 import GlobalSearch from './portal/GlobalSearch';
 import { Capacitor } from '@capacitor/core';
@@ -278,6 +283,7 @@ export default function App({ currentUser = null, onSignOut } = {}) {
   const mayManageUsers = can(currentUser, 'manage_users');
   const mayManageConfig = can(currentUser, 'manage_config');
   const mayManageTemplates = can(currentUser, 'manage_templates');
+  const mayReview = can(currentUser, 'review_surveys') || can(currentUser, 'approve_surveys') || mayManageTeam;
   /** Which Admin Dashboard modules this user may open. */
   const mayOpenAdmin = (module) => ({
     forms: mayManageConfig, versions: mayManageConfig, audit: mayManageConfig,
@@ -610,6 +616,12 @@ export default function App({ currentUser = null, onSignOut } = {}) {
 
     if (signInError) {
       return { message: 'Sign in again to upload. Your work is saved on this device.' };
+    }
+    if (refusedError && isLockedRefusal(refusedError)) {
+      return {
+        message: 'This facility has been approved and is locked, so the changes on this device cannot upload. '
+          + 'They are kept here -- ask a Manager or Admin to reopen the facility, then sync again.'
+      };
     }
     if (refusedError) {
       return {
@@ -1101,7 +1113,9 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
    * edits. With no connection the device copy is opened instead of refusing.
    */
   const handleOpenSurvey = async (surveyId) => {
-    if (surveyId === survey?.id) return;
+    // Already loaded (the facility the app opened in the background, or the
+    // one last worked on): show it. Returning silently made "Open" look dead.
+    if (surveyId === survey?.id) { setView('survey'); return; }
     setSyncState('syncing');
 
     const local = await getSurveyOffline(surveyId);
@@ -1437,10 +1451,74 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
     setView('survey');
   };
 
+  // Every list and count works from these: the facilities with each one's
+  // due date resolved (its own, else its project's), for Overdue.
+  const listRows = useMemo(() => withDueDates(surveyList, projects), [surveyList, projects]);
+
   /** Facilities belonging to the open project, and nothing else. */
   const facilitiesInProject = activeProject
-    ? surveyList.filter((s) => s.projectId === activeProject.id)
+    ? listRows.filter((s) => s.projectId === activeProject.id)
     : [];
+
+  /**
+   * The open facility's place in review and approval: its own status (which
+   * may be newer on this device) with the review status from the server list,
+   * or from the copy last downloaded when the list does not have it.
+   */
+  const openRow = survey ? listRows.find((r) => r.id === survey.id) : null;
+  const openStage = survey ? {
+    status: survey.status,
+    reviewStatus: openRow && !openRow.localOnly ? openRow.reviewStatus : (survey.review?.status ?? null),
+    reviewNote: openRow && !openRow.localOnly ? openRow.reviewNote : (survey.review?.note ?? null),
+    approvedAt: openRow?.approvedAt ?? survey.review?.approvedAt ?? null
+  } : null;
+  const openIsLocked = !!openStage && isLocked(openStage);
+  const mayEditOpen = mayEditSurveys && !openIsLocked;
+  const [workflowBusy, setWorkflowBusy] = useState(null);
+  // Until the database records reviews, the facility screen offers no review
+  // steps (they would fail) and shows no review banner.
+  const [workflowReady, setWorkflowReady] = useState(false);
+  useEffect(() => {
+    if (!currentUser) return undefined;
+    let cancelled = false;
+    workflowBackendReady().then((ok) => { if (!cancelled) setWorkflowReady(ok); }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [currentUser?.id]);
+
+  /** A review step taken from the facility screen. */
+  const handleWorkflowStep = async (action) => {
+    const current = surveyRef.current;
+    if (!current) return;
+    let note = null;
+    if (action === 'request_changes') {
+      note = window.prompt('What should the surveyor change? They will see this note.');
+      if (!note || !note.trim()) return;
+    } else if (action === 'reopen') {
+      note = window.prompt('Reopen this approved facility for changes? Add a reason (optional).', '');
+      if (note === null) return;
+    }
+    setWorkflowBusy(action);
+    try {
+      const fields = await moveFacility(current.id, action, note);
+      // The server changed status, review and revision; take exactly those,
+      // so the next upload builds on the revision just written.
+      const next = {
+        ...current,
+        status: fields.status,
+        review: { status: fields.reviewStatus, note: fields.reviewNote, reviewedAt: fields.reviewedAt, approvedAt: fields.approvedAt },
+        revision: fields.revision,
+        cloudRevision: fields.revision
+      };
+      markAsExternalChange();
+      setSurvey(next);
+      await saveSurveyOffline(next, { pendingSync: !!current.pendingSync });
+      refreshSurveyList();
+    } catch (err) {
+      alert(err.message);
+    } finally {
+      setWorkflowBusy(null);
+    }
+  };
 
   /**
    * The next facility number, continuing from every facility this device knows
@@ -1674,7 +1752,7 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
       {isWebPortal && (
         <PortalSidebar
           current={view === 'admin' ? { admin: adminModule } : { view }}
-          access={{ config: mayManageConfig, users: mayManageUsers, templates: mayManageTemplates, admin: isAdminUser(currentUser) }}
+          access={{ config: mayManageConfig, users: mayManageUsers, templates: mayManageTemplates, review: mayReview, admin: isAdminUser(currentUser) }}
           /* Only once a project is open: on the project list a "Facilities"
              entry would point at a project nobody has chosen. */
           hasOpenProject={!!activeProject && view !== 'projects'}
@@ -1746,7 +1824,7 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
         <main className="flex-1 w-full px-3 sm:px-5 pt-4 md:pb-6">
           <PortalHome
             currentUser={currentUser}
-            surveys={surveyList}
+            surveys={listRows}
             projects={projects}
             formsConfig={formsConfig}
             formsVersion={formsVersion}
@@ -1816,6 +1894,27 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
         </main>
       )}
 
+      {/* Review & Approval: the queue, the steps, the due dates. */}
+      {view === 'review' && isWebPortal && mayReview && (
+        <>
+          <div className="bg-white border-b border-slate-200">
+            <div className="max-w-6xl mx-auto px-3 sm:px-6 py-2">
+              <Breadcrumb moduleName="Review & Approval" onDashboard={dashboardCrumb} onHome={handleBackToProjects} />
+            </div>
+          </div>
+          <main className="flex-1 w-full px-3 sm:px-5 pt-4 safe-area-content-pb md:pb-8">
+            <ReviewApproval
+              currentUser={currentUser}
+              surveys={listRows}
+              projects={projects}
+              onOpenSurvey={openSurveyFromPortal}
+              onChanged={() => { refreshSurveyList(); refreshProjects(); }}
+              onOpenRoles={mayManageUsers ? () => openAdmin('roles') : null}
+            />
+          </main>
+        </>
+      )}
+
       {/* Every facility across projects: where the dashboard's numbers lead. */}
       {view === 'allFacilities' && isWebPortal && (
         <>
@@ -1826,7 +1925,7 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
           </div>
           <main className="flex-1 w-full px-3 sm:px-8 pt-4 sm:pt-6 safe-area-content-pb md:pb-8">
             <AllFacilities
-              surveys={surveyList}
+              surveys={listRows}
               projects={projects}
               filter={portalListFilter}
               onClearNarrow={() => setPortalListFilter((f) => ({ ...f, priority: null, evidence: null }))}
@@ -1993,7 +2092,7 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
             </select>
           )}
 
-          {mayEditSurveys ? (
+          {mayEditOpen ? (
           <button
             type="button"
             onClick={handleSubmitFacility}
@@ -2005,11 +2104,25 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
           </button>
           ) : (
             <span className="px-3 py-1 rounded-lg bg-slate-100 border border-slate-200 text-slate-600 text-xs font-bold shrink-0"
-              title="Your role can view this facility but not change it">
-              Read-only
+              title={openIsLocked ? 'Approved facilities are locked' : 'Your role can view this facility but not change it'}>
+              {openIsLocked ? 'Locked' : 'Read-only'}
             </span>
           )}
         </div>
+
+        {/* Where this facility is in review, and the steps this person may take. */}
+        {workflowReady && openStage && stageOf(openStage) !== 'draft' && (
+          <div className="max-w-6xl mx-auto px-3 sm:px-6 pb-2">
+            <WorkflowBanner
+              stage={stageOf(openStage)}
+              note={openStage.reviewNote}
+              approvedAt={openStage.approvedAt}
+              actions={workflowActions(currentUser, openStage)}
+              busy={workflowBusy}
+              onStep={handleWorkflowStep}
+            />
+          </div>
+        )}
 
         {activeProject && (
           <div className="max-w-6xl mx-auto px-3 sm:px-6 pb-2">
@@ -2043,7 +2156,7 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
             disabled. The database refuses its changes anyway; this keeps the
             screen from offering them. */}
         <TabPanel active={activeTab === 'facility'}>
-          <fieldset disabled={!mayEditSurveys} className="min-w-0 border-0 p-0 m-0">
+          <fieldset disabled={!mayEditOpen} className="min-w-0 border-0 p-0 m-0">
           <FacilityInfo
             facility={survey?.facility || {}}
             onChange={handleUpdateFacility}
@@ -2060,7 +2173,7 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
         </TabPanel>
 
         <TabPanel active={activeTab === 'items'}>
-          <fieldset disabled={!mayEditSurveys} className="min-w-0 border-0 p-0 m-0">
+          <fieldset disabled={!mayEditOpen} className="min-w-0 border-0 p-0 m-0">
           <SurveyList
             items={survey?.items || []}
             onAddItem={handleAddItem}
@@ -2085,7 +2198,7 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
         <TabPanel active={activeTab === 'signatures'}>
           <div className="max-w-4xl mx-auto mb-6">
             <SavedFacilities
-              surveys={surveyList}
+              surveys={listRows}
               currentId={survey?.id}
               onOpen={handleOpenSurvey}
               onDelete={mayDeleteSnags ? handleDeleteSurvey : null}
@@ -2095,7 +2208,7 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
               onSubmit={handleSubmitFromList}
             />
           </div>
-          <fieldset disabled={!mayEditSurveys} className="min-w-0 border-0 p-0 m-0">
+          <fieldset disabled={!mayEditOpen} className="min-w-0 border-0 p-0 m-0">
           <SignatureSection
             signatures={survey?.signatures || {}}
             onChange={handleUpdateSignatures}
@@ -2116,6 +2229,34 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
         />
       )}
       </div>
+    </div>
+  );
+}
+
+/** The open facility's review stage, the reviewer's note, and the steps allowed. */
+function WorkflowBanner({ stage, note, approvedAt, actions = [], busy, onStep }) {
+  const look = {
+    changes_requested: 'bg-rose-50 border-rose-200 text-rose-800',
+    submitted: 'bg-sky-50 border-sky-200 text-sky-800',
+    in_review: 'bg-violet-50 border-violet-200 text-violet-800',
+    approved: 'bg-emerald-50 border-emerald-200 text-emerald-800'
+  }[stage] || 'bg-slate-50 border-slate-200 text-slate-700';
+  const text = {
+    changes_requested: `Sent back for changes${note ? `: \u201c${note}\u201d` : '.'} Fix it, then submit again.`,
+    submitted: 'Submitted, waiting for review.',
+    in_review: 'In review: a reviewer is checking this facility.',
+    approved: `Approved${approvedAt ? ` on ${new Date(approvedAt).toLocaleDateString()}` : ''}. Locked: a Manager or Admin can reopen it.`
+  }[stage];
+  return (
+    <div role="status" className={`rounded-xl border px-3 py-2 text-[13px] flex items-center gap-2 flex-wrap ${look}`}>
+      <span className="font-bold">{STAGE_BY_KEY[stage]?.label}</span>
+      <span className="flex-1 min-w-[200px]">{text}</span>
+      {actions.map((a) => (
+        <button key={a} type="button" disabled={!!busy} onClick={() => onStep(a)}
+          className="px-3 py-1 rounded-lg bg-white/80 hover:bg-white border border-black/10 text-xs font-bold disabled:opacity-50">
+          {busy === a ? '\u2026' : ACTION_LABELS[a]}
+        </button>
+      ))}
     </div>
   );
 }

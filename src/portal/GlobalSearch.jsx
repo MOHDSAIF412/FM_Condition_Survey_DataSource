@@ -7,12 +7,15 @@ const PAGES_ADMIN = [
   { label: 'Forms & Fields', hint: 'Survey Builder', target: { admin: 'forms' } },
   { label: 'Inspection Templates', hint: 'Survey Builder', target: { admin: 'templates' } },
   { label: 'Users', hint: 'Administration', target: { admin: 'users' } },
+  { label: 'Roles & Permissions', hint: 'Administration', target: { admin: 'roles' } },
+  { label: 'Review & Approval', hint: 'Workflows', target: { view: 'review' } },
   { label: 'Version History', hint: 'Administration', target: { admin: 'versions' } },
   { label: 'Audit Logs', hint: 'Administration', target: { admin: 'audit' } }
 ];
 const PAGES_ALL = [
   { label: 'Dashboard', hint: 'Home', target: { view: 'home' } },
   { label: 'All Projects', hint: 'Projects', target: { view: 'projects' } },
+  { label: 'All Facilities', hint: 'Projects', target: { view: 'allFacilities' } },
   { label: 'Generate Reports', hint: 'Reports', target: { view: 'reports' } }
 ];
 

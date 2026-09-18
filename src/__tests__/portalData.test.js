@@ -27,13 +27,14 @@ describe('dashboardStats', () => {
       createdLast30: 3, totalTrend: 50,          // 3 created vs 2 in the 30 days before
       completedLast30: 2, completedTrend: 100    // 2 completed vs 1
     });
-    expect(s.statusBreakdown.map((x) => [x.count, x.percent])).toEqual([[3, 60], [2, 40]]);
+    // Draft, Changes requested, Submitted, In review, Approved.
+    expect(s.statusBreakdown.map((x) => [x.count, x.percent])).toEqual([[2, 40], [0, 0], [3, 60], [0, 0], [0, 0]]);
   });
 
   test('no trend when there is nothing to compare with', () => {
     expect(trendPercent(4, 0)).toBeNull();
     expect(dashboardStats([], NOW)).toMatchObject({ total: 0, totalTrend: null, completedTrend: null });
-    expect(dashboardStats([], NOW).statusBreakdown.map((x) => x.percent)).toEqual([0, 0]);
+    expect(dashboardStats([], NOW).statusBreakdown.map((x) => x.percent)).toEqual([0, 0, 0, 0, 0]);
   });
 });
 
@@ -104,7 +105,7 @@ describe('every dashboard number opens a list of exactly what it counted', () =>
     expect(list('all')).toHaveLength(stats.total);
     expect(list('submitted')).toHaveLength(stats.completed);
     expect(list('draft')).toHaveLength(stats.drafts);
-    for (const row of stats.statusBreakdown) expect(list(row.key)).toHaveLength(row.count);
+    for (const row of stats.statusBreakdown) expect(list({ stage: row.key })).toHaveLength(row.count);
   });
 
   test('evidence: completed facilities with no photos', () => {
@@ -129,12 +130,41 @@ describe('every dashboard number opens a list of exactly what it counted', () =>
   });
 
   test('unknown targets fall back to everything rather than to an empty list', () => {
-    expect(facilityListFilter('nonsense')).toEqual({ status: 'all', priority: null, evidence: null, projectId: null });
+    expect(facilityListFilter('nonsense')).toEqual({ status: 'all', priority: null, evidence: null, stage: null, overdue: false, projectId: null });
     expect(facilityListFilter({ priority: 9 }).priority).toBeNull();
     expect(list(undefined)).toHaveLength(surveys.length);
   });
 
   test('odd priority values count as P2, the default for a new snag', () => {
     expect([normalisePriority(1), normalisePriority('4'), normalisePriority(null), normalisePriority(7)]).toEqual([1, 4, 2, 2]);
+  });
+});
+
+describe('workflow stages and due dates on the dashboard', () => {
+  const rows = [
+    { id: 'd', status: 'draft', effectiveDue: '2026-09-10' },                                   // overdue
+    { id: 'cr', status: 'draft', reviewStatus: 'changes_requested', effectiveDue: '2026-09-30' },
+    { id: 'sub', status: 'submitted', effectiveDue: '2026-09-01' },                             // overdue
+    { id: 'rev', status: 'submitted', reviewStatus: 'in_review' },
+    { id: 'ok', status: 'submitted', reviewStatus: 'approved', effectiveDue: '2026-09-01' }      // approved: never overdue
+  ];
+  const stats = dashboardStats(rows, NOW);
+  const list = (target) => applyFacilityFilter(rows, facilityListFilter(target), null, NOW).map((s) => s.id);
+
+  test('each stage counted once, and each count opens exactly those facilities', () => {
+    expect(stats.stageCounts).toEqual({ draft: 1, changes_requested: 1, submitted: 1, in_review: 1, approved: 1 });
+    for (const row of stats.statusBreakdown) expect(list({ stage: row.key })).toHaveLength(row.count);
+    expect(stats.awaitingReview).toBe(2);
+  });
+
+  test('overdue: past the due date and not approved', () => {
+    expect(stats.overdue).toBe(2);
+    expect(list({ overdue: true })).toEqual(['d', 'sub']);
+  });
+
+  test('"Completed" and "In progress" still count by submitted / draft', () => {
+    expect(stats.completed).toBe(3);
+    expect(stats.drafts).toBe(2);
+    expect(list('submitted')).toEqual(['sub', 'rev', 'ok']);
   });
 });

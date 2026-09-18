@@ -13,6 +13,7 @@ import {
 } from './portalData';
 import { useEscapeKey } from '../utils/useEscapeKey';
 import { can } from '../utils/auth';
+import { stageOf, STAGE_BY_KEY } from '../utils/workflow';
 
 const card = 'bg-white rounded-2xl border border-slate-200/80 shadow-[0_1px_3px_rgba(15,37,87,0.06)]';
 const clickable = 'cursor-pointer transition-shadow hover:shadow-md hover:border-sky-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500';
@@ -36,6 +37,7 @@ export default function PortalHome({
   const isAdmin = can(currentUser, 'manage_config');
   const mayUsers = can(currentUser, 'manage_users');
   const mayTemplates = can(currentUser, 'manage_templates');
+  const mayReview = can(currentUser, 'review_surveys') || can(currentUser, 'approve_surveys');
   const [now, setNow] = useState(() => new Date());
   const [priorities, setPriorities] = useState(() => cachedPriorityCounts());
   const [activity, setActivity] = useState(() => cachedActivity());
@@ -121,7 +123,7 @@ export default function PortalHome({
       </section>
 
       {/* KPI cards */}
-      <div className="grid gap-4 grid-cols-1 md:grid-cols-3">
+      <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 2xl:grid-cols-4">
         <Kpi icon={ClipboardList} tone="ocs" color="#3b5697" label="Total Surveys" value={stats.total} loading={initialLoad}
           trend={stats.totalTrend} series={series.total} note={`${stats.createdLast30} started in the last 30 days`}
           onClick={() => onOpenList('all')} />
@@ -131,6 +133,9 @@ export default function PortalHome({
         <Kpi icon={Clock3} tone="amber" color="#f59e0b" label="In Progress (Draft)" value={stats.drafts} loading={initialLoad}
           series={series.drafts} note={`${stats.draftsWithSnags} with snags recorded`}
           onClick={() => onOpenList('draft')} />
+        <Kpi icon={CalendarDays} tone="rose" color="#e11d48" label="Overdue" value={stats.overdue} loading={initialLoad}
+          note={`${stats.awaitingReview} waiting for review · ${stats.stageCounts.approved} approved`}
+          onClick={() => onOpenList({ overdue: true })} />
       </div>
 
       {/* Charts + quick actions */}
@@ -138,20 +143,16 @@ export default function PortalHome({
         <div className={`${card} p-5`}>
           <Title title="Survey Status" sub="Overview of survey completion progress" />
           <div className="flex flex-col sm:flex-row items-center gap-6 mt-3">
-            <Donut total={stats.total} onClick={() => onOpenList('all')} segments={[
-              { value: stats.completed, color: '#10b981', key: 'submitted' },
-              { value: stats.drafts, color: '#f59e0b', key: 'draft' }
-            ]} onSegment={onOpenList} />
+            <Donut total={stats.total} onClick={() => onOpenList('all')}
+              segments={stats.statusBreakdown.map((s) => ({ value: s.count, color: s.color, key: s.key }))}
+              onSegment={(key) => onOpenList({ stage: key })} />
             <div className="flex-1 w-full">
               <ul className="divide-y divide-slate-100">
-                {[
-                  { ...stats.statusBreakdown[0], color: 'bg-emerald-500' },
-                  { ...stats.statusBreakdown[1], color: 'bg-amber-500' }
-                ].map((s) => (
+                {stats.statusBreakdown.map((s) => (
                   <li key={s.key}>
-                    <button type="button" onClick={() => onOpenList(s.key)}
-                      className="w-full flex items-center gap-3 py-3 text-sm rounded-lg hover:bg-slate-50 px-2 -mx-2">
-                      <span className={`w-3 h-3 rounded-full ${s.color}`} />
+                    <button type="button" onClick={() => onOpenList({ stage: s.key })}
+                      className="w-full flex items-center gap-3 py-2 text-sm rounded-lg hover:bg-slate-50 px-2 -mx-2">
+                      <span className="w-3 h-3 rounded-full" style={{ background: s.color }} />
                       <span className="flex-1 text-left text-slate-700">{s.label}</span>
                       <span className="font-bold text-slate-900 w-10 text-right tabular-nums">{s.count}</span>
                       <span className="text-slate-400 w-14 text-right">({s.percent}%)</span>
@@ -160,10 +161,14 @@ export default function PortalHome({
                   </li>
                 ))}
               </ul>
-              <p className="mt-3 flex gap-2 items-start text-[11px] text-slate-500 bg-sky-50/70 border border-sky-100 rounded-xl px-3 py-2">
-                <Info className="w-3.5 h-3.5 text-sky-600 shrink-0 mt-0.5" />
-                Overdue and In Review statuses arrive with Workflows (due dates and a review step).
-              </p>
+              {mayReview && stats.awaitingReview > 0 && (
+                <button type="button" onClick={() => onNavigate({ view: 'review' })}
+                  className="mt-3 w-full flex gap-2 items-center text-[12px] font-semibold text-violet-700 bg-violet-50 border border-violet-100 rounded-xl px-3 py-2 hover:bg-violet-100">
+                  <Info className="w-3.5 h-3.5 shrink-0" />
+                  {stats.awaitingReview} facilit{stats.awaitingReview === 1 ? 'y is' : 'ies are'} waiting for review
+                  <ChevronRight className="w-4 h-4 ml-auto" />
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -183,8 +188,8 @@ export default function PortalHome({
             <QuickAction icon={FileText} label="Generate Report" onClick={onViewReports} />
             {mayTemplates && <QuickAction icon={ClipboardCheck} label="Inspection Templates" onClick={() => onNavigate({ admin: 'templates' })} />}
             <QuickAction icon={Building2} label="All Facilities" onClick={() => onOpenList('all')} />
-            {isAdmin
-              ? <QuickAction icon={Workflow} label="Configure Workflows" disabled note="Stage 6" />
+            {mayReview
+              ? <QuickAction icon={Workflow} label="Review & Approval" onClick={() => onNavigate({ view: 'review' })} />
               : <QuickAction icon={FolderKanban} label="All Projects" onClick={() => onNavigate({ view: 'projects' })} />}
           </ul>
         </div>
@@ -226,7 +231,7 @@ export default function PortalHome({
               <ConfigRow label="Dropdown Options" value={config ? `${config.options} custom` : '—'} onClick={() => onNavigate({ admin: 'forms' })} />
               <ConfigRow label="Inspection Templates" value={config ? `${config.templates} active` : '—'} onClick={() => onNavigate({ admin: 'templates' })} />
               <ConfigRow label="Report Templates" pending="Stage 4" />
-              <ConfigRow label="Workflows" pending="Stage 6" />
+              <ConfigRow label="Review & Approval" value={`${stats.awaitingReview} waiting`} onClick={() => onNavigate({ view: 'review' })} />
             </ul>
           </div>
         ) : (
@@ -234,6 +239,8 @@ export default function PortalHome({
             <IconTitle icon={ClipboardCheck} title="Evidence Check" sub="Worth finishing before reports go to the client" />
             <ul className="divide-y divide-slate-100 mt-2 text-sm">
               <EvidenceRow icon={Clock3} tone="text-amber-500" label="Drafts not yet submitted" value={stats.drafts} onClick={() => onOpenList('draft')} />
+              <EvidenceRow icon={RotateCcw} tone="text-rose-500" label="Sent back for changes" value={stats.stageCounts.changes_requested} onClick={() => onOpenList({ stage: 'changes_requested' })} />
+              <EvidenceRow icon={CalendarDays} tone="text-rose-600" label="Overdue" value={stats.overdue} onClick={() => onOpenList({ overdue: true })} />
               <EvidenceRow icon={Camera} tone="text-rose-500" label="Completed facilities with no photos" value={stats.noPhotoFacilities} onClick={() => onOpenList({ evidence: 'noPhotos' })} />
               <EvidenceRow icon={AlertTriangle} tone="text-rose-600" label="Urgent (P1) snags" value={priorities?.[1] ?? '—'} onClick={() => onOpenList({ priority: 1 })} />
             </ul>
@@ -458,7 +465,6 @@ function RecentTable({ rows, projects, onOpenSurvey, onOpenProject, loading }) {
             const p = projects.find((x) => x.id === s.projectId);
             const code = s.facility?.facilityCode || facilityCode(s.facility?.facilityNumber) || '—';
             const date = s.submittedAt || s.updatedAt || s.createdAt;
-            const done = s.status === 'submitted';
             return (
               <tr key={s.id} onClick={() => onOpenSurvey(s.id)}
                 className="border-b border-slate-100 last:border-0 cursor-pointer hover:bg-sky-50/50">
@@ -466,8 +472,8 @@ function RecentTable({ rows, projects, onOpenSurvey, onOpenProject, loading }) {
                 <td className="py-2.5 px-2 text-slate-600 whitespace-nowrap">{p?.projectNumber || '—'}</td>
                 <td className="py-2.5 px-2 text-slate-700 max-w-[180px] truncate">{s.facilityName || 'Unnamed facility'}</td>
                 <td className="py-2.5 px-2">
-                  <span className={`px-2.5 py-1 rounded-md text-[11px] font-bold ${done ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>
-                    {done ? 'Completed' : 'Draft'}
+                  <span className={`px-2.5 py-1 rounded-md text-[11px] font-bold border ${STAGE_BY_KEY[stageOf(s)].badge}`}>
+                    {STAGE_BY_KEY[stageOf(s)].label}
                   </span>
                 </td>
                 <td className="py-2.5 px-2 text-slate-600 whitespace-nowrap">{date ? new Date(date).toLocaleDateString([], { day: 'numeric', month: 'short', year: 'numeric' }) : '—'}</td>
@@ -504,7 +510,11 @@ const ACTIVITY_LOOK = {
   NAMED: { icon: Pencil, cls: 'bg-sky-50 text-sky-600', title: 'Survey named' },
   SUBMITTED: { icon: Send, cls: 'bg-emerald-50 text-emerald-600', title: 'Survey submitted' },
   REOPENED: { icon: RotateCcw, cls: 'bg-amber-50 text-amber-600', title: 'Survey reopened' },
-  DELETED: { icon: Trash2, cls: 'bg-rose-50 text-rose-600', title: 'Survey deleted' }
+  DELETED: { icon: Trash2, cls: 'bg-rose-50 text-rose-600', title: 'Survey deleted' },
+  IN_REVIEW: { icon: ClipboardCheck, cls: 'bg-violet-50 text-violet-600', title: 'Review started' },
+  CHANGES_REQUESTED: { icon: RotateCcw, cls: 'bg-rose-50 text-rose-600', title: 'Sent back for changes' },
+  APPROVED: { icon: CircleCheck, cls: 'bg-emerald-50 text-emerald-600', title: 'Facility approved' },
+  UNLOCKED: { icon: RotateCcw, cls: 'bg-amber-50 text-amber-600', title: 'Reopened after approval' }
 };
 
 function describeActivity(row) {

@@ -22,7 +22,9 @@ export const ADMIN_MODULES = [
   { key: 'users', label: 'Users', hint: 'Add, disable, reset passwords', icon: Users, ready: true },
   { key: 'roles', label: 'Roles & Permissions', hint: 'Roles, projects, backend rules', icon: ShieldCheck, ready: true },
   { key: 'templates', label: 'Inspection Templates', hint: 'Standard checklists', icon: ClipboardList, ready: true },
-  { key: 'workflows', label: 'Workflows', hint: 'Status stages and approvals', icon: Workflow, ready: false, stage: 'Stage 6' },
+  // Review & Approval lives in the portal menu (Projects), not here: reviewers
+  // and managers use it, not only administrators.
+  { key: 'workflows', label: 'Workflows', hint: 'Status stages and approvals', icon: Workflow, ready: false, stage: 'Projects menu' },
   { key: 'settings', label: 'Settings', hint: 'Application settings', icon: Settings, ready: false, stage: 'Later stage' },
   { key: 'versions', label: 'Version History', hint: 'Published versions, rollback', icon: History, ready: true },
   { key: 'audit', label: 'Audit Log', hint: 'Who changed what, and when', icon: ScrollText, ready: true },

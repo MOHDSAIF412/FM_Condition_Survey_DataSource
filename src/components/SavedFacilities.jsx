@@ -14,6 +14,7 @@ import NoReportAccess from './NoReportAccess';
 import { generateSurveyPDF } from '../utils/pdfGenerator';
 import { generateSurveyExcel } from '../utils/excelGenerator';
 import { formatMoney } from '../utils/currency';
+import { stageOf, STAGE_BY_KEY, isOverdue } from '../utils/workflow';
 import {
   facilityCode, snagLabel, facilityTypeOf, PRIORITY_LEVELS, DEPARTMENTS
 } from '../types/survey';
@@ -341,19 +342,32 @@ export default function SavedFacilities({
    * facility and submitting from inside was the only route before, so drafts
    * with completed work sat unsubmitted.
    */
+  // Where the facility is in review and approval, plus Overdue when it is
+  // past its due date. A draft (or one sent back) can be submitted from here.
   const StatusBadge = ({ s }) => {
+    const stage = STAGE_BY_KEY[stageOf(s)];
+    const overdue = isOverdue(s) && (
+      <span title={`Due ${s.effectiveDue}`} className="px-2 py-1 rounded-full text-[11px] font-bold bg-rose-600 text-white inline-flex items-center gap-1">
+        Overdue
+      </span>
+    );
     if (s.status === 'submitted') {
       return (
-        <span className="px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 inline-flex items-center gap-1.5">
-          <CheckCircle2 className="w-3.5 h-3.5" /> Submitted
+        <span className="inline-flex items-center gap-1.5 flex-wrap">
+          <span className={`px-2.5 py-1 rounded-full text-[11px] font-bold border inline-flex items-center gap-1.5 ${stage.badge}`}>
+            <CheckCircle2 className="w-3.5 h-3.5" /> {stage.label}
+          </span>
+          {overdue}
         </span>
       );
     }
     return (
       <span className="inline-flex items-center gap-1.5 flex-wrap">
-        <span className="px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-50 text-amber-700 border border-amber-200 inline-flex items-center gap-1.5">
-          <Clock className="w-3.5 h-3.5" /> Draft
+        <span title={s.reviewNote ? `Reviewer: ${s.reviewNote}` : undefined}
+          className={`px-2.5 py-1 rounded-full text-[11px] font-bold border inline-flex items-center gap-1.5 ${stage.badge}`}>
+          <Clock className="w-3.5 h-3.5" /> {stage.label}
         </span>
+        {overdue}
         {onSubmit && (
           <button
             type="button"
@@ -405,7 +419,8 @@ export default function SavedFacilities({
       </button>
       </>
       )}
-      {onDelete && (
+      {/* An approved facility is locked; the database refuses its deletion. */}
+      {onDelete && stageOf(s) !== 'approved' && (
         <button
           type="button"
           disabled={busy !== null}

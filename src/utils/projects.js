@@ -58,6 +58,7 @@ function normalise(row) {
     location: row.location || '',
     notes: row.notes || '',
     status: row.status || 'active',
+    dueDate: row.due_date || null,
     createdAt: row.created_at,
     updatedAt: row.updated_at
   };
@@ -70,10 +71,15 @@ function normalise(row) {
 export async function listProjects() {
   if (!isCloudConfigured) return cachedProjects();
 
-  const { data, error } = await supabase
+  const columns = 'id, project_number, name, client, location, notes, status, created_at, updated_at';
+  let { data, error } = await supabase
     .from('projects')
-    .select('id, project_number, name, client, location, notes, status, created_at, updated_at')
+    .select(`${columns}, due_date`)
     .order('created_at', { ascending: false });
+  // A database without due dates yet (Stage 6) still lists its projects.
+  if (error && error.code === '42703') {
+    ({ data, error } = await supabase.from('projects').select(columns).order('created_at', { ascending: false }));
+  }
 
   if (error) {
     console.warn('[projects] falling back to the cached list:', error.message);

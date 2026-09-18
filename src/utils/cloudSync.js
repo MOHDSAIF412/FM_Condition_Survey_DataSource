@@ -400,6 +400,15 @@ export async function pullSurvey(surveyId, knownPhotos = {}) {
     generalNotes: row.general_notes || '',
     status: row.status || 'draft',
     submittedAt: row.submitted_at || null,
+    // Review and approval, as the server last had it. Read-only here: only
+    // fm_workflow_move() changes it, and pushSurvey never sends it back.
+    review: {
+      status: row.review_status ?? null,
+      note: row.review_note ?? null,
+      reviewedAt: row.reviewed_at ?? null,
+      approvedAt: row.approved_at ?? null
+    },
+    dueDate: row.due_date ?? null,
     revision: row.revision || 1,
     // The server revision this copy is built on. pushSurvey refuses to
     // overwrite a server state the client has not actually seen.
@@ -446,12 +455,23 @@ export function cachedSurveyList() {
  * which made "no connection" indistinguishable from "no facilities" and left
  * the caller nothing to fall back on.
  */
+const LIST_COLUMNS = 'id, title, facility, facility_name, status, submitted_at, updated_at, created_at, revision, project_id';
+// Review and due-date columns (Stage 6). Asked for separately so the list
+// still loads from a database that does not have them yet.
+const REVIEW_COLUMNS = 'review_status, review_note, reviewed_at, approved_at, due_date';
+
 export async function listSurveys() {
   if (!isCloudConfigured) return [];
-  const { data, error } = await supabase
+  let { data, error } = await supabase
     .from('condition_surveys')
-    .select('id, title, facility, facility_name, status, submitted_at, updated_at, created_at, revision, project_id')
+    .select(`${LIST_COLUMNS}, ${REVIEW_COLUMNS}`)
     .order('updated_at', { ascending: false });
+  if (error && error.code === '42703') {
+    ({ data, error } = await supabase
+      .from('condition_surveys')
+      .select(LIST_COLUMNS)
+      .order('updated_at', { ascending: false }));
+  }
   if (error) throw error;
   const surveys = data || [];
   const ids = surveys.map((r) => r.id);
@@ -474,7 +494,12 @@ export async function listSurveys() {
     status: r.status || 'draft',
     submittedAt: r.submitted_at,
     updatedAt: r.updated_at,
-    createdAt: r.created_at
+    createdAt: r.created_at,
+    reviewStatus: r.review_status ?? null,
+    reviewNote: r.review_note ?? null,
+    reviewedAt: r.reviewed_at ?? null,
+    approvedAt: r.approved_at ?? null,
+    dueDate: r.due_date ?? null
   }));
 
   try {

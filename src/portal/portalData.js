@@ -1,14 +1,14 @@
 /**
- * Numbers for the web portal dashboard, all from real data.
+ * Numbers for the web portal dashboard, all from real data: the five workflow
+ * stages (see utils/workflow.js), due dates, and snag priority P1-P4.
  *
- * The app records two survey states -- draft and submitted -- and snag
- * priority P1-P4. The dashboard shows exactly those. States the design has but
- * the app does not record yet (Overdue, In Review, a condition rating) arrive
- * with the Workflows stage rather than being invented here.
+ * Rows are expected to carry `effectiveDue` (withDueDates) for the overdue
+ * count; without it nothing is counted overdue, never wrongly so.
  */
 import { supabase, isCloudConfigured } from '../utils/supabaseClient';
 import { fetchAllPages } from '../utils/cloudSync';
 import { sectionsForScope, fieldsForSection, activeOptions } from '../config/formConfig';
+import { STAGES, STAGE_BY_KEY, stageOf, isOverdue, todayISO } from '../utils/workflow';
 
 const DAY = 24 * 60 * 60 * 1000;
 const PRIORITY_CACHE_KEY = 'fm_portal_priority_cache';
@@ -48,6 +48,9 @@ export function dashboardStats(surveys = [], now = Date.now()) {
   const snags = surveys.reduce((n, s) => n + (s.itemCount || 0), 0);
   const photos = surveys.reduce((n, s) => n + (s.photoCount || 0), 0);
   const pct = (n) => (surveys.length ? Math.round((n / surveys.length) * 100) : 0);
+  const today = todayISO(now);
+  const stageCounts = Object.fromEntries(STAGES.map((st) => [st.key, 0]));
+  for (const s of surveys) stageCounts[stageOf(s)] += 1;
 
   return {
     total: surveys.length,
@@ -61,10 +64,12 @@ export function dashboardStats(surveys = [], now = Date.now()) {
     snags,
     photos,
     noPhotoFacilities: surveys.filter(missingPhotos).length,
-    statusBreakdown: [
-      { key: 'submitted', label: 'Completed', count: submitted.length, percent: pct(submitted.length) },
-      { key: 'draft', label: 'Draft (in progress)', count: drafts.length, percent: pct(drafts.length) }
-    ]
+    stageCounts,
+    awaitingReview: stageCounts.submitted + stageCounts.in_review,
+    overdue: surveys.filter((s) => isOverdue(s, today)).length,
+    statusBreakdown: STAGES.map((st) => ({
+      key: st.key, label: st.label, color: st.color, count: stageCounts[st.key], percent: pct(stageCounts[st.key])
+    }))
   };
 }
 
@@ -163,6 +168,8 @@ export function facilityListFilter(target = 'all') {
     status: ['submitted', 'draft'].includes(t.status) ? t.status : 'all',
     priority: [1, 2, 3, 4].includes(Number(t.priority)) ? Number(t.priority) : null,
     evidence: t.evidence === 'noPhotos' ? 'noPhotos' : null,
+    stage: STAGE_BY_KEY[t.stage] ? t.stage : null,
+    overdue: t.overdue === true,
     projectId: t.projectId || null
   };
 }
@@ -172,7 +179,23 @@ export function facilityListFilter(target = 'all') {
  * the list: its wording, the test each facility must pass, and a line that
  * ties the list back to the number that was clicked.
  */
-export function narrowFor(filter, bySurvey) {
+export function narrowFor(filter, bySurvey, now = Date.now()) {
+  if (filter?.stage) {
+    const st = STAGE_BY_KEY[filter.stage];
+    return {
+      label: `Stage: ${st.label}`,
+      test: (s) => stageOf(s) === filter.stage,
+      note: (rows) => `${rows.length} facilit${rows.length === 1 ? 'y is' : 'ies are'} ${st.label.toLowerCase()}`
+    };
+  }
+  if (filter?.overdue) {
+    const today = todayISO(now);
+    return {
+      label: 'Overdue',
+      test: (s) => isOverdue(s, today),
+      note: (rows) => `${rows.length} facilit${rows.length === 1 ? 'y is' : 'ies are'} past the due date and not yet approved`
+    };
+  }
   if (filter?.priority) {
     const p = filter.priority;
     const name = PRIORITY_NAMES[p];
@@ -198,8 +221,8 @@ export function narrowFor(filter, bySurvey) {
 }
 
 /** The facilities a filter selects -- the same rules the list screen applies. */
-export function applyFacilityFilter(surveys = [], filter = facilityListFilter(), bySurvey = null) {
-  const narrow = narrowFor(filter, bySurvey);
+export function applyFacilityFilter(surveys = [], filter = facilityListFilter(), bySurvey = null, now = Date.now()) {
+  const narrow = narrowFor(filter, bySurvey, now);
   return surveys.filter((s) => {
     if (filter.projectId && s.projectId !== filter.projectId) return false;
     if (filter.status === 'submitted' && !isSubmitted(s)) return false;

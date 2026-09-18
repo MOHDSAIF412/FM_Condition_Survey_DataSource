@@ -95,6 +95,9 @@ export function mergeSurveyLists(remote = [], local = [], {
       status: l.status || 'draft',
       submittedAt: l.submittedAt || null,
       updatedAt: l.updatedAt || null,
+      reviewStatus: l.review?.status ?? null,
+      reviewNote: l.review?.note ?? null,
+      dueDate: l.dueDate ?? null,
       pendingSync: !!l.pendingSync,
       localOnly: true,
       cached: false
