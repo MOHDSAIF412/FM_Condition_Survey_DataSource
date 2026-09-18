@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Loader2, Lock, Check, AlertCircle, ShieldCheck, Info } from 'lucide-react';
-import { listRoles, updateRole, listTeamUsers, accessErrorMessage } from '../utils/access';
+import { listRoles, updateRole, listTeamUsers, accessErrorMessage, rolesBackendReady } from '../utils/access';
 import { PERMISSIONS, DEFAULT_ROLES, roleKey } from '../utils/roles';
 
 /**
@@ -19,11 +19,12 @@ export default function RolesPermissions({ canEdit = true, onOpenUsers }) {
   const [saving, setSaving] = useState(null);
   const [error, setError] = useState('');
   const [savedKey, setSavedKey] = useState(null);
+  const [ready, setReady] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
-    Promise.all([listRoles(), listTeamUsers().catch(() => [])])
-      .then(([r, u]) => { if (!cancelled) { setRoles(r); setUsers(u); } })
+    Promise.all([listRoles(), listTeamUsers().catch(() => []), rolesBackendReady()])
+      .then(([r, u, ok]) => { if (!cancelled) { setRoles(r); setUsers(u); setReady(ok); } })
       .catch((err) => { if (!cancelled) setError(err.message || 'Could not load the roles.'); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
@@ -61,7 +62,7 @@ export default function RolesPermissions({ canEdit = true, onOpenUsers }) {
   // would remount on every change and lose keyboard focus.
   const cell = ({ role, label, on, onToggle, title }) => {
     const busy = saving === `${role.key}:${label}`;
-    const disabled = role.locked || !canEdit || busy;
+    const disabled = role.locked || !canEdit || !ready || busy;
     return (
       <td key={label} className="px-2 py-2.5 text-center">
         <button type="button" onClick={onToggle} disabled={disabled} aria-pressed={on}
@@ -92,6 +93,8 @@ export default function RolesPermissions({ canEdit = true, onOpenUsers }) {
           </button>
         )}
       </div>
+
+      {!ready && <NotSwitchedOn />}
 
       {error && (
         <div role="alert" className="flex items-start gap-2 p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-semibold">
@@ -172,6 +175,22 @@ export default function RolesPermissions({ canEdit = true, onOpenUsers }) {
           <p className="flex gap-2"><Info className="w-4 h-4 text-sky-600 shrink-0" />
             <span>A person can also be given single extra permissions on top of their role, on the Users page.</span></p>
         </div>
+      </div>
+    </div>
+  );
+}
+
+/** Shown until the Stage 5 database change is applied. */
+export function NotSwitchedOn() {
+  return (
+    <div role="status" className="flex items-start gap-2 p-4 rounded-2xl bg-amber-50 border border-amber-200 text-amber-800 text-sm">
+      <Info className="w-5 h-5 shrink-0 text-amber-600" />
+      <div>
+        <p className="font-bold">Roles are built but not switched on yet.</p>
+        <p className="text-xs mt-0.5">
+          The database update that enforces them has not been applied, so nothing here can be saved yet.
+          Until it is, everyone keeps today&rsquo;s access: administrators can do everything, other users what is ticked for them.
+        </p>
       </div>
     </div>
   );

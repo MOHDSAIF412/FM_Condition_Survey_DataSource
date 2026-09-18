@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Users, Loader2, Plus, X, AlertCircle, ChevronDown } from 'lucide-react';
-import { listTeamUsers, listProjectMembers, addProjectMember, removeProjectMember, listRoles, accessErrorMessage } from '../utils/access';
+import { listTeamUsers, listProjectMembers, addProjectMember, removeProjectMember, listRoles, accessErrorMessage, rolesBackendReady } from '../utils/access';
 import { DEFAULT_ROLES, ADMIN_ROLES, roleKey } from '../utils/roles';
 
 /**
@@ -17,6 +17,13 @@ export default function ProjectTeam({ project, canManage }) {
   const [busy, setBusy] = useState(null);
   const [error, setError] = useState('');
   const [adding, setAdding] = useState('');
+  const [ready, setReady] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    rolesBackendReady().then((ok) => { if (!cancelled) setReady(ok); });
+    return () => { cancelled = true; };
+  }, []);
 
   useEffect(() => {
     if (!open || !project?.id) return undefined;
@@ -40,6 +47,7 @@ export default function ProjectTeam({ project, canManage }) {
   const name = (u) => u.full_name || u.email;
 
   const team = users.filter((u) => memberIds.includes(u.id) && !seesAll(u));
+  if (!ready) return null;
   const automatic = users.filter((u) => seesAll(u));
   const candidates = users.filter((u) => !memberIds.includes(u.id) && !seesAll(u));
 

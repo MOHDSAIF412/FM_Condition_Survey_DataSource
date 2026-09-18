@@ -9,6 +9,25 @@ import { DEFAULT_ROLES } from './roles';
 
 const ROLES_CACHE_KEY = 'fm_roles_cache';
 
+let backendReady = null;
+
+/**
+ * Whether the database has the Stage 5 tables yet. The screens ship before the
+ * database change is applied; until it is, they must say so rather than offer
+ * changes that cannot be saved. Everyone keeps the old access meanwhile.
+ * True when it cannot be checked (offline), so a lost connection never hides
+ * the screens; false on a build with no cloud, which has no roles at all.
+ */
+export async function rolesBackendReady() {
+  if (!isCloudConfigured) return false;
+  if (backendReady !== null) return backendReady;
+  const { error } = await supabase.from('fm_roles').select('key').limit(1);
+  const missing = !!error && (error.code === 'PGRST205' || error.code === '42P01'
+    || /does not exist|could not find the table/i.test(error.message || ''));
+  if (!error || missing) backendReady = !missing;
+  return !missing;
+}
+
 function readCache(key, fallback) {
   try { return JSON.parse(localStorage.getItem(key)) ?? fallback; } catch { return fallback; }
 }

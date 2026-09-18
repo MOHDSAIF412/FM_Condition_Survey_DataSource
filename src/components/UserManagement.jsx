@@ -3,7 +3,8 @@ import {
   UserPlus, Trash2, Loader2, ShieldCheck, Copy, Check, X, AlertCircle, KeyRound, FolderKanban, Pencil, Plus
 } from 'lucide-react';
 import { listUsers, createUser, deleteUser, resetUserPassword, listUserPermissions, setUserPermission } from '../utils/auth';
-import { listRoles, setUserRole, listProjectMembers, addProjectMember, removeProjectMember, accessErrorMessage } from '../utils/access';
+import { listRoles, setUserRole, listProjectMembers, addProjectMember, removeProjectMember, accessErrorMessage, rolesBackendReady } from '../utils/access';
+import { NotSwitchedOn } from '../admin/RolesPermissions';
 import { PERMISSIONS, DEFAULT_ROLES, ADMIN_ROLES, isSuperAdmin, roleKey } from '../utils/roles';
 
 const ROLE_BADGE = {
@@ -44,8 +45,10 @@ export default function UserManagement({ myId, me, projects = [] }) {
   const [savingKey, setSavingKey] = useState(null);
   const [resettingId, setResettingId] = useState(null);
   const [editingProjectsFor, setEditingProjectsFor] = useState(null);
+  const [ready, setReady] = useState(true);
 
-  const iAmSuper = isSuperAdmin(me);
+  // Before the database has roles, an old 'admin' is all-powerful, as before.
+  const iAmSuper = isSuperAdmin(me) || (!ready && me?.role === 'admin');
   const roleByKey = useMemo(() => Object.fromEntries(roles.map((r) => [r.key, r])), [roles]);
   const offeredRoles = roles.filter((r) => iAmSuper || !ADMIN_ROLES.includes(r.key));
   const projectsOf = (userId) => members.filter((m) => m.user_id === userId).map((m) => m.project_id);
@@ -54,9 +57,10 @@ export default function UserManagement({ myId, me, projects = [] }) {
     setLoading(true);
     setError('');
     try {
-      const [list, permissions, roleList, team] = await Promise.all([
-        listUsers(), listUserPermissions(), listRoles(), listProjectMembers().catch(() => [])
+      const [list, permissions, roleList, team, ok] = await Promise.all([
+        listUsers(), listUserPermissions(), listRoles(), listProjectMembers().catch(() => []), rolesBackendReady()
       ]);
+      setReady(ok);
       setUsers(list);
       setPerms(permissions);
       setRoles(roleList);
@@ -314,6 +318,8 @@ export default function UserManagement({ myId, me, projects = [] }) {
         </form>
       )}
 
+      {!ready && !loading && <NotSwitchedOn />}
+
       {error && (
         <div role="alert" className="flex items-start gap-2 p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-semibold">
           <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
@@ -360,7 +366,7 @@ export default function UserManagement({ myId, me, projects = [] }) {
                     {/* Role */}
                     <div className="flex items-center gap-2 flex-wrap">
                       <label className="sr-only" htmlFor={`role-${u.id}`}>Role for {u.email}</label>
-                      {canEdit && u.id !== myId ? (
+                      {ready && canEdit && u.id !== myId ? (
                         <select
                           id={`role-${u.id}`}
                           value={roleKeyNow}
@@ -382,7 +388,7 @@ export default function UserManagement({ myId, me, projects = [] }) {
                     </div>
 
                     {/* Projects */}
-                    <div className="flex items-center gap-1.5 flex-wrap text-[11px]">
+                    {ready && <div className="flex items-center gap-1.5 flex-wrap text-[11px]">
                       <FolderKanban className="w-3.5 h-3.5 text-slate-400" />
                       {role?.all_projects || isAdminRole ? (
                         <span className="text-slate-500 italic">Every project (role)</span>
@@ -401,8 +407,8 @@ export default function UserManagement({ myId, me, projects = [] }) {
                           )}
                         </>
                       )}
-                    </div>
-                    {editingProjectsFor === u.id && (
+                    </div>}
+                    {ready && editingProjectsFor === u.id && (
                       <div className="flex flex-wrap gap-2 p-3 rounded-xl bg-slate-50 border border-slate-200">
                         {projects.map((p) => {
                           const on = theirProjects.includes(p.id);
