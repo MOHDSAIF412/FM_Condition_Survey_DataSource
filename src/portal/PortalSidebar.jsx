@@ -12,28 +12,30 @@ export const APP_VERSION = '1.0.0';
  * the header menu button on narrower ones.
  *
  * Items for modules not built yet are shown as such (never faked), so the
- * portal is honest about what it does today. Administrator sections are left
- * out entirely for everyone else -- the database refuses their actions anyway.
+ * portal is honest about what it does today. Each section appears only to a
+ * role holding the permission it needs (`access`) -- the database refuses the
+ * actions of anyone else anyway.
  */
-function buildNav({ isAdmin, hasOpenProject }) {
+function buildNav({ access = {}, hasOpenProject }) {
   const soon = (label, stage) => ({ label, disabled: true, stage });
+  const isAdmin = !!access.config;
   return [
     { key: 'home', label: 'Dashboard', icon: Home, target: { view: 'home' } },
     // One entry: forms, sections, fields and dropdown options are all edited on
     // the same Survey Builder page, so separate links went nowhere new.
-    isAdmin && { key: 'builder', label: 'Survey Builder', icon: LayoutList, target: { admin: 'forms' } },
+    access.config && { key: 'builder', label: 'Survey Builder', icon: LayoutList, target: { admin: 'forms' } },
     {
       key: 'reports', label: 'Reports', icon: FileText,
       children: [
         { label: 'Generate Reports', target: { view: 'reports' } },
-        ...(isAdmin ? [soon('Report Builder', 'Stage 4'), soon('Report Templates', 'Stage 4')] : [])
+        ...(access.config ? [soon('Report Builder', 'Stage 4'), soon('Report Templates', 'Stage 4')] : [])
       ]
     },
-    isAdmin && {
+    access.users && {
       key: 'users', label: 'Users', icon: Users,
       children: [
         { label: 'Users', target: { admin: 'users' } },
-        soon('Roles & Permissions', 'Stage 5')
+        { label: 'Roles & Permissions', target: { admin: 'roles' } }
       ]
     },
     {
@@ -45,25 +47,22 @@ function buildNav({ isAdmin, hasOpenProject }) {
           { label: 'Facilities', target: { view: 'facilities' } },
           { label: 'Photos', target: { view: 'photos' } }
         ] : []),
-        ...(isAdmin ? [
-          { label: 'Inspection Templates', target: { admin: 'templates' } },
-          soon('Workflows', 'Stage 6'),
-          soon('AI Assistant', 'Not enabled')
-        ] : [])
+        ...(access.templates ? [{ label: 'Inspection Templates', target: { admin: 'templates' } }] : []),
+        ...(isAdmin ? [soon('Workflows', 'Stage 6'), soon('AI Assistant', 'Not enabled')] : [])
       ]
     },
-    isAdmin && { key: 'versions', label: 'Version History', icon: History, target: { admin: 'versions' } },
-    isAdmin && { key: 'audit', label: 'Audit Logs', icon: ScrollText, target: { admin: 'audit' } },
-    isAdmin && { key: 'settings', label: 'Settings', icon: Settings, disabled: true, stage: 'Later stage' }
+    access.config && { key: 'versions', label: 'Version History', icon: History, target: { admin: 'versions' } },
+    access.config && { key: 'audit', label: 'Audit Logs', icon: ScrollText, target: { admin: 'audit' } },
+    access.admin && { key: 'settings', label: 'Settings', icon: Settings, disabled: true, stage: 'Later stage' }
   ].filter(Boolean);
 }
 
 const sameTarget = (a, b) => !!a && !!b && a.view === b.view && a.admin === b.admin;
 
 export default function PortalSidebar({
-  current, isAdmin, hasOpenProject, onNavigate, open, onClose
+  current, access, hasOpenProject, onNavigate, open, onClose
 }) {
-  const nav = buildNav({ isAdmin, hasOpenProject });
+  const nav = buildNav({ access, hasOpenProject });
   const groupOf = (target) => nav.find((g) => g.children?.some((c) => sameTarget(c.target, target)))?.key;
   const [expanded, setExpanded] = useState(() => new Set([groupOf(current), 'reports', 'users', 'projects'].filter(Boolean)));
 

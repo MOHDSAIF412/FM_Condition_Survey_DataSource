@@ -4,7 +4,7 @@ import { Loader2 } from 'lucide-react';
 import App from '../App';
 import Login from './Login';
 import { isCloudConfigured } from '../utils/supabaseClient';
-import { getSession, onAuthChange, getMyProfile, signOut, cachedProfile, clearCachedProfile } from '../utils/auth';
+import { getSession, onAuthChange, getMyProfile, signOut, cachedProfile, clearCachedProfile, noteSignedInAccount } from '../utils/auth';
 import { isOnline, initNetworkMonitor, onNetworkChange } from '../utils/network';
 import { withTimeout } from '../utils/cloudSync';
 
@@ -55,12 +55,14 @@ export default function AuthGate() {
     (async () => {
       const existing = await getSession();
       if (cancelled) return;
+      noteSignedInAccount(existing?.user?.id);
       setSession(existing);
       if (existing) setProfile(await loadProfile(existing));
       setChecking(false);
     })();
 
     const unsubscribe = onAuthChange(async (next) => {
+      noteSignedInAccount(next?.user?.id);
       setSession(next);
       setProfile(next ? await loadProfile(next) : null);
     });
@@ -79,7 +81,7 @@ export default function AuthGate() {
   }
 
   if (!session) {
-    return <Login online={online} onSignedIn={setSession} />;
+    return <Login online={online} onSignedIn={(s) => { noteSignedInAccount(s?.user?.id); setSession(s); }} />;
   }
 
   // A session exists but the profile row failed to load (offline on first

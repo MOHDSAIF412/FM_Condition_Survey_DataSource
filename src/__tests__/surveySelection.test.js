@@ -98,3 +98,29 @@ describe('mergeSurveyLists', () => {
     expect(row).toMatchObject({ cached: true, onDevice: false });
   });
 });
+
+describe('mergeSurveyLists with a fresh server list', () => {
+  const local = [
+    { id: 'other-account', projectId: 'p2', items: [snag('a')], pendingSync: false, submittedAt: '2026-09-14T00:00:00Z' },
+    { id: 'unsent', projectId: 'p1', items: [snag('b')], pendingSync: true }
+  ];
+
+  test('device copies the server does not list are left off, unless they hold unsent work', () => {
+    const rows = mergeSurveyLists([], local, { serverIsAuthoritative: true });
+    expect(rows.map((r) => r.id)).toEqual(['unsent']);
+  });
+
+  test('offline (cached list) keeps showing what is on the device', () => {
+    const rows = mergeSurveyLists([], local, { remoteIsCached: true });
+    expect(rows.map((r) => r.id).sort()).toEqual(['other-account', 'unsent']);
+  });
+});
+
+test('unsent work in a project this account cannot see is left off the list (kept on the device)', () => {
+  const local = [
+    { id: 'mine', projectId: 'p1', items: [snag('a')], pendingSync: true },
+    { id: 'previous-account', projectId: 'p2', items: [snag('b')], pendingSync: true }
+  ];
+  const rows = mergeSurveyLists([], local, { serverIsAuthoritative: true, visibleProjectIds: new Set(['p1']) });
+  expect(rows.map((r) => r.id)).toEqual(['mine']);
+});

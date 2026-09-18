@@ -1,4 +1,6 @@
 import React, { useState } from 'react';
+import { roleLabel as labelForRole, isAdminUser } from '../utils/roles';
+import { can } from '../utils/auth';
 import {
   Download,
   Upload,
@@ -43,13 +45,14 @@ export default function Header({
   searchSlot,
   onChangePassword,
   onSignOut,
-  canDownloadReports = true
+  canDownloadReports = true,
+  canEdit = true
 }) {
   // Connectivity wins over sync state: if there is no connection, saying
   // "Synced" would be a lie even when the last push did succeed.
   // A refused session is reported even while offline: it is the reason nothing
   // will upload, and it does not resolve by finding signal.
-  const sync = (!online && syncState !== 'unauthorized')
+  const sync = (!online && syncState !== 'unauthorized' && syncState !== 'refused')
     ? { label: pendingCount > 0 ? `Offline - ${pendingCount} waiting` : 'Offline',
         cls: 'bg-amber-50 text-amber-700 border-amber-200', dot: 'bg-amber-500' }
     : ({
@@ -62,14 +65,17 @@ export default function Header({
         // Distinct from "waiting": nothing will ever upload until they sign in
         // again, so this must not look like a patchy connection.
         unauthorized: { label: 'Sign in again to sync',
-                        cls: 'bg-rose-50 text-rose-700 border-rose-200', dot: 'bg-rose-500' }
+                        cls: 'bg-rose-50 text-rose-700 border-rose-200', dot: 'bg-rose-500' },
+        // Signed in, but the role or project team does not allow the upload.
+        refused: { label: 'No upload access',
+                   cls: 'bg-rose-50 text-rose-700 border-rose-200', dot: 'bg-rose-500' }
       }[syncState] || { label: 'Online', cls: 'bg-emerald-50 text-emerald-700 border-emerald-200', dot: 'bg-emerald-500' });
 
   const [showMenu, setShowMenu] = useState(false);
   const [showBell, setShowBell] = useState(false);
 
   const displayName = currentUser?.full_name || currentUser?.email || 'Signed in';
-  const roleLabel = currentUser?.role === 'admin' ? 'Administrator' : 'FM Team';
+  const roleLabel = currentUser ? labelForRole(currentUser) : 'FM Team';
 
   const subtitle = contextLabel
     || survey?.facility?.facilityName
@@ -210,11 +216,11 @@ export default function Header({
                       <p className="text-sm font-bold text-slate-900 truncate">{displayName}</p>
                       <p className="text-[11px] text-slate-500 truncate">{currentUser.email}</p>
                       <span className={`inline-block mt-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold border ${
-                        currentUser.role === 'admin'
+                        isAdminUser(currentUser)
                           ? 'bg-ocs-50 text-ocs-700 border-ocs-200'
                           : 'bg-slate-100 text-slate-600 border-slate-200'
                       }`}>
-                        {currentUser.role === 'admin' ? 'Administrator' : 'Surveyor'}
+                        {labelForRole(currentUser)}
                       </span>
                     </div>
                   )}
@@ -239,7 +245,7 @@ export default function Header({
                     <span>Backup Survey (JSON)</span>
                   </button>
 
-                  <label className={MENU_ITEM + ' cursor-pointer'}>
+                  {canEdit && <label className={MENU_ITEM + ' cursor-pointer'}>
                     <Upload className="w-4 h-4 text-slate-400" />
                     <span>Restore Survey (JSON)</span>
                     <input
@@ -248,9 +254,9 @@ export default function Header({
                       className="hidden"
                       onChange={(e) => { setShowMenu(false); onImportJSON(e); }}
                     />
-                  </label>
+                  </label>}
 
-                  {currentUser && currentUser.role === 'admin' && onOpenUsers && (
+                  {currentUser && can(currentUser, 'manage_users') && onOpenUsers && (
                     <>
                       <div className="border-t border-slate-100 my-1" />
                       <p className={MENU_HEADING}>Administration</p>

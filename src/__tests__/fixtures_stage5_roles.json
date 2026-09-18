@@ -1,0 +1,112 @@
+[
+ {
+  "key": "super_admin",
+  "label": "Super Admin",
+  "description": "Everything, including other administrators.",
+  "permissions": {
+   "edit_surveys": true,
+   "delete_snags": true,
+   "download_reports": true,
+   "manage_projects": true,
+   "manage_team": true,
+   "review_surveys": true,
+   "approve_surveys": true,
+   "manage_templates": true,
+   "manage_config": true,
+   "manage_users": true
+  },
+  "all_projects": true,
+  "approved_only": false,
+  "locked": true,
+  "sort": 1
+ },
+ {
+  "key": "admin",
+  "label": "Admin",
+  "description": "Everything except changing administrator accounts.",
+  "permissions": {
+   "edit_surveys": true,
+   "delete_snags": true,
+   "download_reports": true,
+   "manage_projects": true,
+   "manage_team": true,
+   "review_surveys": true,
+   "approve_surveys": true,
+   "manage_templates": true,
+   "manage_config": true,
+   "manage_users": true
+  },
+  "all_projects": true,
+  "approved_only": false,
+  "locked": true,
+  "sort": 2
+ },
+ {
+  "key": "manager",
+  "label": "Manager",
+  "description": "Runs projects: teams, review and approval.",
+  "permissions": {
+   "edit_surveys": true,
+   "delete_snags": true,
+   "download_reports": true,
+   "manage_projects": true,
+   "manage_team": true,
+   "review_surveys": true,
+   "approve_surveys": true,
+   "manage_templates": true
+  },
+  "all_projects": true,
+  "approved_only": false,
+  "locked": false,
+  "sort": 3
+ },
+ {
+  "key": "surveyor",
+  "label": "Surveyor",
+  "description": "Records facilities and snags on site.",
+  "permissions": {
+   "edit_surveys": true,
+   "manage_projects": true
+  },
+  "all_projects": false,
+  "approved_only": false,
+  "locked": false,
+  "sort": 4
+ },
+ {
+  "key": "engineer",
+  "label": "Engineer",
+  "description": "Surveys and reviews technical findings.",
+  "permissions": {
+   "edit_surveys": true,
+   "download_reports": true,
+   "review_surveys": true
+  },
+  "all_projects": false,
+  "approved_only": false,
+  "locked": false,
+  "sort": 5
+ },
+ {
+  "key": "client",
+  "label": "Client",
+  "description": "Reads approved facilities and reports for their projects.",
+  "permissions": {
+   "download_reports": true
+  },
+  "all_projects": false,
+  "approved_only": true,
+  "locked": false,
+  "sort": 6
+ },
+ {
+  "key": "viewer",
+  "label": "Viewer",
+  "description": "Reads everything in their projects, changes nothing.",
+  "permissions": {},
+  "all_projects": false,
+  "approved_only": false,
+  "locked": false,
+  "sort": 7
+ }
+]

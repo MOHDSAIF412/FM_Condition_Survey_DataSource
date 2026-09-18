@@ -112,3 +112,11 @@
     padding-bottom: calc(var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)) + 5rem);
   }
 }
+
+/* Read-only roles see a facility inside a disabled fieldset: make every
+   control inside it look as unavailable as it is. */
+fieldset:disabled button,
+fieldset:disabled label[role='button'] {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

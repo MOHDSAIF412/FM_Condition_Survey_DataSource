@@ -9,6 +9,7 @@
  * open the app.
  */
 import { supabase, isCloudConfigured, SUPABASE_URL } from './supabaseClient';
+import { hasPermission } from './roles';
 
 export async function getSession() {
   if (!isCloudConfigured) return null;
@@ -77,6 +78,26 @@ export function cachedProfile(userId) {
   }
 }
 
+// Lists cached for the account signed in last. Another account on the same
+// device must not open onto them: each account sees only its own projects.
+// Facility copies stored on the device are not touched -- they may hold unsent
+// work -- and the list screens hide the ones the server no longer lists.
+const ACCOUNT_CACHES = [
+  'fm_survey_list_cache', 'fm_projects_cache', 'fm_portal_priority_cache', 'fm_portal_priority_by_survey',
+  'fm_portal_activity_cache', 'fm_roles_cache'
+];
+const LAST_ACCOUNT_KEY = 'fm_last_account';
+
+/** Call as an account signs in: clears the previous account's cached lists. */
+export function noteSignedInAccount(userId) {
+  if (!userId) return;
+  try {
+    const last = localStorage.getItem(LAST_ACCOUNT_KEY);
+    if (last && last !== userId) ACCOUNT_CACHES.forEach((k) => localStorage.removeItem(k));
+    localStorage.setItem(LAST_ACCOUNT_KEY, userId);
+  } catch { /* storage unavailable */ }
+}
+
 export function clearCachedProfile() {
   try { localStorage.removeItem(PROFILE_CACHE_KEY); } catch { /* nothing cached */ }
 }
@@ -98,21 +119,28 @@ export async function getMyProfile() {
     return null;
   }
   if (data) {
+    // The role's current permissions travel with the profile (and its cache),
+    // so an administrator's change to a role reaches the screens on the next
+    // load. Without it the built-in defaults apply.
+    const { data: roleInfo, error: roleErr } = await supabase
+      .from('fm_roles')
+      .select('key, label, permissions, all_projects, approved_only, locked')
+      .eq('key', data.role)
+      .maybeSingle();
+    if (roleErr) console.warn('[auth] role details unavailable, using defaults:', roleErr.message);
+    else if (roleInfo) data.roleInfo = roleInfo;
     try { localStorage.setItem(PROFILE_CACHE_KEY, JSON.stringify(data)); } catch { /* storage unavailable */ }
   }
   return data;
 }
 
 /**
- * Whether a user may do something. Admins hold everything: an administrator
- * locked out of deleting a snag would just change their own permission back,
- * so the tick boxes only ever describe ordinary surveyors.
+ * Whether a user may do something: their role's permissions plus any extra
+ * ones ticked for them. Administrators hold everything. Matches the database's
+ * fm_can(), which refuses deactivated accounts too. See roles.js.
  */
 export function can(user, permission) {
-  // Matches the database's fm_can(), which refuses deactivated accounts too.
-  if (!user || user.is_active === false) return false;
-  if (user.role === 'admin') return true;
-  return user.permissions?.[permission] === true;
+  return hasPermission(user, permission);
 }
 
 /**
@@ -146,8 +174,8 @@ export async function listUsers() {
 }
 
 /** @returns {{user, password}} the generated/entered password, shown once. */
-export async function createUser({ email, fullName, role, password }) {
-  return callAdminUsers('POST', { email, fullName, role, password });
+export async function createUser({ email, fullName, role, password, projectIds }) {
+  return callAdminUsers('POST', { email, fullName, role, password, projectIds });
 }
 
 export async function deleteUser(userId) {

@@ -7,7 +7,9 @@ const TABLES = {
   '': 'Everything',
   app_config_versions: 'Configuration',
   fm_survey_users: 'Users & access',
-  inspection_templates: 'Inspection templates'
+  inspection_templates: 'Inspection templates',
+  fm_roles: 'Roles & permissions',
+  fm_project_members: 'Project teams'
 };
 
 const fmt = (d) => new Date(d).toLocaleString([], { dateStyle: 'medium', timeStyle: 'medium' });

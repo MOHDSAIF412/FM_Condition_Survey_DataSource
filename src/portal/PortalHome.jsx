@@ -12,6 +12,7 @@ import {
   loadRecentActivity, cachedActivity, timeAgo, greeting, dailySeries
 } from './portalData';
 import { useEscapeKey } from '../utils/useEscapeKey';
+import { can } from '../utils/auth';
 
 const card = 'bg-white rounded-2xl border border-slate-200/80 shadow-[0_1px_3px_rgba(15,37,87,0.06)]';
 const clickable = 'cursor-pointer transition-shadow hover:shadow-md hover:border-sky-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500';
@@ -31,7 +32,10 @@ export default function PortalHome({
   currentUser, surveys = [], projects = [], formsConfig, formsVersion, templates = [],
   loading, onCreateProject, onViewReports, onOpenSurvey, onOpenProject, onOpenList, onNavigate
 }) {
-  const isAdmin = currentUser?.role === 'admin';
+  // What this user may manage decides which actions and panels appear.
+  const isAdmin = can(currentUser, 'manage_config');
+  const mayUsers = can(currentUser, 'manage_users');
+  const mayTemplates = can(currentUser, 'manage_templates');
   const [now, setNow] = useState(() => new Date());
   const [priorities, setPriorities] = useState(() => cachedPriorityCounts());
   const [activity, setActivity] = useState(() => cachedActivity());
@@ -102,10 +106,12 @@ export default function PortalHome({
                 <p className="text-xs text-slate-500">{now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
               </div>
             </div>
-            <button type="button" onClick={onCreateProject}
-              className="px-5 py-2.5 rounded-xl bg-flame-500 hover:bg-flame-600 text-white text-sm font-bold inline-flex items-center gap-2 shadow-md">
-              <FolderPlus className="w-4 h-4" /> Create New Project
-            </button>
+            {onCreateProject && (
+              <button type="button" onClick={onCreateProject}
+                className="px-5 py-2.5 rounded-xl bg-flame-500 hover:bg-flame-600 text-white text-sm font-bold inline-flex items-center gap-2 shadow-md">
+                <FolderPlus className="w-4 h-4" /> Create New Project
+              </button>
+            )}
             <button type="button" onClick={onViewReports}
               className="px-5 py-2.5 rounded-xl bg-white border border-slate-200 hover:bg-slate-50 text-slate-800 text-sm font-bold inline-flex items-center gap-2 shadow-sm">
               <BarChart3 className="w-4 h-4 text-ocs-600" /> View Reports
@@ -171,11 +177,12 @@ export default function PortalHome({
         <div className={`${card} p-5 lg:col-span-2 2xl:col-span-1`}>
           <IconTitle icon={Zap} gradient title="Quick Actions" sub="Take action, get things done" />
           <ul className="divide-y divide-slate-100 mt-2">
-            <QuickAction icon={FolderPlus} label="Create New Project" onClick={onCreateProject} />
+            {onCreateProject && <QuickAction icon={FolderPlus} label="Create New Project" onClick={onCreateProject} />}
             {isAdmin && <QuickAction icon={LayoutList} label="Manage Forms" onClick={() => onNavigate({ admin: 'forms' })} />}
-            {isAdmin && <QuickAction icon={Users} label="Manage Users" onClick={() => onNavigate({ admin: 'users' })} />}
+            {mayUsers && <QuickAction icon={Users} label="Manage Users" onClick={() => onNavigate({ admin: 'users' })} />}
             <QuickAction icon={FileText} label="Generate Report" onClick={onViewReports} />
-            {isAdmin && <QuickAction icon={ClipboardCheck} label="Inspection Templates" onClick={() => onNavigate({ admin: 'templates' })} />}
+            {mayTemplates && <QuickAction icon={ClipboardCheck} label="Inspection Templates" onClick={() => onNavigate({ admin: 'templates' })} />}
+            <QuickAction icon={Building2} label="All Facilities" onClick={() => onOpenList('all')} />
             {isAdmin
               ? <QuickAction icon={Workflow} label="Configure Workflows" disabled note="Stage 6" />
               : <QuickAction icon={FolderKanban} label="All Projects" onClick={() => onNavigate({ view: 'projects' })} />}

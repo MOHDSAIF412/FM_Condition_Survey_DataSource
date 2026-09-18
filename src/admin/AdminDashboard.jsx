@@ -6,6 +6,7 @@ import FormBuilder from './FormBuilder';
 import AuditLog from './AuditLog';
 import UserManagement from '../components/UserManagement';
 import TemplateManager from '../components/TemplateManager';
+import RolesPermissions from './RolesPermissions';
 
 /**
  * The Admin / Developer Dashboard. Web portal only, administrators only.
@@ -19,7 +20,7 @@ export const ADMIN_MODULES = [
   { key: 'rules', label: 'Conditional Rules', hint: 'IF / THEN show, hide, require', icon: GitBranch, ready: false, stage: 'Next stage' },
   { key: 'reports', label: 'Report Builder', hint: 'Columns, photos, headers', icon: FileText, ready: false, stage: 'Stage 4' },
   { key: 'users', label: 'Users', hint: 'Add, disable, reset passwords', icon: Users, ready: true },
-  { key: 'roles', label: 'Roles & Permissions', hint: 'Roles, projects, backend rules', icon: ShieldCheck, ready: false, stage: 'Stage 5' },
+  { key: 'roles', label: 'Roles & Permissions', hint: 'Roles, projects, backend rules', icon: ShieldCheck, ready: true },
   { key: 'templates', label: 'Inspection Templates', hint: 'Standard checklists', icon: ClipboardList, ready: true },
   { key: 'workflows', label: 'Workflows', hint: 'Status stages and approvals', icon: Workflow, ready: false, stage: 'Stage 6' },
   { key: 'settings', label: 'Settings', hint: 'Application settings', icon: Settings, ready: false, stage: 'Later stage' },
@@ -28,8 +29,12 @@ export const ADMIN_MODULES = [
   { key: 'ai', label: 'AI Assistant', hint: 'Not enabled', icon: Sparkles, ready: false, stage: 'Not enabled' }
 ];
 
-export default function AdminDashboard({ module = 'forms', onModuleChange, currentUser, facilities, projects, onConfigPublished, embedded = false }) {
-  const active = ADMIN_MODULES.find((m) => m.key === module && m.ready) || ADMIN_MODULES[0];
+export default function AdminDashboard({
+  module = 'forms', onModuleChange, currentUser, facilities, projects, onConfigPublished, embedded = false,
+  mayOpen = () => true
+}) {
+  const active = ADMIN_MODULES.find((m) => m.key === module && m.ready && mayOpen(m.key))
+    || ADMIN_MODULES.find((m) => m.ready && mayOpen(m.key)) || ADMIN_MODULES[0];
 
   return (
     <div className={`max-w-7xl mx-auto grid gap-5 ${embedded ? '' : 'lg:grid-cols-[240px_1fr]'}`}>
@@ -44,7 +49,7 @@ export default function AdminDashboard({ module = 'forms', onModuleChange, curre
               <li key={m.key}>
                 <button
                   type="button"
-                  disabled={!m.ready}
+                  disabled={!m.ready || !mayOpen(m.key)}
                   aria-current={isActive ? 'page' : undefined}
                   onClick={() => onModuleChange(m.key)}
                   className={`w-full text-left px-3 py-2.5 rounded-xl flex items-start gap-2.5 transition-colors ${
@@ -70,7 +75,8 @@ export default function AdminDashboard({ module = 'forms', onModuleChange, curre
       <section aria-label={active.label} className="min-w-0">
         {active.key === 'forms' && <FormBuilder key="forms" onPublished={onConfigPublished} />}
         {active.key === 'versions' && <FormBuilder key="versions" onPublished={onConfigPublished} openHistory />}
-        {active.key === 'users' && <UserManagement myId={currentUser?.id} />}
+        {active.key === 'users' && <UserManagement myId={currentUser?.id} me={currentUser} projects={projects} />}
+        {active.key === 'roles' && <RolesPermissions onOpenUsers={() => onModuleChange('users')} />}
         {active.key === 'templates' && <TemplateManager facilities={facilities} projects={projects} />}
         {active.key === 'audit' && <AuditLog />}
       </section>

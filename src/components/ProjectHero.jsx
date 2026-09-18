@@ -105,13 +105,13 @@ export default function ProjectHero({ project, facilities = [], onOpenReports, o
               >
                 <FileText className="w-4 h-4" /> Reports
               </button>
-              <button
+              {onAddFacility && <button
                 type="button"
                 onClick={onAddFacility}
                 className="px-4 py-2.5 rounded-xl bg-flame-500 hover:bg-flame-600 active:scale-[0.98] text-white font-bold text-sm shadow-card inline-flex items-center gap-2 transition-[background-color,transform] duration-150"
               >
                 + Add Facility
-              </button>
+              </button>}
             </div>
           </div>
 

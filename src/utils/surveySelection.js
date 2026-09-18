@@ -44,7 +44,9 @@ export function sortDate(s) {
  * `cached` marks rows known only from the last list this device downloaded;
  * they can be shown offline but not opened unless a device copy also exists.
  */
-export function mergeSurveyLists(remote = [], local = [], { remoteIsCached = false } = {}) {
+export function mergeSurveyLists(remote = [], local = [], {
+  remoteIsCached = false, serverIsAuthoritative = false, visibleProjectIds = null
+} = {}) {
   const merged = new Map(
     remote.map((s) => [s.id, { ...s, pendingSync: false, cached: remoteIsCached }])
   );
@@ -64,6 +66,21 @@ export function mergeSurveyLists(remote = [], local = [], { remoteIsCached = fal
         pendingSync: !!l.pendingSync,
         cached: false
       });
+      continue;
+    }
+
+    // A fresh server list shows exactly what this account may see. A device
+    // copy it does not list -- deleted elsewhere, or in a project this account
+    // is not on (another account used this device) -- stays on the device but
+    // off the list, unless it holds work that has not uploaded yet.
+    if (serverIsAuthoritative && !l.pendingSync) {
+      onDevice.delete(l.id);
+      continue;
+    }
+    // Unsent work in a project this account cannot see belongs to whoever
+    // used the device before. It stays stored, and uploads when they sign in.
+    if (visibleProjectIds && l.projectId && !visibleProjectIds.has(l.projectId)) {
+      onDevice.delete(l.id);
       continue;
     }
 

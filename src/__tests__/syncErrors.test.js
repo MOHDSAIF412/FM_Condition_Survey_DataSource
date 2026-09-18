@@ -19,3 +19,12 @@ test.each([
 ])('treats %s as a connection problem, not sign-in', (_, err) => {
   expect(isAuthFailure(err)).toBe(false);
 });
+
+test('access refusals are told apart from lost connections', async () => {
+  const { isAccessRefused } = await import('../utils/syncErrors');
+  expect(isAccessRefused({ code: '42501', message: 'new row violates row-level security policy for table "survey_items"' })).toBe(true);
+  expect(isAccessRefused({ message: 'Refused: only a Super Admin can give, change or remove an administrator role.' })).toBe(true);
+  expect(isAccessRefused({ message: 'JWT expired' })).toBe(false);
+  expect(isAccessRefused({ message: 'Failed to fetch' })).toBe(false);
+  expect(isAccessRefused(null)).toBe(false);
+});

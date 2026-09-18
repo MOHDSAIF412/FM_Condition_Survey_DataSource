@@ -12,6 +12,7 @@ import UserManagement from './components/UserManagement';
 import ChangePasswordModal from './components/ChangePasswordModal';
 import Breadcrumb from './components/Breadcrumb';
 import ProjectHero from './components/ProjectHero';
+import ProjectTeam from './components/ProjectTeam';
 import PhotoGallery from './components/PhotoGallery';
 import ReportDashboard from './components/ReportDashboard';
 import AdminDashboard from './admin/AdminDashboard';
@@ -57,7 +58,8 @@ const LIST_WAIT_MS = 8000;
 const SIGN_OUT_UPLOAD_WAIT_MS = 6000;
 import { isCloudConfigured } from './utils/supabaseClient';
 import { can } from './utils/auth';
-import { isAuthFailure } from './utils/syncErrors';
+import { isAdminUser } from './utils/roles';
+import { isAuthFailure, isAccessRefused } from './utils/syncErrors';
 import { chooseSurveyToOpen, mergeSurveyLists } from './utils/surveySelection';
 import { uploadSurveyRecord as uploadRecord } from './utils/uploadRecord';
 import { confirmReportReady } from './utils/reportCompleteness';
@@ -65,6 +67,7 @@ import { initNetworkMonitor, onNetworkChange, isOnline } from './utils/network';
 import { PHOTO_SYNC, consumeCaptureReturn } from './utils/photoCapture';
 import {
   listProjects,
+  listVisibleProjectIds,
   createProject as createProjectRecord,
   assignFacilityToProject,
   getActiveProjectId,
@@ -249,9 +252,16 @@ export default function App({ currentUser = null, onSignOut } = {}) {
     }
   }
 
-  /** One place that decides which unhappy sync state the header should show. */
+  /**
+   * One place that decides which unhappy sync state the header should show.
+   * Signed in and refused by the access rules means the role or project team
+   * does not allow it -- signing in again would not help.
+   */
+  const failureState = (err) => (
+    currentUser && isAccessRefused(err) ? 'refused' : isAuthFailure(err) ? 'unauthorized' : 'offline'
+  );
   function reportSyncFailure(err) {
-    setSyncState(isAuthFailure(err) ? 'unauthorized' : 'offline');
+    setSyncState(failureState(err));
   }
   const [syncState, setSyncState] = useState(isCloudConfigured ? 'idle' : 'off');
   const [creatingFacility, setCreatingFacility] = useState(false);
@@ -259,6 +269,23 @@ export default function App({ currentUser = null, onSignOut } = {}) {
   // for them in Manage Users.
   const mayDeleteSnags = can(currentUser, 'delete_snags');
   const mayDownloadReports = can(currentUser, 'download_reports');
+  // A build with no cloud has no sign-in and no roles: everything is allowed
+  // there, as before. Signed in, the role decides (and the database enforces).
+  const signedInUser = isCloudConfigured ? currentUser : null;
+  const mayEditSurveys = !signedInUser || can(signedInUser, 'edit_surveys');
+  const mayManageProjects = !signedInUser || can(signedInUser, 'manage_projects');
+  const mayManageTeam = can(currentUser, 'manage_team');
+  const mayManageUsers = can(currentUser, 'manage_users');
+  const mayManageConfig = can(currentUser, 'manage_config');
+  const mayManageTemplates = can(currentUser, 'manage_templates');
+  /** Which Admin Dashboard modules this user may open. */
+  const mayOpenAdmin = (module) => ({
+    forms: mayManageConfig, versions: mayManageConfig, audit: mayManageConfig,
+    users: mayManageUsers, roles: mayManageUsers, templates: mayManageTemplates
+  })[module] === true;
+  // Read by the upload path, which runs outside render.
+  const mayEditRef = useRef(mayEditSurveys);
+  mayEditRef.current = mayEditSurveys;
   // Which stat tile was last tapped. The nonce lets the same tile be tapped
   // twice and still scroll the list back into view.
   const [listFocus, setListFocus] = useState(null);
@@ -368,6 +395,11 @@ export default function App({ currentUser = null, onSignOut } = {}) {
     // construction, not by remembering to check a flag.
     if (!surveyIsWorthSyncing(surveyRef.current)) {
       return { skipped: true, reason: 'empty' };
+    }
+    // A read-only role has nothing of its own to upload: opening a facility
+    // must never send it back to the server under that account.
+    if (!mayEditRef.current) {
+      return { skipped: true, reason: 'read-only' };
     }
 
     let pushResult = await pushSurvey(surveyRef.current);
@@ -569,13 +601,21 @@ export default function App({ currentUser = null, onSignOut } = {}) {
     const { flushed, failed, problems, authError } = await flushPendingSurveys();
     await refreshSurveyList();
 
-    const signInError = [currentError, authError].find((e) => e && isAuthFailure(e));
+    const refusedError = [currentError, authError].find((e) => e && failureState(e) === 'refused');
+    const signInError = [currentError, authError].find((e) => e && failureState(e) === 'unauthorized');
     if (signInError) setSyncState('unauthorized');
+    else if (refusedError) setSyncState('refused');
     else if (currentError || failed) setSyncState('offline');
     else setSyncState('synced');
 
     if (signInError) {
       return { message: 'Sign in again to upload. Your work is saved on this device.' };
+    }
+    if (refusedError) {
+      return {
+        message: 'Your role or project team does not allow this upload. The work is kept on this device -- '
+          + 'ask an administrator to add you to the project team, then sync again.'
+      };
     }
     if (currentError || failed) {
       const unreachable = (msg) => /failed to fetch|network|timed out|load failed/i.test(String(msg || ''));
@@ -1023,7 +1063,17 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
     let local = [];
     try { local = await listAllSurveysOffline(); } catch { /* list what the server has */ }
 
-    setSurveyList(mergeSurveyLists(remote, local, { remoteIsCached }));
+    // Which projects this account may see, when the server can say so.
+    let visibleProjectIds = null;
+    if (isCloudConfigured && !remoteIsCached) {
+      try { visibleProjectIds = await withTimeout(listVisibleProjectIds(), LIST_WAIT_MS, 'Loading projects'); } catch { /* show the device copies */ }
+    }
+
+    setSurveyList(mergeSurveyLists(remote, local, {
+      remoteIsCached,
+      serverIsAuthoritative: isCloudConfigured && !remoteIsCached,
+      visibleProjectIds
+    }));
   };
 
   // On launch, upload anything left unsent by an earlier offline session --
@@ -1624,7 +1674,7 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
       {isWebPortal && (
         <PortalSidebar
           current={view === 'admin' ? { admin: adminModule } : { view }}
-          isAdmin={currentUser?.role === 'admin'}
+          access={{ config: mayManageConfig, users: mayManageUsers, templates: mayManageTemplates, admin: isAdminUser(currentUser) }}
           /* Only once a project is open: on the project list a "Facilities"
              entry would point at a project nobody has chosen. */
           hasOpenProject={!!activeProject && view !== 'projects'}
@@ -1648,6 +1698,7 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
         pendingCount={pendingPhotoCount}
         currentUser={currentUser}
         canDownloadReports={mayDownloadReports}
+        canEdit={mayEditSurveys}
         // On the hub screens the subtitle is the project you are in, not a
         // facility -- "New Facility Assessment" there would be misleading.
         contextLabel={
@@ -1664,7 +1715,7 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
           <GlobalSearch
             surveys={surveyList}
             projects={projects}
-            isAdmin={currentUser?.role === 'admin'}
+            isAdmin={isAdminUser(currentUser)}
             onOpenSurvey={openSurveyFromPortal}
             onOpenProject={handleOpenProject}
             onNavigate={navigatePortal}
@@ -1701,7 +1752,7 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
             formsVersion={formsVersion}
             templates={templates}
             loading={projectsLoading}
-            onCreateProject={openCreateProject}
+            onCreateProject={mayManageProjects ? openCreateProject : null}
             onOpenList={openFacilityList}
             onViewReports={() => setView('reports')}
             onOpenSurvey={openSurveyFromPortal}
@@ -1719,7 +1770,7 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
             loading={projectsLoading}
             online={online}
             onOpenProject={handleOpenProject}
-            onCreateProject={handleCreateProject}
+            onCreateProject={mayManageProjects ? handleCreateProject : null}
             onRefresh={refreshProjects}
             openCreateSignal={createProjectSignal}
           />
@@ -1728,7 +1779,7 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
 
       {/* Admin-only. The server enforces this regardless of whether this view
           is reachable -- it only decides whether the option is offered. */}
-      {view === 'users' && currentUser?.role === 'admin' && (
+      {view === 'users' && mayManageUsers && (
         <>
           <div className="bg-white border-b border-slate-200">
             <div className="max-w-6xl mx-auto px-3 sm:px-6 py-2">
@@ -1742,7 +1793,7 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
             </div>
           </div>
           <main className="flex-1 w-full px-3 sm:px-8 pt-4 sm:pt-6 safe-area-content-pb md:pb-8">
-            <UserManagement myId={currentUser.id} />
+            <UserManagement myId={currentUser.id} me={currentUser} projects={projects} />
           </main>
         </>
       )}
@@ -1750,12 +1801,13 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
       {/* Admin / Developer Dashboard: web portal, administrators only. The
           database refuses configuration, template and user changes from anyone
           else, so these checks only decide what is offered. */}
-      {view === 'admin' && isWebPortal && currentUser?.role === 'admin' && (
+      {view === 'admin' && isWebPortal && mayOpenAdmin(adminModule) && (
         <main className="flex-1 w-full px-3 sm:px-8 pt-4 sm:pt-6 safe-area-content-pb md:pb-8">
           <AdminDashboard
             embedded
             module={adminModule}
             onModuleChange={setAdminModule}
+            mayOpen={mayOpenAdmin}
             currentUser={currentUser}
             facilities={surveyList}
             projects={projects}
@@ -1810,7 +1862,7 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
                 project={activeProject}
                 facilities={facilitiesInProject}
                 onOpenReports={() => setView('reports')}
-                onAddFacility={handleAddFacilityToProject}
+                onAddFacility={mayEditSurveys ? handleAddFacilityToProject : null}
                 onFocusList={(key) => {
                   // The photo count is the one tile with somewhere better to
                   // go than a re-sorted list.
@@ -1822,10 +1874,16 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
               {!facilitiesInProject.length && (
                 <div className="bg-white rounded-2xl p-6 border border-slate-200 text-center">
                   <h3 className="font-bold text-slate-700 text-sm">No facilities in this project yet</h3>
-                  <p className="text-xs text-slate-500 mt-1">
-                    Use <span className="font-semibold">+ Add Facility</span> to start the first one.
-                  </p>
+                  {mayEditSurveys && (
+                    <p className="text-xs text-slate-500 mt-1">
+                      Use <span className="font-semibold">+ Add Facility</span> to start the first one.
+                    </p>
+                  )}
                 </div>
+              )}
+
+              {isCloudConfigured && mayManageTeam && (
+                <ProjectTeam project={activeProject} canManage={mayManageTeam} />
               )}
 
               <SavedFacilities
@@ -1935,6 +1993,7 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
             </select>
           )}
 
+          {mayEditSurveys ? (
           <button
             type="button"
             onClick={handleSubmitFacility}
@@ -1944,6 +2003,12 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
             <span className="sm:hidden">Submit &amp; New</span>
             <span className="hidden sm:inline">Submit &amp; Start New Facility</span>
           </button>
+          ) : (
+            <span className="px-3 py-1 rounded-lg bg-slate-100 border border-slate-200 text-slate-600 text-xs font-bold shrink-0"
+              title="Your role can view this facility but not change it">
+              Read-only
+            </span>
+          )}
         </div>
 
         {activeProject && (
@@ -1974,22 +2039,28 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
           also preserves each tab's scroll position and in-progress input. */}
       {view === 'survey' && (
       <main className="flex-1 max-w-6xl w-full mx-auto px-3 sm:px-6 pt-4 sm:pt-6 safe-area-content-pb md:pb-8">
+        {/* A role without Edit surveys sees the facility with every control
+            disabled. The database refuses its changes anyway; this keeps the
+            screen from offering them. */}
         <TabPanel active={activeTab === 'facility'}>
+          <fieldset disabled={!mayEditSurveys} className="min-w-0 border-0 p-0 m-0">
           <FacilityInfo
             facility={survey?.facility || {}}
             onChange={handleUpdateFacility}
             onCreate={handleCreateFacility}
             creating={creatingFacility}
             created={!!survey?.cloudRevision}
-            onNewFacility={handleNewFacility}
+            onNewFacility={mayEditSurveys ? handleNewFacility : null}
             templates={templates}
             canStartFromTemplate={
               !survey?.facility?.templateId && (survey?.items || []).every(isBlankSnag)
             }
           />
+          </fieldset>
         </TabPanel>
 
         <TabPanel active={activeTab === 'items'}>
+          <fieldset disabled={!mayEditSurveys} className="min-w-0 border-0 p-0 m-0">
           <SurveyList
             items={survey?.items || []}
             onAddItem={handleAddItem}
@@ -2001,6 +2072,7 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
             appliedTemplateName={survey?.facility?.templateName || ''}
             onApplyTemplate={handleApplyTemplate}
           />
+          </fieldset>
         </TabPanel>
 
         <TabPanel active={activeTab === 'analytics'}>
@@ -2023,12 +2095,14 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
               onSubmit={handleSubmitFromList}
             />
           </div>
+          <fieldset disabled={!mayEditSurveys} className="min-w-0 border-0 p-0 m-0">
           <SignatureSection
             signatures={survey?.signatures || {}}
             onChange={handleUpdateSignatures}
             facility={survey?.facility || {}}
             onOpenReport={() => setShowReportModal(true)}
           />
+          </fieldset>
         </TabPanel>
       </main>
       )}

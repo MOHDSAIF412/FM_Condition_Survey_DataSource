@@ -131,6 +131,18 @@ export async function createProject(details) {
   return normalise(data);
 }
 
+/**
+ * Ids of the projects this account may see, straight from the server -- or
+ * null when that cannot be established (offline, error). Never a cached copy:
+ * callers use it to decide what to hide.
+ */
+export async function listVisibleProjectIds() {
+  if (!isCloudConfigured) return null;
+  const { data, error } = await supabase.from('projects').select('id');
+  if (error) return null;
+  return new Set((data || []).map((r) => r.id));
+}
+
 export async function updateProject(projectId, details) {
   if (!isCloudConfigured) throw new Error('Cloud sync is not configured on this build.');
 

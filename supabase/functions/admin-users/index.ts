@@ -30,6 +30,24 @@ function json(body: unknown, status = 200) {
   });
 }
 
+const ADMIN_ROLES = ['super_admin', 'admin'];
+
+/**
+ * Whether the caller may manage users: an administrator, or a role (or the
+ * caller's own ticks) holding manage_users -- the same rule as fm_can().
+ */
+async function canManageUsers(caller: { role: string; is_active: boolean; permissions?: Record<string, unknown> } | null) {
+  if (!caller || !caller.is_active) return false;
+  if (ADMIN_ROLES.includes(caller.role)) return true;
+  if (caller.permissions?.manage_users === true) return true;
+  const { data: role } = await admin.from('fm_roles').select('permissions').eq('key', caller.role).maybeSingle();
+  return role?.permissions?.manage_users === true;
+}
+
+/** Changing an administrator account (or creating one) is for a Super Admin only. */
+const mayTouchRole = (caller: { role: string } | null, role: string | null | undefined) =>
+  !ADMIN_ROLES.includes(role || '') || caller?.role === 'super_admin';
+
 /** The caller's own row in fm_survey_users, found via their bearer token. */
 async function callerProfile(req: Request) {
   const authHeader = req.headers.get('Authorization') || '';
@@ -41,7 +59,7 @@ async function callerProfile(req: Request) {
 
   const { data: profile } = await admin
     .from('fm_survey_users')
-    .select('id, email, role, is_active')
+    .select('id, email, role, is_active, permissions')
     .eq('id', userData.user.id)
     .maybeSingle();
 
@@ -63,7 +81,7 @@ Deno.serve(async (req) => {
     const bootstrapMode = (count || 0) === 0;
 
     const caller = bootstrapMode ? null : await callerProfile(req);
-    const isAdmin = bootstrapMode || (caller && caller.role === 'admin' && caller.is_active);
+    const isAdmin = bootstrapMode || await canManageUsers(caller);
 
     if (req.method === 'GET') {
       if (!isAdmin) return json({ error: 'Admin access required.' }, 403);
@@ -81,12 +99,13 @@ Deno.serve(async (req) => {
       const body = await req.json().catch(() => ({}));
       const email = String(body.email || '').trim().toLowerCase();
       const fullName = String(body.fullName || '').trim();
-      // A non-admin creator can never grant themselves admin by passing a role
-      // in the request; only bootstrap (the very first account) is admin by
-      // default otherwise every new account is 'user' unless the caller who
-      // IS already an admin explicitly asks for 'admin'.
-      const requestedRole = body.role === 'admin' ? 'admin' : 'user';
-      const role = bootstrapMode ? 'admin' : requestedRole;
+      // The very first account is a Super Admin. After that the role must be
+      // one that exists, and only a Super Admin can create an administrator.
+      const { data: knownRole } = await admin.from('fm_roles').select('key').eq('key', String(body.role || 'surveyor')).maybeSingle();
+      if (!bootstrapMode && !knownRole) return json({ error: 'Choose a valid role.' }, 400);
+      const role = bootstrapMode ? 'super_admin' : knownRole!.key;
+      if (!mayTouchRole(caller, role)) return json({ error: 'Only a Super Admin can create an administrator.' }, 403);
+      const projectIds: string[] = Array.isArray(body.projectIds) ? body.projectIds.map(String) : [];
       const password = String(body.password || '').trim() || randomPassword();
 
       if (!email || !email.includes('@')) return json({ error: 'A valid email is required.' }, 400);
@@ -112,6 +131,16 @@ Deno.serve(async (req) => {
         throw profileErr;
       }
 
+      // The projects they start on. A failure here leaves a working account
+      // with no projects yet, which the team screens can fix -- not worth
+      // failing the whole creation over.
+      if (projectIds.length) {
+        const { error: teamErr } = await admin.from('fm_project_members').insert(
+          projectIds.map((projectId) => ({ project_id: projectId, user_id: created.user.id, added_by: caller?.id || null }))
+        );
+        if (teamErr) console.error('[admin-users] could not add to projects:', teamErr.message);
+      }
+
       return json({ user: { id: created.user.id, email, fullName, role }, password, bootstrap: bootstrapMode });
     }
 
@@ -122,6 +151,10 @@ Deno.serve(async (req) => {
       if (!userId) return json({ error: 'userId is required.' }, 400);
       if (caller && userId === caller.id) {
         return json({ error: 'You cannot delete your own account.' }, 400);
+      }
+      const { data: doomed } = await admin.from('fm_survey_users').select('role').eq('id', userId).maybeSingle();
+      if (!mayTouchRole(caller, doomed?.role)) {
+        return json({ error: 'Only a Super Admin can remove an administrator.' }, 403);
       }
 
       const { error: delErr } = await admin.auth.admin.deleteUser(userId);
@@ -147,10 +180,13 @@ Deno.serve(async (req) => {
 
       const { data: target } = await admin
         .from('fm_survey_users')
-        .select('id, email')
+        .select('id, email, role')
         .eq('id', userId)
         .maybeSingle();
       if (!target) return json({ error: 'That user was not found.' }, 404);
+      if (!mayTouchRole(caller, target.role)) {
+        return json({ error: 'Only a Super Admin can reset an administrator\'s password.' }, 403);
+      }
 
       const { error: updErr } = await admin.auth.admin.updateUserById(userId, { password });
       if (updErr) return json({ error: updErr.message }, 400);

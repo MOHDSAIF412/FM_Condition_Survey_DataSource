@@ -42,7 +42,7 @@ export default function ProjectDashboard({
 
   // "Create New Project" on the dashboard lands here with the form already open.
   useEffect(() => {
-    if (openCreateSignal) setShowForm(true);
+    if (openCreateSignal && onCreateProject) setShowForm(true);
   }, [openCreateSignal]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -91,14 +91,14 @@ export default function ProjectDashboard({
             </div>
           </div>
 
-          <button
+          {onCreateProject && <button
             type="button"
             onClick={() => { setShowForm((v) => !v); setError(''); }}
             className="px-6 py-3.5 rounded-xl bg-flame-500 hover:bg-flame-600 active:scale-[0.98] text-white font-bold text-[15px] shadow-card inline-flex items-center gap-2 shrink-0 transition-[background-color,transform] duration-150"
           >
             <FolderPlus className="w-4 h-4" />
             {showForm ? 'Cancel' : 'Create Project'}
-          </button>
+          </button>}
         </div>
 
         {/* Quick stats -- gives the page something to look at even with one project */}
