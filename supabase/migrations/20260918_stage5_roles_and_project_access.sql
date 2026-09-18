@@ -220,6 +220,9 @@ revoke all on function public.fm_visible_survey_ids() from public, anon;
 revoke all on function public.fm_sees_approved_only() from public, anon;
 revoke all on function public.fm_guard_role_change() from public, anon;
 revoke all on function public.fm_project_add_creator() from public, anon;
+-- Trigger-only: not callable through the API at all (applied live as stage5_trigger_functions_not_callable).
+revoke execute on function public.fm_guard_role_change() from authenticated;
+revoke execute on function public.fm_project_add_creator() from authenticated;
 grant execute on function public.fm_visible_project_ids() to authenticated;
 grant execute on function public.fm_visible_survey_ids() to authenticated;
 grant execute on function public.fm_sees_approved_only() to authenticated;
