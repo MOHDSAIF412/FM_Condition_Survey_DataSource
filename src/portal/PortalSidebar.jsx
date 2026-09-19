@@ -28,7 +28,7 @@ function buildNav({ access = {}, hasOpenProject }) {
       key: 'reports', label: 'Reports', icon: FileText,
       children: [
         { label: 'Generate Reports', target: { view: 'reports' } },
-        ...(access.config ? [soon('Report Builder', 'Stage 4'), soon('Report Templates', 'Stage 4')] : [])
+        ...(access.config ? [{ label: 'Report Builder', target: { admin: 'reports' } }] : [])
       ]
     },
     access.users && {

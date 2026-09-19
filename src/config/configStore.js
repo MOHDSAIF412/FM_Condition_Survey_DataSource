@@ -14,12 +14,14 @@
  */
 import { supabase, isCloudConfigured } from '../utils/supabaseClient';
 import { normaliseFormsConfig, defaultFormsConfig, validateFormsConfig } from './formConfig';
+import { normaliseReportsConfig, defaultReportsConfig, validateReportsConfig } from './reportLayouts';
 
 const CACHE_KEY = (kind) => `fm_config_${kind}_cache`;
 const COLUMNS = 'id, kind, version, status, config, notes, based_on, created_by, created_at, updated_at, published_by, published_at';
 
-const normalisers = { forms: normaliseFormsConfig };
-const defaults = { forms: defaultFormsConfig };
+const normalisers = { forms: normaliseFormsConfig, reports: normaliseReportsConfig };
+const defaults = { forms: defaultFormsConfig, reports: defaultReportsConfig };
+const validators = { forms: validateFormsConfig, reports: validateReportsConfig };
 
 function normalise(kind, config) {
   return (normalisers[kind] || ((c) => c || {}))(config || {});
@@ -126,8 +128,8 @@ async function nextVersionNumber(kind) {
  */
 export async function saveDraft(kind, config, { draftId = null, basedOn = null, notes = '', expectedUpdatedAt = null } = {}) {
   const clean = normalise(kind, config);
-  if (kind === 'forms') {
-    const problems = validateFormsConfig(clean);
+  if (validators[kind]) {
+    const problems = validators[kind](clean);
     if (problems.length) throw new Error(problems.join(' '));
   }
 

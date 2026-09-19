@@ -8,6 +8,7 @@ import { reportFieldsFor, reportValue } from '../config/reportFields';
 import { OCS_LOGO_BASE64 } from '../assets/logoDataUrl.js';
 import { saveBlob } from './fileSaver.js';
 import { formatMoney, EXCEL_MONEY_FORMAT } from './currency.js';
+import { resolveLayout, registerColumns, photosFor, DEFAULT_TITLE } from '../config/reportLayouts';
 
 /**
  * Converts image data (including SVG data URLs) to a clean JPEG base64 string via an offscreen
@@ -204,7 +205,13 @@ function placeImageInBox(ws, imageId, img, box) {
  * Generates an audit-ready multi-sheet Microsoft Excel (.xlsx) Report
  * Organized Facility-wise with embedded defect photos, clean columns, and no redundant metadata.
  */
-export async function generateSurveyExcel(input, selectedFacility = 'ALL') {
+export async function generateSurveyExcel(input, selectedFacility = 'ALL', options = {}) {
+  // The layout (see config/reportLayouts) picks the sheets, register columns,
+  // photos and whether costs appear. Standard reproduces the workbook as it
+  // was before layouts existed.
+  const layout = resolveLayout(options.layout);
+  const show = layout.sections;
+  const costs = layout.showCosts;
   // Accepts one survey or many. Passing several produces a single combined
   // workbook: shared summary and CapEx totals, with the Snag Register split
   // into a section per facility.
@@ -252,6 +259,7 @@ export async function generateSurveyExcel(input, selectedFacility = 'ALL') {
   // ==========================================
   // SHEET 1: EXECUTIVE SUMMARY & COVER
   // ==========================================
+  if (show.cover) {
   const wsExec = workbook.addWorksheet('Executive Summary', {
     views: [{ showGridLines: true }]
   });
@@ -268,9 +276,10 @@ export async function generateSurveyExcel(input, selectedFacility = 'ALL') {
   // Title Banner
   wsExec.mergeCells('B2:F2');
   const titleCell = wsExec.getCell('B2');
+  const reportTitle = layout.title ? layout.title.toUpperCase() : null;
   titleCell.value = selectedFacility === 'ALL'
-    ? 'FACILITY CONDITION ASSESSMENT & SNAGGING AUDIT REPORT'
-    : `FACILITY CONDITION REPORT — ${selectedFacility.toUpperCase()}`;
+    ? (reportTitle || DEFAULT_TITLE.excel)
+    : `${reportTitle || 'FACILITY CONDITION REPORT'} — ${selectedFacility.toUpperCase()}`;
   titleCell.font = { name: 'Arial', size: 14, bold: true, color: { argb: 'FFFFFFFF' } };
   titleCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: primaryNavy } };
   titleCell.alignment = { horizontal: 'center', vertical: 'middle' };
@@ -323,7 +332,7 @@ export async function generateSurveyExcel(input, selectedFacility = 'ALL') {
       const label = [f.facilityCode, f.facilityName || f.buildingName].filter(Boolean).join(' · ')
         || `Facility ${idx + 1}`;
       const cost = calculateSurveyStats(g.items || []).totalCost;
-      return [label, `${(g.items || []).length} snags  •  ${formatMoney(cost)}`];
+      return [label, costs ? `${(g.items || []).length} snags  •  ${formatMoney(cost)}` : `${(g.items || []).length} snags`];
     }),
     ['Total Snags', String(itemsToReport.length)],
     ['Report Scope', selectedFacility === 'ALL' ? 'All locations across every facility listed' : `Locations matching ${selectedFacility}`]
@@ -369,8 +378,10 @@ export async function generateSurveyExcel(input, selectedFacility = 'ALL') {
     ['Client / Property Owner', facility.clientName || 'N/A'],
     ['Facility Manager', facility.facilityManager || 'N/A'],
     ['Inspection Survey Date', facility.surveyDate || new Date().toISOString().split('T')[0]],
-    ['Surveyor Sign-Off', primarySurvey.signatures?.surveyor?.signatureData ? 'Certified & Signed' : 'Pending Signature'],
-    ['Client Sign-Off', primarySurvey.signatures?.client?.signatureData ? 'Certified & Signed' : 'Pending Signature']
+    ...(show.signatures ? [
+      ['Surveyor Sign-Off', primarySurvey.signatures?.surveyor?.signatureData ? 'Certified & Signed' : 'Pending Signature'],
+      ['Client Sign-Off', primarySurvey.signatures?.client?.signatureData ? 'Certified & Signed' : 'Pending Signature']
+    ] : [])
   ];
 
   stakeFields.forEach(([lbl, val]) => {
@@ -390,7 +401,9 @@ export async function generateSurveyExcel(input, selectedFacility = 'ALL') {
     { label: 'TOTAL SNAGS AUDITED', val: stats.total, color: 'FF0F172A', sub: 'Cataloged building elements' },
     { label: 'TOTAL DEFECT PHOTOS', val: stats.totalPhotos, color: 'FF0284C7', sub: 'Attached photographic evidence' },
     { label: 'URGENT HAZARDS (P1)', val: stats.priorityCounts[1], color: 'FFDC2626', sub: 'Immediate life safety' },
-    { label: 'REMEDIAL CAPEX BUDGET', val: formatMoney(stats.totalCost), color: 'FF0F172A', sub: 'Estimated remediation expenditure' }
+    costs
+      ? { label: 'REMEDIAL CAPEX BUDGET', val: formatMoney(stats.totalCost), color: 'FF0F172A', sub: 'Estimated remediation expenditure' }
+      : { label: 'ESSENTIAL REPAIRS (P2)', val: stats.priorityCounts[2], color: 'FFEA580C', sub: 'Priority 2 items' }
   ];
 
   let kpiRow = 6;
@@ -419,6 +432,7 @@ export async function generateSurveyExcel(input, selectedFacility = 'ALL') {
   });
 
   // Priority Schedule Table on Executive Sheet
+  if (show.prioritySchedule) {
   wsExec.getCell(`D${kpiRow}`).value = '4. REMEDIATION PRIORITY BREAKDOWN';
   wsExec.getCell(`D${kpiRow}`).font = { name: 'Arial', size: 11, bold: true, color: { argb: primaryNavy } };
   kpiRow++;
@@ -437,11 +451,14 @@ export async function generateSurveyExcel(input, selectedFacility = 'ALL') {
     wsExec.getCell(`E${kpiRow}`).font = { name: 'Arial', size: 9, color: { argb: 'FF475569' } };
     kpiRow++;
   });
+  }
+  }
 
   // ==========================================
   // SHEET 2: DEPARTMENTAL CAPEX SUMMARY
   // ==========================================
-  const wsDept = workbook.addWorksheet('Departmental CapEx', {
+  if (show.departmentCapex) {
+  const wsDept = workbook.addWorksheet(costs ? 'Departmental CapEx' : 'Departments', {
     views: [{ showGridLines: true }]
   });
 
@@ -455,19 +472,22 @@ export async function generateSurveyExcel(input, selectedFacility = 'ALL') {
 
   wsDept.mergeCells('B2:E2');
   const deptTitle = wsDept.getCell('B2');
-  deptTitle.value = 'MAINTENANCE DEPARTMENT / TRADE CAPEX ALLOCATION';
+  deptTitle.value = costs ? 'MAINTENANCE DEPARTMENT / TRADE CAPEX ALLOCATION' : 'SNAGS BY MAINTENANCE DEPARTMENT / TRADE';
   deptTitle.font = { name: 'Arial', size: 12, bold: true, color: { argb: 'FFFFFFFF' } };
   deptTitle.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: primaryNavy } };
   deptTitle.alignment = { horizontal: 'center', vertical: 'middle' };
   wsDept.getRow(2).height = 28;
 
-  const deptHeaders = ['Department / Trade', 'Defect Count', 'Remedial Budget (AED)', 'CapEx Share (%)'];
+  const deptHeaders = costs
+    ? ['Department / Trade', 'Defect Count', 'Remedial Budget (AED)', 'CapEx Share (%)']
+    : ['Department / Trade', 'Defect Count'];
+  const deptCols = costs ? ['B', 'C', 'D', 'E'] : ['B', 'C'];
   const deptHeaderRow = wsDept.getRow(4);
   deptHeaderRow.values = ['', ...deptHeaders];
   deptHeaderRow.font = { name: 'Arial', size: 9, bold: true, color: { argb: 'FFFFFFFF' } };
   deptHeaderRow.height = 22;
 
-  ['B4', 'C4', 'D4', 'E4'].forEach((c) => {
+  deptCols.map((c) => `${c}4`).forEach((c) => {
     wsDept.getCell(c).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: headerBlue } };
     wsDept.getCell(c).alignment = { vertical: 'middle', horizontal: c === 'B4' ? 'left' : 'center' };
   });
@@ -479,41 +499,36 @@ export async function generateSurveyExcel(input, selectedFacility = 'ALL') {
     const pct = stats.totalCost > 0 ? (dStat.cost / stats.totalCost) : 0;
 
     const row = wsDept.getRow(dRowIdx);
-    row.values = [
-      '',
-      dInfo.name,
-      dStat.count,
-      dStat.cost,
-      pct
-    ];
+    row.values = costs ? ['', dInfo.name, dStat.count, dStat.cost, pct] : ['', dInfo.name, dStat.count];
     row.font = { name: 'Arial', size: 9 };
     wsDept.getCell(`C${dRowIdx}`).alignment = { horizontal: 'center' };
-    wsDept.getCell(`D${dRowIdx}`).numFmt = EXCEL_MONEY_FORMAT;
-    wsDept.getCell(`E${dRowIdx}`).numFmt = '0.0%';
-    wsDept.getCell(`E${dRowIdx}`).alignment = { horizontal: 'center' };
+    if (costs) {
+      wsDept.getCell(`D${dRowIdx}`).numFmt = EXCEL_MONEY_FORMAT;
+      wsDept.getCell(`E${dRowIdx}`).numFmt = '0.0%';
+      wsDept.getCell(`E${dRowIdx}`).alignment = { horizontal: 'center' };
+    }
     dRowIdx++;
   });
 
   // Total row
   const totalRow = wsDept.getRow(dRowIdx);
-  totalRow.values = [
-    '',
-    'TOTAL (All Departments Combined)',
-    stats.total,
-    stats.totalCost,
-    1.0
-  ];
+  totalRow.values = costs
+    ? ['', 'TOTAL (All Departments Combined)', stats.total, stats.totalCost, 1.0]
+    : ['', 'TOTAL (All Departments Combined)', stats.total];
   totalRow.font = { name: 'Arial', size: 10, bold: true, color: { argb: primaryNavy } };
   totalRow.height = 22;
-  ['B', 'C', 'D', 'E'].forEach((col) => {
+  deptCols.forEach((col) => {
     const c = wsDept.getCell(`${col}${dRowIdx}`);
     c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE2E8F0' } };
     c.border = { top: { style: 'thin' }, bottom: { style: 'double' } };
   });
   wsDept.getCell(`C${dRowIdx}`).alignment = { horizontal: 'center' };
-  wsDept.getCell(`D${dRowIdx}`).numFmt = EXCEL_MONEY_FORMAT;
-  wsDept.getCell(`E${dRowIdx}`).numFmt = '100.0%';
-  wsDept.getCell(`E${dRowIdx}`).alignment = { horizontal: 'center' };
+  if (costs) {
+    wsDept.getCell(`D${dRowIdx}`).numFmt = EXCEL_MONEY_FORMAT;
+    wsDept.getCell(`E${dRowIdx}`).numFmt = '100.0%';
+    wsDept.getCell(`E${dRowIdx}`).alignment = { horizontal: 'center' };
+  }
+  }
 
   // ==========================================
   // SHEET 3: DETAILED SNAG REGISTER (FACILITIES WISE, CLEAN COLUMNS)
@@ -536,6 +551,7 @@ export async function generateSurveyExcel(input, selectedFacility = 'ALL') {
   // I: Est. Cost (AED)
   // ==========================================
 
+  if (show.register) {
   const wsSnags = workbook.addWorksheet('Snag Register', {
     views: [{ showGridLines: true }]
   });
@@ -557,34 +573,23 @@ export async function generateSurveyExcel(input, selectedFacility = 'ALL') {
    * Quantity and cost appear only on a snag's first row. Repeating them would
    * make the column total count a three-photo snag's CapEx three times.
    */
-  const COL = {
-    num: 1,
-    photo: 2,
-    photoOf: 3,
-    location: 4,
-    name: 5,
-    dept: 6,
-    priority: 7,
-    defect: 8,
-    qty: 9,
-    cost: 10
-  };
+  // Columns come from the layout; the photo column carries its "n of m"
+  // column with it. Standard gives exactly the columns listed above.
+  const layoutColumns = registerColumns(layout, 'excel');
+  const WIDTH = { number: 8, photo: THUMB_COL_WIDTH, photoOf: 10, location: 32, name: 34, department: 24, priority: 14, defect: 48, quantity: 10, cost: 18 };
+  const sheetColumns = layoutColumns.flatMap((c) => (c.key === 'photo'
+    ? [c, { key: 'photoOf', label: 'Photo' }]
+    : [c]));
+  const COL = {};
+  sheetColumns.forEach((c, i) => { COL[c.key] = i + 1; });
+  const hasPhotoColumn = !!COL.photo;
   // Snag fields added in the Admin Dashboard with "Excel report" on, after the built-in columns.
   const customSnagFields = reportFieldsFor('snag', 'excel', groups.flatMap((g) => g.items || []));
-  const customCol = (idx) => COL.cost + 1 + idx;
-  const lastCol = COL.cost + customSnagFields.length;
+  const customCol = (idx) => sheetColumns.length + 1 + idx;
+  const lastCol = Math.max(1, sheetColumns.length + customSnagFields.length);
 
   wsSnags.columns = [
-    { width: 8 },                // Snag #
-    { width: THUMB_COL_WIDTH },  // Evidence Photo
-    { width: 10 },               // Photo n of m
-    { width: 32 },               // Snag Location / Room
-    { width: 34 },               // Snag / Component Name
-    { width: 24 },               // Department / Trade
-    { width: 14 },               // Priority
-    { width: 48 },               // Observed Defects & Notes
-    { width: 10 },               // Quantity
-    { width: 18 },               // Est. Cost (AED)
+    ...sheetColumns.map((c) => ({ width: WIDTH[c.key] || 16 })),
     ...customSnagFields.map((f) => ({ width: f.type === 'textarea' ? 40 : 22 }))
   ];
 
@@ -603,16 +608,7 @@ export async function generateSurveyExcel(input, selectedFacility = 'ALL') {
 
   // Clean Table Headers
   const snagHeaders = [
-    'Snag #',
-    'Evidence Photo',
-    'Photo',
-    'Snag Location / Room',
-    'Snag / Component Name',
-    'Department / Trade',
-    'Priority',
-    'Observed Defects & Notes',
-    'Quantity',
-    'Est. Cost (AED)',
+    ...sheetColumns.map((c) => c.label),
     ...customSnagFields.map((f) => f.label)
   ];
 
@@ -643,7 +639,9 @@ export async function generateSurveyExcel(input, selectedFacility = 'ALL') {
     // Facility Section Header Row
     wsSnags.mergeCells(`A${snagRowIdx}:${letterFor(lastCol)}${snagRowIdx}`);
     const facBannerCell = wsSnags.getCell(`A${snagRowIdx}`);
-    facBannerCell.value = `\u{1F3E2} FACILITY: ${facRef}${facName.toUpperCase()} (${groupItems.length} Audited Snags  \u2022  ${formatMoney(groupStats.totalCost)} Total Remedial CapEx)`;
+    facBannerCell.value = costs
+      ? `\u{1F3E2} FACILITY: ${facRef}${facName.toUpperCase()} (${groupItems.length} Audited Snags  \u2022  ${formatMoney(groupStats.totalCost)} Total Remedial CapEx)`
+      : `\u{1F3E2} FACILITY: ${facRef}${facName.toUpperCase()} (${groupItems.length} Audited Snags)`;
     facBannerCell.font = { name: 'Arial', size: 10, bold: true, color: { argb: 'FFFFFFFF' } };
     facBannerCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: facilityHeaderBg } };
     facBannerCell.alignment = { vertical: 'middle', indent: 1 };
@@ -657,7 +655,7 @@ export async function generateSurveyExcel(input, selectedFacility = 'ALL') {
     for (let i = 0; i < groupItems.length; i++) {
       const item = groupItems[i];
       const dept = DEPARTMENTS[item.department] || DEPARTMENTS.GENERAL;
-      const photos = (item.photos || []).filter((p) => p && p.dataUrl);
+      const photos = hasPhotoColumn ? photosFor(layout, (item.photos || []).filter((p) => p && p.dataUrl)) : [];
 
       // A snag with no usable photo still gets exactly one row, so it is not
       // silently absent from the schedule.
@@ -668,13 +666,22 @@ export async function generateSurveyExcel(input, selectedFacility = 'ALL') {
         const isFirstRowOfSnag = k === 0;
 
         const row = wsSnags.getRow(snagRowIdx);
-        row.getCell(COL.num).value = isFirstRowOfSnag ? i + 1 : '';
-        row.getCell(COL.photoOf).value = photos.length ? `${k + 1} of ${photos.length}` : '—';
-        row.getCell(COL.location).value = item.location || 'General Site Area';
-        row.getCell(COL.name).value = snagLabel(item, i);
-        row.getCell(COL.dept).value = dept.name;
-        row.getCell(COL.priority).value = `P${item.priority}`;
-        row.getCell(COL.defect).value = item.defectDescription || 'No defect observed.';
+        // Writes a column only when the layout includes it.
+        const put = (key, value, style = {}) => {
+          if (!COL[key]) return;
+          const c = row.getCell(COL[key]);
+          c.value = value;
+          Object.assign(c, style);
+        };
+        put('number', isFirstRowOfSnag ? i + 1 : '', { alignment: { horizontal: 'center', vertical: 'middle' } });
+        put('photoOf', photos.length ? `${k + 1} of ${photos.length}` : '—', {
+          alignment: { horizontal: 'center', vertical: 'middle' }
+        });
+        put('location', item.location || 'General Site Area', { alignment: { vertical: 'middle', wrapText: true } });
+        put('name', snagLabel(item, i), { alignment: { vertical: 'middle', wrapText: true } });
+        put('department', dept.name, { alignment: { vertical: 'middle' } });
+        put('priority', `P${item.priority}`, { alignment: { horizontal: 'center', vertical: 'middle' } });
+        put('defect', item.defectDescription || 'No defect observed.', { alignment: { vertical: 'middle', wrapText: true } });
         customSnagFields.forEach((f, idx) => {
           const c = row.getCell(customCol(idx));
           c.value = reportValue(f, item, 'snag');
@@ -683,37 +690,34 @@ export async function generateSurveyExcel(input, selectedFacility = 'ALL') {
 
         // Only once per snag -- see the COL comment above.
         if (isFirstRowOfSnag) {
-          row.getCell(COL.qty).value = item.quantity || 1;
-          row.getCell(COL.cost).value = parseFloat(item.estimatedCost) || 0;
-          row.getCell(COL.cost).numFmt = EXCEL_MONEY_FORMAT;
-          row.getCell(COL.cost).font = { name: 'Arial', size: 9, bold: true };
+          put('quantity', item.quantity || 1, { alignment: { horizontal: 'center', vertical: 'middle' } });
+          put('cost', parseFloat(item.estimatedCost) || 0, {
+            numFmt: EXCEL_MONEY_FORMAT, alignment: { horizontal: 'right', vertical: 'middle' }
+          });
         }
 
         row.font = { name: 'Arial', size: 9 };
-        row.height = THUMB_ROW_HEIGHT_PTS; // Photo box height
+        // The tall row is the photo box; without photos, rows size to their text.
+        if (hasPhotoColumn) row.height = THUMB_ROW_HEIGHT_PTS;
 
-        row.getCell(COL.num).alignment = { horizontal: 'center', vertical: 'middle' };
-        row.getCell(COL.num).font = { name: 'Arial', size: 9, bold: true };
-        row.getCell(COL.photoOf).alignment = { horizontal: 'center', vertical: 'middle' };
-        row.getCell(COL.photoOf).font = {
-          name: 'Arial', size: 8, bold: true, color: { argb: 'FF64748B' }
-        };
-        row.getCell(COL.location).alignment = { vertical: 'middle', wrapText: true };
-        row.getCell(COL.location).font = { name: 'Arial', size: 9, bold: true };
-        row.getCell(COL.name).alignment = { vertical: 'middle', wrapText: true };
-        row.getCell(COL.name).font = { name: 'Arial', size: 9, bold: true };
-        row.getCell(COL.dept).alignment = { vertical: 'middle' };
-        row.getCell(COL.priority).alignment = { horizontal: 'center', vertical: 'middle' };
-        row.getCell(COL.priority).font = {
-          name: 'Arial',
-          size: 9,
-          bold: true,
-          color: { argb: item.priority === 1 ? 'FFDC2626' : item.priority === 2 ? 'FFF97316' : 'FF0F172A' }
-        };
-        row.getCell(COL.defect).alignment = { vertical: 'middle', wrapText: true };
-        row.getCell(COL.qty).alignment = { horizontal: 'center', vertical: 'middle' };
-        row.getCell(COL.cost).alignment = { horizontal: 'right', vertical: 'middle' };
+        const bold = { name: 'Arial', size: 9, bold: true };
+        if (COL.number) row.getCell(COL.number).font = bold;
+        if (COL.photoOf) row.getCell(COL.photoOf).font = { name: 'Arial', size: 8, bold: true, color: { argb: 'FF64748B' } };
+        if (COL.location) row.getCell(COL.location).font = bold;
+        if (COL.name) row.getCell(COL.name).font = bold;
+        if (COL.priority) {
+          row.getCell(COL.priority).font = {
+            name: 'Arial',
+            size: 9,
+            bold: true,
+            color: { argb: item.priority === 1 ? 'FFDC2626' : item.priority === 2 ? 'FFF97316' : 'FF0F172A' }
+          };
+        }
 
+        if (!hasPhotoColumn) {
+          snagRowIdx++;
+          continue;
+        }
         const cell = row.getCell(COL.photo);
         cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFFFFF' } };
         cell.border = {
@@ -774,6 +778,18 @@ export async function generateSurveyExcel(input, selectedFacility = 'ALL') {
     }
 
     snagRowIdx++;   // blank spacer between facilities
+  }
+  }
+
+  // A layout with none of the workbook's sheets (photos only, say) still
+  // produces a file that opens, saying why it is short.
+  if (!workbook.worksheets.length) {
+    const ws = workbook.addWorksheet('Report');
+    ws.getCell('B2').value = `${layout.name}: this layout has no Excel sheets. Use the PDF for its photo pages.`;
+    ws.getCell('B2').font = { name: 'Arial', size: 11, bold: true };
+  }
+  if (layout.footerText) {
+    for (const ws of workbook.worksheets) ws.headerFooter.oddFooter = `&L${layout.footerText}&RPage &P of &N`;
   }
 
   // Trigger Excel file download in browser

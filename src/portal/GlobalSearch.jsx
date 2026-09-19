@@ -6,6 +6,7 @@ import { listUsers } from '../utils/auth';
 const PAGES_ADMIN = [
   { label: 'Forms & Fields', hint: 'Survey Builder', target: { admin: 'forms' } },
   { label: 'Inspection Templates', hint: 'Survey Builder', target: { admin: 'templates' } },
+  { label: 'Report Builder', hint: 'Reports', target: { admin: 'reports' } },
   { label: 'Users', hint: 'Administration', target: { admin: 'users' } },
   { label: 'Roles & Permissions', hint: 'Administration', target: { admin: 'roles' } },
   { label: 'Review & Approval', hint: 'Workflows', target: { view: 'review' } },

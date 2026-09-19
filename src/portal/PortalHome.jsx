@@ -14,6 +14,8 @@ import {
 import { useEscapeKey } from '../utils/useEscapeKey';
 import { can } from '../utils/auth';
 import { stageOf, STAGE_BY_KEY } from '../utils/workflow';
+import { useFormsConfig } from '../config/FormsConfigContext';
+import { activeLayouts } from '../config/reportLayouts';
 
 const card = 'bg-white rounded-2xl border border-slate-200/80 shadow-[0_1px_3px_rgba(15,37,87,0.06)]';
 const clickable = 'cursor-pointer transition-shadow hover:shadow-md hover:border-sky-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500';
@@ -35,6 +37,8 @@ export default function PortalHome({
 }) {
   // What this user may manage decides which actions and panels appear.
   const isAdmin = can(currentUser, 'manage_config');
+  const { reports } = useFormsConfig();
+  const layoutCount = useMemo(() => activeLayouts(reports?.config).length, [reports]);
   const mayUsers = can(currentUser, 'manage_users');
   const mayTemplates = can(currentUser, 'manage_templates');
   const mayReview = can(currentUser, 'review_surveys') || can(currentUser, 'approve_surveys');
@@ -230,7 +234,7 @@ export default function PortalHome({
               <ConfigRow label="Fields" value={config ? `${config.fields} active` : '—'} onClick={() => onNavigate({ admin: 'forms' })} />
               <ConfigRow label="Dropdown Options" value={config ? `${config.options} custom` : '—'} onClick={() => onNavigate({ admin: 'forms' })} />
               <ConfigRow label="Inspection Templates" value={config ? `${config.templates} active` : '—'} onClick={() => onNavigate({ admin: 'templates' })} />
-              <ConfigRow label="Report Templates" pending="Stage 4" />
+              <ConfigRow label="Report Layouts" value={reports?.version ? `${layoutCount} active` : 'Standard only'} onClick={() => onNavigate({ admin: 'reports' })} />
               <ConfigRow label="Review & Approval" value={`${stats.awaitingReview} waiting`} onClick={() => onNavigate({ view: 'review' })} />
             </ul>
           </div>

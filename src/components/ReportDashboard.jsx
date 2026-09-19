@@ -8,6 +8,9 @@ import { generateSurveyExcel } from '../utils/excelGenerator';
 import { generateSurveyPDF } from '../utils/pdfGenerator';
 import { facilityCode, calculateSurveyStats } from '../types/survey';
 import { formatMoney } from '../utils/currency';
+import { stageOf, STAGE_BY_KEY } from '../utils/workflow';
+import { useFormsConfig } from '../config/FormsConfigContext';
+import { activeLayouts, resolveLayout } from '../config/reportLayouts';
 
 /**
  * Pick a project, tick the facilities, get one report.
@@ -23,10 +26,29 @@ export default function ReportDashboard({ projects = [], surveys = [], initialPr
   const [busy, setBusy] = useState('');
   const [message, setMessage] = useState('');
 
+  // Layouts come from the Report Builder (published, cached on this device).
+  const { reports } = useFormsConfig();
+  const layouts = useMemo(() => activeLayouts(reports?.config), [reports]);
+  const [layoutId, setLayoutId] = useState('');
+  const layout = useMemo(() => resolveLayout(layoutId || null, reports?.config), [layoutId, reports]);
+
   const facilities = useMemo(
-    () => surveys.filter((s) => s.projectId === projectId),
-    [surveys, projectId]
+    () => surveys.filter((s) => s.projectId === projectId && (!layout.approvedOnly || stageOf(s) === 'approved')),
+    [surveys, projectId, layout.approvedOnly]
   );
+  const hiddenByLayout = useMemo(
+    () => (layout.approvedOnly ? surveys.filter((s) => s.projectId === projectId).length - facilities.length : 0),
+    [surveys, projectId, facilities, layout.approvedOnly]
+  );
+
+  // A layout that covers approved facilities only drops ticks on the rest.
+  useEffect(() => {
+    const listed = new Set(facilities.map((f) => f.id));
+    setSelected((prev) => {
+      const next = new Set([...prev].filter((id) => listed.has(id)));
+      return next.size === prev.size ? prev : next;
+    });
+  }, [facilities]);
 
   // Switching project must not leave ticks on facilities that are no longer
   // listed -- that is how a report ends up containing another project's data.
@@ -74,6 +96,9 @@ export default function ReportDashboard({ projects = [], surveys = [], initialPr
           console.warn('[report] skipped a facility that does not belong to this project:', f.id);
           return null;
         }
+        // Same check for the layout: an approved-only report is re-checked
+        // against the freshly loaded facility, not the list row.
+        if (layout.approvedOnly && stageOf(full) !== 'approved') return null;
         return (full.items || []).length ? hydratePhotos(full) : null;
       });
       const loaded = results.filter(Boolean);
@@ -87,10 +112,10 @@ export default function ReportDashboard({ projects = [], surveys = [], initialPr
       if (kind === 'pdf') {
         // The PDF generator covers one facility at a time, so a multi-facility
         // request produces one file each rather than silently dropping the rest.
-        for (const s of loaded) await generateSurveyPDF(s, 'ALL');
+        for (const s of loaded) await generateSurveyPDF(s, 'ALL', { layout });
         setMessage(`${loaded.length} PDF${loaded.length === 1 ? '' : 's'} generated.`);
       } else {
-        await generateSurveyExcel(loaded, 'ALL');
+        await generateSurveyExcel(loaded, 'ALL', { layout });
         setMessage(`Excel report generated for ${loaded.length} facilit${loaded.length === 1 ? 'y' : 'ies'}.`);
       }
     } catch (err) {
@@ -134,6 +159,23 @@ export default function ReportDashboard({ projects = [], surveys = [], initialPr
           </select>
         </div>
 
+        {layouts.length > 1 && (
+          <div>
+            <label htmlFor="report-layout" className="block text-xs font-semibold text-slate-700 mb-1">Report layout</label>
+            <select
+              id="report-layout"
+              value={layout.id}
+              onChange={(e) => setLayoutId(e.target.value)}
+              className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-sky-500 text-sm font-semibold bg-white"
+            >
+              {layouts.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
+            </select>
+            <p className="text-[11px] text-slate-500 mt-1">
+              {layout.description || [!layout.showCosts && 'No costs', layout.approvedOnly && 'Approved facilities only'].filter(Boolean).join(' · ')}
+            </p>
+          </div>
+        )}
+
         {!projectId ? (
           <div className="flex items-start gap-2 p-3 rounded-xl bg-slate-50 border border-slate-200 text-slate-600 text-xs">
             <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
@@ -142,7 +184,9 @@ export default function ReportDashboard({ projects = [], surveys = [], initialPr
         ) : !facilities.length ? (
           <div className="flex items-start gap-2 p-3 rounded-xl bg-slate-50 border border-slate-200 text-slate-600 text-xs">
             <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-            This project has no facilities yet.
+            {hiddenByLayout
+              ? `None of this project's ${hiddenByLayout} facilit${hiddenByLayout === 1 ? 'y is' : 'ies are'} approved yet, and the "${layout.name}" layout covers approved facilities only.`
+              : 'This project has no facilities yet.'}
           </div>
         ) : (
           <div>
@@ -179,7 +223,7 @@ export default function ReportDashboard({ projects = [], surveys = [], initialPr
                         </span>
                         <span className="block text-[11px] text-slate-500">
                           {f.itemCount || 0} snag{f.itemCount === 1 ? '' : 's'}
-                          {f.status === 'submitted' ? ' · Submitted' : ' · Draft'}
+                          {` · ${STAGE_BY_KEY[stageOf(f)].label}`}
                         </span>
                       </span>
                     </button>
@@ -188,9 +232,14 @@ export default function ReportDashboard({ projects = [], surveys = [], initialPr
               })}
             </ul>
 
+            {hiddenByLayout > 0 && (
+              <p className="text-[11px] text-slate-500 mt-2">
+                {hiddenByLayout} facilit{hiddenByLayout === 1 ? 'y' : 'ies'} not approved yet {hiddenByLayout === 1 ? 'is' : 'are'} left out by this layout.
+              </p>
+            )}
             <p className="text-xs text-slate-600 mt-3 font-semibold">
               Selected: {preview.count} facilit{preview.count === 1 ? 'y' : 'ies'}
-              {preview.snags ? ` · ${preview.snags} snags` : ''}
+              {preview.snags ? ` · ${preview.snags} snag${preview.snags === 1 ? '' : 's'}` : ''}
             </p>
 
             {!canDownloadReports ? (

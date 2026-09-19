@@ -286,12 +286,14 @@ export default function App({ currentUser = null, onSignOut } = {}) {
   const mayReview = can(currentUser, 'review_surveys') || can(currentUser, 'approve_surveys') || mayManageTeam;
   /** Which Admin Dashboard modules this user may open. */
   const mayOpenAdmin = (module) => ({
-    forms: mayManageConfig, versions: mayManageConfig, audit: mayManageConfig,
+    forms: mayManageConfig, versions: mayManageConfig, audit: mayManageConfig, reports: mayManageConfig,
     users: mayManageUsers, roles: mayManageUsers, templates: mayManageTemplates
   })[module] === true;
   // Read by the upload path, which runs outside render.
   const mayEditRef = useRef(mayEditSurveys);
   mayEditRef.current = mayEditSurveys;
+  // Whether the open facility is approved (locked); set once the list is known.
+  const openLockedRef = useRef(false);
   // Which stat tile was last tapped. The nonce lets the same tile be tapped
   // twice and still scroll the list back into view.
   const [listFocus, setListFocus] = useState(null);
@@ -406,6 +408,14 @@ export default function App({ currentUser = null, onSignOut } = {}) {
     // must never send it back to the server under that account.
     if (!mayEditRef.current) {
       return { skipped: true, reason: 'read-only' };
+    }
+    // An approved facility is locked on the server, which refuses every write
+    // to it. With nothing unsent there is nothing to upload, and trying anyway
+    // turned every launch into a refusal and a red "No upload access" pill.
+    // Work that IS waiting still goes up, so its refusal is reported.
+    if (openLockedRef.current && !hasUnpushedEditsRef.current) {
+      const stored = await getSurveyOffline(surveyRef.current.id);
+      if (!stored?.pendingSync) return { skipped: true, reason: 'locked' };
     }
 
     let pushResult = await pushSurvey(surveyRef.current);
@@ -684,6 +694,10 @@ export default function App({ currentUser = null, onSignOut } = {}) {
               const remoteHasContent = remote && Array.isArray(remote.items) && remote.items.length > 0;
               const localHasContent = saved && Array.isArray(saved.items) && saved.items.length > 0;
               if (remoteHasContent || (remote && !localHasContent)) {
+                // Came from the server: not an edit to save or send back. Left
+                // unmarked, every launch re-flagged it as unsent and uploaded
+                // it again -- refused, since Stage 6, for approved facilities.
+                markAsExternalChange();
                 setSurvey(remote);
                 await saveSurveyOffline(remote, { pendingSync: false });
                 setIsLoaded(true);
@@ -1473,6 +1487,7 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
     approvedAt: openRow?.approvedAt ?? survey.review?.approvedAt ?? null
   } : null;
   const openIsLocked = !!openStage && isLocked(openStage);
+  openLockedRef.current = openIsLocked;
   const mayEditOpen = mayEditSurveys && !openIsLocked;
   const [workflowBusy, setWorkflowBusy] = useState(null);
   // Until the database records reviews, the facility screen offers no review

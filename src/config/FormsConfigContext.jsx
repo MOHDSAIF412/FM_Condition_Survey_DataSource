@@ -17,6 +17,7 @@ export const currentPlatform = () => (Capacitor.isNativePlatform() ? 'mobile' : 
 
 export function FormsConfigProvider({ children, enabled = true }) {
   const [state, setState] = useState(() => cachedPublishedConfig('forms'));
+  const [reports, setReports] = useState(() => cachedPublishedConfig('reports'));
 
   const refresh = useCallback(async () => {
     if (!isCloudConfigured) return;
@@ -26,6 +27,11 @@ export function FormsConfigProvider({ children, enabled = true }) {
     } catch (err) {
       console.warn('[config] could not refresh the form configuration:', err?.message);
     }
+    // Report layouts ride along: loading them caches them on this device, which
+    // is where the PDF and Excel generators read them from -- offline too.
+    loadPublishedConfig('reports')
+      .then((next) => setReports((prev) => (prev.version === next.version && JSON.stringify(prev.config) === JSON.stringify(next.config) ? prev : next)))
+      .catch((err) => console.warn('[config] report layouts unavailable:', err?.message));
   }, []);
 
   useEffect(() => {
@@ -44,8 +50,9 @@ export function FormsConfigProvider({ children, enabled = true }) {
     config: state.config,
     version: state.version,
     platform: currentPlatform(),
+    reports,
     refresh
-  }), [state, refresh]);
+  }), [state, reports, refresh]);
 
   return <FormsConfigContext.Provider value={value}>{children}</FormsConfigContext.Provider>;
 }
@@ -64,5 +71,5 @@ export function useFormsConfig() {
   const ctx = useContext(FormsConfigContext);
   if (ctx) return ctx;
   const { config, version } = cachedPublishedConfig('forms');
-  return { config, version, platform: currentPlatform(), refresh: async () => {} };
+  return { config, version, platform: currentPlatform(), reports: cachedPublishedConfig('reports'), refresh: async () => {} };
 }

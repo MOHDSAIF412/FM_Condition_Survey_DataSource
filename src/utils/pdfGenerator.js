@@ -6,6 +6,7 @@ import { PRIORITY_LEVELS, DEPARTMENTS, calculateSurveyStats, snagLabel } from '.
 import { reportFieldsFor, reportValue } from '../config/reportFields';
 import { OCS_LOGO_TRIMMED, OCS_LOGO_WHITE, OCS_LOGO_TRIMMED_RATIO } from '../assets/logoTrimmed';
 import { formatMoney } from './currency';
+import { resolveLayout, registerColumns, photosFor, DEFAULT_TITLE, DEFAULT_FOOTER } from '../config/reportLayouts';
 
 /* jsPDF's addImage stretches the bitmap to whatever box you give it -- it does
    not preserve aspect. The cover was drawn 32x15mm (ratio 2.133) against a true
@@ -48,9 +49,17 @@ async function getSafeImageDataUrl(dataUrl) {
 }
 
 /**
- * Generates an executive Facilities Management condition assessment report
+ * Generates an executive Facilities Management condition assessment report.
+ *
+ * `options.layout` (a layout object or id, see config/reportLayouts) decides
+ * the sections, register columns, photos, costs, title and footer. Without it
+ * the published default layout is used; the built-in Standard layout draws
+ * the report exactly as it was before layouts existed.
  */
-export async function generateSurveyPDF(survey, selectedFacility = 'ALL') {
+export async function generateSurveyPDF(survey, selectedFacility = 'ALL', options = {}) {
+  const layout = resolveLayout(options.layout);
+  const show = layout.sections;
+  const costs = layout.showCosts;
   // autotable patches jsPDF's prototype, so it must finish loading before the
   // document is constructed or doc.autoTable would not exist.
   const [{ default: jsPDF }] = await Promise.all([
@@ -109,10 +118,25 @@ export async function generateSurveyPDF(survey, selectedFacility = 'ALL') {
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(7.5);
     doc.setTextColor(100, 116, 139);
-    doc.text('CONFIDENTIAL • OCS Facilities Management Condition Survey', 20, pageHeight - 5);
+    doc.text(layout.footerText || DEFAULT_FOOTER, 20, pageHeight - 5);
     doc.text(`Page ${pageNo} of ${totalPages}`, pageWidth - 20, pageHeight - 5, { align: 'right' });
   };
 
+  // Each section opens a new page -- except the first one drawn, which uses the
+  // page the document starts with.
+  let started = false;
+  const newPage = () => {
+    if (started) doc.addPage();
+    started = true;
+    return doc.internal.getNumberOfPages();
+  };
+  // Running header again on every page an autoTable spills onto.
+  const continuing = (firstPage, title) => () => {
+    if (doc.internal.getCurrentPageInfo().pageNumber > firstPage) renderHeader(`${title} (CONT.)`);
+  };
+
+  if (show.cover) {
+  started = true;
   // ==========================================
   // PAGE 1: EXECUTIVE COVER PAGE
   // ==========================================
@@ -128,12 +152,13 @@ export async function generateSurveyPDF(survey, selectedFacility = 'ALL') {
   }
 
   // Badge
-  doc.setFillColor(241, 94, 34); // sky-600
-  doc.roundedRect(20, 16, 85, 7, 2, 2, 'F');
+  const badge = (layout.title || DEFAULT_TITLE.pdf).toUpperCase();
   doc.setFontSize(8);
   doc.setFont('helvetica', 'bold');
+  doc.setFillColor(241, 94, 34); // sky-600
+  doc.roundedRect(20, 16, Math.min(Math.max(85, doc.getTextWidth(badge) + 8), pageWidth - 80), 7, 2, 2, 'F');
   doc.setTextColor(255, 255, 255);
-  doc.text('FM CONDITION & DEFECT SCHEDULE', 24, 21);
+  doc.text(doc.splitTextToSize(badge, pageWidth - 88)[0], 24, 21);
 
   // Title
   doc.setFontSize(20);
@@ -263,7 +288,11 @@ export async function generateSurveyPDF(survey, selectedFacility = 'ALL') {
   drawKpiCard(20, curY, 'AUDITED SNAGS', stats.total, 'Snag Elements', [40, 65, 124]);
   drawKpiCard(20 + kpiWidth + 3, curY, 'ATTACHED PHOTOS', stats.totalPhotos, 'Defect Evidence', [2, 132, 199]);
   drawKpiCard(20 + (kpiWidth + 3) * 2, curY, 'URGENT HAZARDS', stats.priorityCounts[1], 'Priority 1 Life Safety', [220, 38, 38]);
-  drawKpiCard(20 + (kpiWidth + 3) * 3, curY, 'REMEDIAL CAPEX', formatMoney(stats.totalCost), 'Estimated Budget', [40, 65, 124]);
+  if (costs) {
+    drawKpiCard(20 + (kpiWidth + 3) * 3, curY, 'REMEDIAL CAPEX', formatMoney(stats.totalCost), 'Estimated Budget', [40, 65, 124]);
+  } else {
+    drawKpiCard(20 + (kpiWidth + 3) * 3, curY, 'ESSENTIAL (P2)', stats.priorityCounts[2], 'Priority 2 Repairs', [234, 88, 12]);
+  }
 
   // Scope notes block
   curY += 34;
@@ -279,6 +308,7 @@ export async function generateSurveyPDF(survey, selectedFacility = 'ALL') {
   doc.text(doc.splitTextToSize(scopeText, pageWidth - 40), 20, curY + 6);
 
   // Digital Signatures
+  if (show.signatures) {
   curY += 26;
   doc.setFontSize(9);
   doc.setFont('helvetica', 'bold');
@@ -325,52 +355,58 @@ export async function generateSurveyPDF(survey, selectedFacility = 'ALL') {
       console.warn('Could not embed client signature', e);
     }
   }
+  }
+  }
 
 
   // ==========================================
   // PAGE 2: DEPARTMENTAL CAPEX & PRIORITY MATRIX
   // ==========================================
-  doc.addPage();
-  renderHeader('DEPARTMENTAL ALLOCATION & PRIORITY SCHEDULE');
+  if (show.departmentCapex || show.prioritySchedule) {
+  const breakdownTitle = 'DEPARTMENTAL ALLOCATION & PRIORITY SCHEDULE';
+  const breakdownPage = newPage();
+  renderHeader(breakdownTitle);
 
   let currentY = 28;
+  let sectionNo = 0;
+
+  if (show.departmentCapex) {
   doc.setFontSize(11);
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(15, 23, 42);
-  doc.text('1. REMEDIAL CAPEX BY MAINTENANCE DEPARTMENT / TRADE', 20, currentY);
+  doc.text(`${++sectionNo}. ${costs ? 'REMEDIAL CAPEX' : 'SNAGS'} BY MAINTENANCE DEPARTMENT / TRADE`, 20, currentY);
 
   // Department Table
   const deptTableRows = Object.keys(DEPARTMENTS).map((dKey) => {
     const dept = DEPARTMENTS[dKey];
     const dStat = stats.departmentStats[dKey] || { count: 0, cost: 0 };
     const pct = stats.totalCost > 0 ? ((dStat.cost / stats.totalCost) * 100).toFixed(1) : '0.0';
-    return [
-      dept.name,
-      dStat.count,
-      formatMoney(dStat.cost),
-      `${pct}%`
-    ];
+    return costs
+      ? [dept.name, dStat.count, formatMoney(dStat.cost), `${pct}%`]
+      : [dept.name, dStat.count];
   });
 
-  deptTableRows.push([
-    'TOTAL (All Departments Combined)',
-    stats.total,
-    formatMoney(stats.totalCost),
-    '100.0%'
-  ]);
+  deptTableRows.push(costs
+    ? ['TOTAL (All Departments Combined)', stats.total, formatMoney(stats.totalCost), '100.0%']
+    : ['TOTAL (All Departments Combined)', stats.total]);
 
   doc.autoTable({
     startY: currentY + 4,
-    head: [['Maintenance Department / Trade', 'Defect Count', 'Remedial Budget (AED)', 'CapEx Share (%)']],
+    head: [costs
+      ? ['Maintenance Department / Trade', 'Defect Count', 'Remedial Budget (AED)', 'CapEx Share (%)']
+      : ['Maintenance Department / Trade', 'Defect Count']],
     body: deptTableRows,
     theme: 'grid',
     headStyles: { fillColor: [40, 65, 124], textColor: [255, 255, 255], fontSize: 8.5, fontStyle: 'bold' },
     bodyStyles: { fontSize: 8, textColor: [30, 41, 59] },
-    columnStyles: {
+    columnStyles: costs ? {
       0: { fontStyle: 'bold', cellWidth: 70 },
       1: { halign: 'center', cellWidth: 30 },
       2: { halign: 'right', fontStyle: 'bold', cellWidth: 40 },
       3: { halign: 'center', cellWidth: 30 }
+    } : {
+      0: { fontStyle: 'bold', cellWidth: 130 },
+      1: { halign: 'center', cellWidth: 40 }
     },
     didParseCell: function(data) {
       if (data.row.index === deptTableRows.length - 1) {
@@ -379,18 +415,18 @@ export async function generateSurveyPDF(survey, selectedFacility = 'ALL') {
       }
     },
     margin: { top: 26, left: 20, right: 20, bottom: 18 },
-    didDrawPage: (data) => {
-      if (data.pageNumber > 2) renderHeader('DEPARTMENTAL ALLOCATION & PRIORITY SCHEDULE (CONT.)');
-    }
+    didDrawPage: continuing(breakdownPage, breakdownTitle)
   });
 
   currentY = doc.lastAutoTable.finalY + 12;
+  }
 
+  if (show.prioritySchedule) {
   // Priority Schedule Table
   doc.setFontSize(11);
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(15, 23, 42);
-  doc.text('2. REMEDIATION PRIORITY & TIMEFRAME SCHEDULE', 20, currentY);
+  doc.text(`${++sectionNo}. REMEDIATION PRIORITY & TIMEFRAME SCHEDULE`, 20, currentY);
 
   const priorityRows = [
     ['Priority 1 (Urgent)', 'Immediate / within 1-3 months', 'Life safety, health, statutory compliance, or operational breakdown.', stats.priorityCounts[1]],
@@ -419,21 +455,41 @@ export async function generateSurveyPDF(survey, selectedFacility = 'ALL') {
       }
     },
     margin: { top: 26, left: 20, right: 20, bottom: 18 },
-    didDrawPage: (data) => {
-      if (data.pageNumber > 2) renderHeader('DEPARTMENTAL ALLOCATION & PRIORITY SCHEDULE (CONT.)');
-    }
+    didDrawPage: continuing(breakdownPage, breakdownTitle)
   });
+  }
+  }
 
 
   // ==========================================
   // PAGE 3: DETAILED SNAG AUDIT SCHEDULE (FACILITY-WISE)
   // ==========================================
-  doc.addPage();
+  if (show.register) {
   const scheduleTitle = selectedFacility === 'ALL'
     ? 'DETAILED SNAG AUDIT SCHEDULE'
     : `AUDIT SCHEDULE — ${selectedFacility.toUpperCase()}`;
-  const assetSchedulePage = doc.internal.getNumberOfPages();
+  const assetSchedulePage = newPage();
   renderHeader(scheduleTitle);
+
+  // The layout's columns, sharing the page width in proportion. The Standard
+  // layout's add up to exactly the width, so its table is unchanged.
+  const columns = registerColumns(layout, 'pdf');
+  const tableWidth = pageWidth - 40;
+  const totalWeight = columns.reduce((n, c) => n + c.weight, 0) || 1;
+  const COLUMN_STYLE = {
+    number: { halign: 'center', fontStyle: 'bold' },
+    name: { fontStyle: 'bold' },
+    location: { fontStyle: 'bold' },
+    department: { halign: 'center' },
+    priority: { halign: 'center', fontStyle: 'bold' },
+    defect: {},
+    quantity: { halign: 'center' },
+    cost: { halign: 'right', fontStyle: 'bold' }
+  };
+  const columnStyles = Object.fromEntries(columns.map((c, i) => [i, {
+    cellWidth: Math.round((c.weight / totalWeight) * tableWidth * 100) / 100, ...COLUMN_STYLE[c.key]
+  }]));
+  const priorityIndex = columns.findIndex((c) => c.key === 'priority');
 
   // Snag fields added in the Admin Dashboard with "PDF report" on. They are
   // printed under the observations, so the table keeps its page-fitted widths.
@@ -444,36 +500,30 @@ export async function generateSurveyPDF(survey, selectedFacility = 'ALL') {
       .map((f) => [f.label, reportValue(f, item, 'snag')])
       .filter(([, v]) => v)
       .map(([l, v]) => `${l}: ${v}`);
-    return [
-      String(index + 1),
-      snagLabel(item, index),
-      item.location || 'General Site Area',
-      deptName,
-      `P${item.priority}`,
-      [item.defectDescription || 'No significant defect identified.', ...extra].join('\n'),
-      formatMoney(item.estimatedCost)
-    ];
+    const cell = {
+      number: String(index + 1),
+      name: snagLabel(item, index),
+      location: item.location || 'General Site Area',
+      department: deptName,
+      priority: `P${item.priority}`,
+      defect: [item.defectDescription || 'No significant defect identified.', ...extra].join('\n'),
+      quantity: `${item.quantity || 1}${item.unit ? ` ${item.unit}` : ''}`,
+      cost: formatMoney(item.estimatedCost)
+    };
+    return columns.map((c) => cell[c.key]);
   });
 
   doc.autoTable({
     startY: 26,
-    head: [['#', 'Snag / Component', 'Location / Room', 'Dept', 'Priority', 'Observations & Defects', 'Est. Cost']],
+    head: [columns.map((c) => c.label)],
     body: assetTableRows,
     theme: 'grid',
     headStyles: { fillColor: [12, 74, 110], textColor: [255, 255, 255], fontSize: 8, fontStyle: 'bold' },
     bodyStyles: { fontSize: 7.5, textColor: [30, 41, 59], cellPadding: 2.5 },
-    columnStyles: {
-      0: { cellWidth: 8, halign: 'center', fontStyle: 'bold' },
-      1: { cellWidth: 34, fontStyle: 'bold' },
-      2: { cellWidth: 32, fontStyle: 'bold' },
-      3: { cellWidth: 18, halign: 'center' },
-      4: { cellWidth: 14, halign: 'center', fontStyle: 'bold' },
-      5: { cellWidth: 44 },
-      6: { cellWidth: 20, halign: 'right', fontStyle: 'bold' }
-    },
+    columnStyles,
     didParseCell: function(data) {
       if (data.section === 'body') {
-        if (data.column.index === 4) {
+        if (data.column.index === priorityIndex) {
           const text = data.cell.text.join('');
           if (text.includes('P1')) data.cell.styles.textColor = [220, 38, 38];
           if (text.includes('P2')) data.cell.styles.textColor = [249, 115, 22];
@@ -481,21 +531,18 @@ export async function generateSurveyPDF(survey, selectedFacility = 'ALL') {
       }
     },
     margin: { top: 26, left: 20, right: 20, bottom: 18 },
-    didDrawPage: (data) => {
-      if (data.pageNumber > assetSchedulePage) {
-        renderHeader(scheduleTitle + ' (CONT.)');
-      }
-    }
+    didDrawPage: continuing(assetSchedulePage, scheduleTitle)
   });
+  }
 
 
   // ==========================================
   // PAGE 4: DEFECT PHOTO EVIDENCE LOG
   // ==========================================
-  const itemsWithPhotos = itemsToReport.filter((item) => item.photos && item.photos.length > 0);
+  const itemsWithPhotos = itemsToReport.filter((item) => photosFor(layout, item.photos || []).length > 0);
 
   if (itemsWithPhotos.length > 0) {
-    doc.addPage();
+    newPage();
     renderHeader('DEFECT PHOTOGRAPHIC EVIDENCE LOG');
 
     let photoY = 28;
@@ -503,10 +550,11 @@ export async function generateSurveyPDF(survey, selectedFacility = 'ALL') {
     for (let i = 0; i < itemsWithPhotos.length; i++) {
       const item = itemsWithPhotos[i];
       const deptName = DEPARTMENTS[item.department]?.name || 'General FM';
-      const totalSnagPhotos = item.photos.length;
+      const snagPhotos = photosFor(layout, item.photos || []);
+      const totalSnagPhotos = snagPhotos.length;
 
       for (let p = 0; p < totalSnagPhotos; p++) {
-        const photo = item.photos[p];
+        const photo = snagPhotos[p];
 
         if (photoY + 75 > pageHeight - 20) {
           doc.addPage();
@@ -593,9 +641,11 @@ export async function generateSurveyPDF(survey, selectedFacility = 'ALL') {
         doc.text(splitDefect, infoX, photoY + 50);
 
         // Action & Cost
-        doc.setFont('helvetica', 'bold');
-        doc.setTextColor(15, 23, 42);
-        doc.text(`Remedial Estimate: ${formatMoney(item.estimatedCost)}`, infoX, photoY + 63);
+        if (costs) {
+          doc.setFont('helvetica', 'bold');
+          doc.setTextColor(15, 23, 42);
+          doc.text(`Remedial Estimate: ${formatMoney(item.estimatedCost)}`, infoX, photoY + 63);
+        }
 
         photoY += 73;
       }
