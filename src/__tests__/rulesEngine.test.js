@@ -1,6 +1,6 @@
 import { describe, test, expect } from 'vitest';
-import { normaliseFormsConfig } from '../config/formConfig';
-import { evaluateRules, fieldState, missingRequired, submissionProblems, conditionMatches } from '../config/rulesEngine';
+import { normaliseFormsConfig, validateFormsConfig } from '../config/formConfig';
+import { evaluateRules, fieldState, missingRequired, submissionProblems, conditionMatches, describeRule, valueOptions, operatorsFor } from '../config/rulesEngine';
 
 const config = normaliseFormsConfig({
   sections: [{ id: 'sec_extra', scope: 'snag', label: 'Assessment' }],
@@ -110,5 +110,41 @@ describe('submissionProblems', () => {
 
   test('the default configuration never blocks a submission', () => {
     expect(submissionProblems(normaliseFormsConfig({}), { facility: {}, items: [{}, {}] })).toEqual([]);
+  });
+});
+
+describe('the rules editor helpers', () => {
+
+  test('built-in dropdowns offer their names and store their ids', () => {
+    expect(valueOptions(config, 'snag', 'priority')[0]).toEqual({ value: '1', label: 'Priority 1 (Urgent)' });
+    expect(valueOptions(config, 'snag', 'department').some((o) => o.value === 'HVAC')).toBe(true);
+    expect(valueOptions(config, 'snag', 'condition').map((o) => o.label)).toEqual(['Good', 'Critical']);
+    expect(valueOptions(config, 'snag', 'defectDescription')).toBeNull();
+  });
+
+  test('a priority rule chosen in the builder fires on a real snag', () => {
+    const rule = { id: 'p1', scope: 'snag', conditions: [{ fieldKey: 'priority', op: 'equals', value: '1' }], actions: [{ type: 'require', fieldKey: 'photos' }] };
+    expect(evaluateRules([rule], 'snag', { priority: 1 }).fired).toEqual(['p1']);
+    expect(evaluateRules([rule], 'snag', { priority: 2 }).fired).toEqual([]);
+    const any = { ...rule, conditions: [{ fieldKey: 'priority', op: 'any_of', value: ['1', '2'] }] };
+    expect(evaluateRules([any], 'snag', { priority: 2 }).fired).toEqual(['p1']);
+  });
+
+  test('photos can only be checked for empty / not empty', () => {
+    expect(operatorsFor(config, 'snag', 'photos')).toEqual(['is_empty', 'is_not_empty']);
+  });
+
+  test('reads as a sentence with option names, not stored values', () => {
+    expect(describeRule(config.rules[0], config)).toBe('IF Condition is Critical THEN show Defect, show Recommendation, make Photos required');
+  });
+
+  test('a condition with no value, or hiding an always-shown field, cannot be saved', () => {
+    const bad = normaliseFormsConfig({
+      ...config,
+      rules: [{ id: 'x', name: 'Bad', scope: 'snag', conditions: [{ fieldKey: 'condition', op: 'equals', value: '' }], actions: [{ type: 'hide', fieldKey: 'priority' }] }]
+    });
+    const problems = validateFormsConfig(bad).join(' ');
+    expect(problems).toMatch(/Bad: an IF condition has no value/);
+    expect(problems).toMatch(/Bad hides a field the app always shows/);
   });
 });

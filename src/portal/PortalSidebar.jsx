@@ -21,9 +21,14 @@ function buildNav({ access = {}, hasOpenProject }) {
   const isAdmin = !!access.config;
   return [
     { key: 'home', label: 'Dashboard', icon: Home, target: { view: 'home' } },
-    // One entry: forms, sections, fields and dropdown options are all edited on
-    // the same Survey Builder page, so separate links went nowhere new.
-    access.config && { key: 'builder', label: 'Survey Builder', icon: LayoutList, target: { admin: 'forms' } },
+    // Forms, sections, fields and dropdown options share one page; rules have their own.
+    access.config && {
+      key: 'builder', label: 'Survey Builder', icon: LayoutList,
+      children: [
+        { label: 'Forms & Fields', target: { admin: 'forms' } },
+        { label: 'Conditional Rules', target: { admin: 'rules' } }
+      ]
+    },
     {
       key: 'reports', label: 'Reports', icon: FileText,
       children: [
@@ -65,7 +70,7 @@ export default function PortalSidebar({
 }) {
   const nav = buildNav({ access, hasOpenProject });
   const groupOf = (target) => nav.find((g) => g.children?.some((c) => sameTarget(c.target, target)))?.key;
-  const [expanded, setExpanded] = useState(() => new Set([groupOf(current), 'reports', 'users', 'projects'].filter(Boolean)));
+  const [expanded, setExpanded] = useState(() => new Set([groupOf(current), 'builder', 'reports', 'users', 'projects'].filter(Boolean)));
 
   // The group holding the current page opens itself.
   useEffect(() => {

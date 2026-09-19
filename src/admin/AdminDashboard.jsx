@@ -18,7 +18,7 @@ import ReportBuilder from './ReportBuilder';
  */
 export const ADMIN_MODULES = [
   { key: 'forms', label: 'Forms & Fields', hint: 'Sections, fields, dropdown options', icon: LayoutList, ready: true },
-  { key: 'rules', label: 'Conditional Rules', hint: 'IF / THEN show, hide, require', icon: GitBranch, ready: false, stage: 'Next stage' },
+  { key: 'rules', label: 'Conditional Rules', hint: 'IF / THEN show, hide, require', icon: GitBranch, ready: true },
   { key: 'reports', label: 'Report Builder', hint: 'Columns, photos, headers', icon: FileText, ready: true },
   { key: 'users', label: 'Users', hint: 'Add, disable, reset passwords', icon: Users, ready: true },
   { key: 'roles', label: 'Roles & Permissions', hint: 'Roles, projects, backend rules', icon: ShieldCheck, ready: true },
@@ -78,6 +78,7 @@ export default function AdminDashboard({
       <section aria-label={active.label} className="min-w-0">
         {active.key === 'forms' && <FormBuilder key="forms" onPublished={onConfigPublished} />}
         {active.key === 'reports' && <ReportBuilder onPublished={onConfigPublished} />}
+        {active.key === 'rules' && <FormBuilder key="rules" mode="rules" onPublished={onConfigPublished} />}
         {active.key === 'versions' && <FormBuilder key="versions" onPublished={onConfigPublished} openHistory />}
         {active.key === 'users' && <UserManagement myId={currentUser?.id} me={currentUser} projects={projects} />}
         {active.key === 'roles' && <RolesPermissions onOpenUsers={() => onModuleChange('users')} />}

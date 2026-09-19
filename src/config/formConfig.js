@@ -257,6 +257,15 @@ export function validateFormsConfig(config) {
     if (!r.conditions.length) problems.push(`${name} has no IF condition.`);
     if (!r.actions.length) problems.push(`${name} has no THEN action.`);
     for (const c of r.conditions) if (!scopeKeys.has(c.fieldKey)) problems.push(`${name} checks a field that does not exist.`);
+    for (const c of r.conditions) {
+      const needsValue = !['is_empty', 'is_not_empty'].includes(c.op);
+      const empty = Array.isArray(c.value) ? !c.value.length : String(c.value ?? '').trim() === '';
+      if (needsValue && empty && scopeKeys.has(c.fieldKey)) problems.push(`${name}: an IF condition has no value to compare with.`);
+    }
+    const locked = new Set(config.fields.filter((f) => f.scope === r.scope && f.lockVisible).map((f) => f.key));
+    for (const a of r.actions) {
+      if (a.type === 'hide' && locked.has(a.fieldKey)) problems.push(`${name} hides a field the app always shows.`);
+    }
     for (const a of r.actions) if (!scopeKeys.has(a.fieldKey)) problems.push(`${name} changes a field that does not exist.`);
   }
   return [...new Set(problems)];

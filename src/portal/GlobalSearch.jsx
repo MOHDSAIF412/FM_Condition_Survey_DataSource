@@ -5,6 +5,7 @@ import { listUsers } from '../utils/auth';
 
 const PAGES_ADMIN = [
   { label: 'Forms & Fields', hint: 'Survey Builder', target: { admin: 'forms' } },
+  { label: 'Conditional Rules', hint: 'Survey Builder', target: { admin: 'rules' } },
   { label: 'Inspection Templates', hint: 'Survey Builder', target: { admin: 'templates' } },
   { label: 'Report Builder', hint: 'Reports', target: { admin: 'reports' } },
   { label: 'Users', hint: 'Administration', target: { admin: 'users' } },

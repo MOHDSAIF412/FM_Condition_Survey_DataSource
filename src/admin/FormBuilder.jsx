@@ -15,6 +15,7 @@ import {
 import { FormsConfigPreview } from '../config/FormsConfigContext';
 import { CustomFieldList } from '../components/CustomFields';
 import { useEscapeKey } from '../utils/useEscapeKey';
+import RulesEditor from './RulesEditor';
 
 const input = 'w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500 bg-white';
 const newId = (p) => `${p}_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`;
@@ -30,7 +31,8 @@ const fmtDate = (d) => (d ? new Date(d).toLocaleString([], { dateStyle: 'medium'
  * any of them can be rolled back to. Fields and options are archived, never
  * deleted, so recorded answers always keep their meaning.
  */
-export default function FormBuilder({ onPublished, openHistory = false }) {
+export default function FormBuilder({ onPublished, openHistory = false, mode = 'fields' }) {
+  // 'rules' shows the Conditional Rules editor on the same draft as the fields.
   const [loading, setLoading] = useState(true);
   const [versions, setVersions] = useState([]);
   const [working, setWorking] = useState(null);
@@ -245,7 +247,7 @@ export default function FormBuilder({ onPublished, openHistory = false }) {
       {/* Status and actions */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 flex flex-col lg:flex-row lg:items-center gap-3">
         <div className="flex-1 min-w-0">
-          <h2 className="text-lg font-bold text-slate-900">Forms &amp; Fields</h2>
+          <h2 className="text-lg font-bold text-slate-900">{mode === 'rules' ? 'Conditional Rules' : <>Forms &amp; Fields</>}</h2>
           <p className="text-xs text-slate-500 mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1">
             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 font-bold">
               Live: {published ? `version ${published.version}` : 'built-in form'}
@@ -303,7 +305,7 @@ export default function FormBuilder({ onPublished, openHistory = false }) {
         <label className="text-xs text-slate-600 inline-flex items-center gap-1.5 cursor-pointer ml-auto">
           <input type="checkbox" checked={showArchived} onChange={(e) => setShowArchived(e.target.checked)} /> Show archived
         </label>
-        <div className="inline-flex rounded-lg border border-slate-200 bg-white overflow-hidden">
+        {mode !== 'rules' && <div className="inline-flex rounded-lg border border-slate-200 bg-white overflow-hidden">
           <button type="button" onClick={() => setPreview(preview === 'web' ? null : 'web')} aria-pressed={preview === 'web'}
             className={`px-3 py-2 text-xs font-bold inline-flex items-center gap-1 ${preview === 'web' ? 'bg-sky-600 text-white' : 'text-slate-600 hover:bg-slate-50'}`}>
             <Monitor className="w-3.5 h-3.5" /> Preview web
@@ -312,9 +314,12 @@ export default function FormBuilder({ onPublished, openHistory = false }) {
             className={`px-3 py-2 text-xs font-bold inline-flex items-center gap-1 border-l border-slate-200 ${preview === 'mobile' ? 'bg-sky-600 text-white' : 'text-slate-600 hover:bg-slate-50'}`}>
             <Smartphone className="w-3.5 h-3.5" /> Preview mobile
           </button>
-        </div>
+        </div>}
       </div>
 
+      {mode === 'rules' ? (
+        <RulesEditor config={working} scope={scope} showArchived={showArchived} update={update} />
+      ) : (
       <div className={preview ? 'grid gap-4 xl:grid-cols-[1fr_380px]' : ''}>
         <div className="space-y-3">
           {sections.map((section) => {
@@ -404,6 +409,7 @@ export default function FormBuilder({ onPublished, openHistory = false }) {
 
         {preview && <FormPreview config={working} scope={scope} platform={preview} onClose={() => setPreview(null)} />}
       </div>
+      )}
 
       {editingField && (
         <FieldEditor
@@ -655,7 +661,7 @@ function FieldEditor({ field, publishedField, config, onChange, onClose }) {
               {!field.system && <Toggle id="fe-excel" label="Excel report" checked={field.excel} onChange={(v) => set({ excel: v })} />}
             </div>
             {field.system && (
-              <p className="text-[11px] text-slate-500 mt-2">Report columns for built-in fields are set in the Report Builder (a later stage).</p>
+              <p className="text-[11px] text-slate-500 mt-2">Report columns for built-in fields are set in the Report Builder (Reports menu).</p>
             )}
           </div>
 

@@ -233,6 +233,7 @@ export default function PortalHome({
               <ConfigRow label="Sections" value={config ? `${config.sections} active` : '—'} onClick={() => onNavigate({ admin: 'forms' })} />
               <ConfigRow label="Fields" value={config ? `${config.fields} active` : '—'} onClick={() => onNavigate({ admin: 'forms' })} />
               <ConfigRow label="Dropdown Options" value={config ? `${config.options} custom` : '—'} onClick={() => onNavigate({ admin: 'forms' })} />
+              <ConfigRow label="Conditional Rules" value={`${(formsConfig?.rules || []).filter((r) => !r.archived && r.enabled !== false).length} active`} onClick={() => onNavigate({ admin: 'rules' })} />
               <ConfigRow label="Inspection Templates" value={config ? `${config.templates} active` : '—'} onClick={() => onNavigate({ admin: 'templates' })} />
               <ConfigRow label="Report Layouts" value={reports?.version ? `${layoutCount} active` : 'Standard only'} onClick={() => onNavigate({ admin: 'reports' })} />
               <ConfigRow label="Review & Approval" value={`${stats.awaitingReview} waiting`} onClick={() => onNavigate({ view: 'review' })} />
