@@ -2,6 +2,7 @@ import React, { createContext, useContext, useEffect, useState, useCallback, use
 import { Capacitor } from '@capacitor/core';
 import { cachedPublishedConfig, loadPublishedConfig } from './configStore';
 import { isCloudConfigured } from '../utils/supabaseClient';
+import { applySettings } from './appSettings';
 
 /**
  * The published form configuration, available to every screen.
@@ -18,6 +19,12 @@ export const currentPlatform = () => (Capacitor.isNativePlatform() ? 'mobile' : 
 export function FormsConfigProvider({ children, enabled = true }) {
   const [state, setState] = useState(() => cachedPublishedConfig('forms'));
   const [reports, setReports] = useState(() => cachedPublishedConfig('reports'));
+  // Settings take effect from the device's copy straight away, then the server's.
+  const [settings, setSettings] = useState(() => {
+    const cached = cachedPublishedConfig('settings');
+    applySettings(cached.config);
+    return cached;
+  });
 
   const refresh = useCallback(async () => {
     if (!isCloudConfigured) return;
@@ -32,6 +39,12 @@ export function FormsConfigProvider({ children, enabled = true }) {
     loadPublishedConfig('reports')
       .then((next) => setReports((prev) => (prev.version === next.version && JSON.stringify(prev.config) === JSON.stringify(next.config) ? prev : next)))
       .catch((err) => console.warn('[config] report layouts unavailable:', err?.message));
+    loadPublishedConfig('settings')
+      .then((next) => {
+        applySettings(next.config);
+        setSettings((prev) => (prev.version === next.version && JSON.stringify(prev.config) === JSON.stringify(next.config) ? prev : next));
+      })
+      .catch((err) => console.warn('[config] settings unavailable:', err?.message));
   }, []);
 
   useEffect(() => {
@@ -51,8 +64,9 @@ export function FormsConfigProvider({ children, enabled = true }) {
     version: state.version,
     platform: currentPlatform(),
     reports,
+    settings,
     refresh
-  }), [state, reports, refresh]);
+  }), [state, reports, settings, refresh]);
 
   return <FormsConfigContext.Provider value={value}>{children}</FormsConfigContext.Provider>;
 }
@@ -71,5 +85,5 @@ export function useFormsConfig() {
   const ctx = useContext(FormsConfigContext);
   if (ctx) return ctx;
   const { config, version } = cachedPublishedConfig('forms');
-  return { config, version, platform: currentPlatform(), reports: cachedPublishedConfig('reports'), refresh: async () => {} };
+  return { config, version, platform: currentPlatform(), reports: cachedPublishedConfig('reports'), settings: cachedPublishedConfig('settings'), refresh: async () => {} };
 }

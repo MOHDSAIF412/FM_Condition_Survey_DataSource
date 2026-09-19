@@ -286,7 +286,7 @@ export default function App({ currentUser = null, onSignOut } = {}) {
   const mayReview = can(currentUser, 'review_surveys') || can(currentUser, 'approve_surveys') || mayManageTeam;
   /** Which Admin Dashboard modules this user may open. */
   const mayOpenAdmin = (module) => ({
-    forms: mayManageConfig, versions: mayManageConfig, audit: mayManageConfig, reports: mayManageConfig, rules: mayManageConfig,
+    forms: mayManageConfig, versions: mayManageConfig, audit: mayManageConfig, reports: mayManageConfig, rules: mayManageConfig, settings: mayManageConfig,
     users: mayManageUsers, roles: mayManageUsers, templates: mayManageTemplates
   })[module] === true;
   // Read by the upload path, which runs outside render.

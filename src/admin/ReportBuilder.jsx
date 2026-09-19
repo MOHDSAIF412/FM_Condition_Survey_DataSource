@@ -4,11 +4,12 @@ import {
   Lock, History, Upload, X, Save, Trash2, RotateCcw, Star, FileText
 } from 'lucide-react';
 import {
-  SECTIONS, PHOTO_LIMITS, DEFAULT_TITLE, DEFAULT_FOOTER, defaultReportsConfig, normaliseReportsConfig,
+  SECTIONS, PHOTO_LIMITS, DEFAULT_TITLE, defaultReportsConfig, normaliseReportsConfig,
   validateReportsConfig, describeReportChanges, clientLayout, editableColumns, columnInfo
 } from '../config/reportLayouts';
 import { listVersions, saveDraft, discardDraft, publishDraft, rollbackTo } from '../config/configStore';
 import { useEscapeKey } from '../utils/useEscapeKey';
+import { defaultReportFooter } from '../config/appSettings';
 
 const input = 'w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500 bg-white';
 const newId = () => `layout_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`;
@@ -353,7 +354,7 @@ function LayoutEditor({ layout, isDefault, onChange, onMakeDefault, onCopy, onAr
           <Field label="Report title" id="rl-title" hint={`Blank uses "${DEFAULT_TITLE.pdf}"`}>
             <input id="rl-title" className={input} value={layout.title} maxLength={80} onChange={(e) => onChange((l) => { l.title = e.target.value; })} />
           </Field>
-          <Field label="Footer text" id="rl-footer" hint={`Blank uses "${DEFAULT_FOOTER}"`}>
+          <Field label="Footer text" id="rl-footer" hint={`Blank uses "${defaultReportFooter()}"`}>
             <input id="rl-footer" className={input} value={layout.footerText} maxLength={120} onChange={(e) => onChange((l) => { l.footerText = e.target.value; })} />
           </Field>
         </div>

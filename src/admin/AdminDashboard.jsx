@@ -8,6 +8,7 @@ import UserManagement from '../components/UserManagement';
 import TemplateManager from '../components/TemplateManager';
 import RolesPermissions from './RolesPermissions';
 import ReportBuilder from './ReportBuilder';
+import SettingsPage from './SettingsPage';
 
 /**
  * The Admin / Developer Dashboard. Web portal only, administrators only.
@@ -26,7 +27,7 @@ export const ADMIN_MODULES = [
   // Review & Approval lives in the portal menu (Projects), not here: reviewers
   // and managers use it, not only administrators.
   { key: 'workflows', label: 'Workflows', hint: 'Status stages and approvals', icon: Workflow, ready: false, stage: 'Projects menu' },
-  { key: 'settings', label: 'Settings', hint: 'Application settings', icon: Settings, ready: false, stage: 'Later stage' },
+  { key: 'settings', label: 'Settings', hint: 'Organisation, priorities, report checks', icon: Settings, ready: true },
   { key: 'versions', label: 'Version History', hint: 'Published versions, rollback', icon: History, ready: true },
   { key: 'audit', label: 'Audit Log', hint: 'Who changed what, and when', icon: ScrollText, ready: true },
   { key: 'ai', label: 'AI Assistant', hint: 'Not enabled', icon: Sparkles, ready: false, stage: 'Not enabled' }
@@ -79,6 +80,7 @@ export default function AdminDashboard({
         {active.key === 'forms' && <FormBuilder key="forms" onPublished={onConfigPublished} />}
         {active.key === 'reports' && <ReportBuilder onPublished={onConfigPublished} />}
         {active.key === 'rules' && <FormBuilder key="rules" mode="rules" onPublished={onConfigPublished} />}
+        {active.key === 'settings' && <SettingsPage onPublished={onConfigPublished} />}
         {active.key === 'versions' && <FormBuilder key="versions" onPublished={onConfigPublished} openHistory />}
         {active.key === 'users' && <UserManagement myId={currentUser?.id} me={currentUser} projects={projects} />}
         {active.key === 'roles' && <RolesPermissions onOpenUsers={() => onModuleChange('users')} />}

@@ -15,13 +15,14 @@
 import { supabase, isCloudConfigured } from '../utils/supabaseClient';
 import { normaliseFormsConfig, defaultFormsConfig, validateFormsConfig } from './formConfig';
 import { normaliseReportsConfig, defaultReportsConfig, validateReportsConfig } from './reportLayouts';
+import { normaliseSettings, defaultSettings, validateSettings } from './appSettings';
 
 const CACHE_KEY = (kind) => `fm_config_${kind}_cache`;
 const COLUMNS = 'id, kind, version, status, config, notes, based_on, created_by, created_at, updated_at, published_by, published_at';
 
-const normalisers = { forms: normaliseFormsConfig, reports: normaliseReportsConfig };
-const defaults = { forms: defaultFormsConfig, reports: defaultReportsConfig };
-const validators = { forms: validateFormsConfig, reports: validateReportsConfig };
+const normalisers = { forms: normaliseFormsConfig, reports: normaliseReportsConfig, settings: normaliseSettings };
+const defaults = { forms: defaultFormsConfig, reports: defaultReportsConfig, settings: defaultSettings };
+const validators = { forms: validateFormsConfig, reports: validateReportsConfig, settings: validateSettings };
 
 function normalise(kind, config) {
   return (normalisers[kind] || ((c) => c || {}))(config || {});

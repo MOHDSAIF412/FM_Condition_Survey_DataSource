@@ -1,3 +1,5 @@
+import { getSettings } from '../config/appSettings';
+
 /**
  * What a report is about to leave out or get wrong, checked before it is built.
  *
@@ -54,6 +56,8 @@ export function reportCompleteness(input) {
  * `ask` is injectable so the wording can be tested.
  */
 export function confirmReportReady(input, ask = (msg) => window.confirm(msg)) {
+  // Settings can turn the check off for organisations that do not want it.
+  if (!getSettings().reportEvidenceCheck) return true;
   const { issues, ok } = reportCompleteness(input);
   if (ok) return true;
   return ask(

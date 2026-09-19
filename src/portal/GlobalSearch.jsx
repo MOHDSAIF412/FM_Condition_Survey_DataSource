@@ -12,7 +12,8 @@ const PAGES_ADMIN = [
   { label: 'Roles & Permissions', hint: 'Administration', target: { admin: 'roles' } },
   { label: 'Review & Approval', hint: 'Workflows', target: { view: 'review' } },
   { label: 'Version History', hint: 'Administration', target: { admin: 'versions' } },
-  { label: 'Audit Logs', hint: 'Administration', target: { admin: 'audit' } }
+  { label: 'Audit Logs', hint: 'Administration', target: { admin: 'audit' } },
+  { label: 'Settings', hint: 'Administration', target: { admin: 'settings' } }
 ];
 const PAGES_ALL = [
   { label: 'Dashboard', hint: 'Home', target: { view: 'home' } },

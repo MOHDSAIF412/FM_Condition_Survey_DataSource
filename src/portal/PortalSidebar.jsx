@@ -59,7 +59,7 @@ function buildNav({ access = {}, hasOpenProject }) {
     },
     access.config && { key: 'versions', label: 'Version History', icon: History, target: { admin: 'versions' } },
     access.config && { key: 'audit', label: 'Audit Logs', icon: ScrollText, target: { admin: 'audit' } },
-    access.admin && { key: 'settings', label: 'Settings', icon: Settings, disabled: true, stage: 'Later stage' }
+    access.config && { key: 'settings', label: 'Settings', icon: Settings, target: { admin: 'settings' } }
   ].filter(Boolean);
 }
 

@@ -6,7 +6,8 @@ import { PRIORITY_LEVELS, DEPARTMENTS, calculateSurveyStats, snagLabel } from '.
 import { reportFieldsFor, reportValue } from '../config/reportFields';
 import { OCS_LOGO_TRIMMED, OCS_LOGO_WHITE, OCS_LOGO_TRIMMED_RATIO } from '../assets/logoTrimmed';
 import { formatMoney } from './currency';
-import { resolveLayout, registerColumns, photosFor, DEFAULT_TITLE, DEFAULT_FOOTER } from '../config/reportLayouts';
+import { resolveLayout, registerColumns, photosFor, DEFAULT_TITLE } from '../config/reportLayouts';
+import { defaultReportFooter } from '../config/appSettings';
 
 /* jsPDF's addImage stretches the bitmap to whatever box you give it -- it does
    not preserve aspect. The cover was drawn 32x15mm (ratio 2.133) against a true
@@ -118,7 +119,7 @@ export async function generateSurveyPDF(survey, selectedFacility = 'ALL', option
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(7.5);
     doc.setTextColor(100, 116, 139);
-    doc.text(layout.footerText || DEFAULT_FOOTER, 20, pageHeight - 5);
+    doc.text(layout.footerText || defaultReportFooter(), 20, pageHeight - 5);
     doc.text(`Page ${pageNo} of ${totalPages}`, pageWidth - 20, pageHeight - 5, { align: 'right' });
   };
 
@@ -429,10 +430,11 @@ export async function generateSurveyPDF(survey, selectedFacility = 'ALL', option
   doc.text(`${++sectionNo}. REMEDIATION PRIORITY & TIMEFRAME SCHEDULE`, 20, currentY);
 
   const priorityRows = [
-    ['Priority 1 (Urgent)', 'Immediate / within 1-3 months', 'Life safety, health, statutory compliance, or operational breakdown.', stats.priorityCounts[1]],
-    ['Priority 2 (Essential)', 'Within 1-2 years', 'Essential repairs to prevent secondary structural or system degradation.', stats.priorityCounts[2]],
-    ['Priority 3 (Desirable)', 'Within 3-5 years', 'Desirable refurbishment to optimize energy efficiency or aesthetics.', stats.priorityCounts[3]],
-    ['Priority 4 (Long Term)', '5+ years', 'Routine long-term lifecycle replacements and preventative monitoring.', stats.priorityCounts[4]]
+    // Timeframes come from Settings (the built-in wording unless changed there).
+    ['Priority 1 (Urgent)', PRIORITY_LEVELS[1].timeframe, 'Life safety, health, statutory compliance, or operational breakdown.', stats.priorityCounts[1]],
+    ['Priority 2 (Essential)', PRIORITY_LEVELS[2].timeframe, 'Essential repairs to prevent secondary structural or system degradation.', stats.priorityCounts[2]],
+    ['Priority 3 (Desirable)', PRIORITY_LEVELS[3].timeframe, 'Desirable refurbishment to optimize energy efficiency or aesthetics.', stats.priorityCounts[3]],
+    ['Priority 4 (Long Term)', PRIORITY_LEVELS[4].timeframe, 'Routine long-term lifecycle replacements and preventative monitoring.', stats.priorityCounts[4]]
   ];
 
   doc.autoTable({
