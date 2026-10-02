@@ -1,5 +1,8 @@
 # HANDOFF — FM Condition Survey
 
+> Historical handoff. See README.md and SYNC_ROLLOUT.md for the 2026-10-02 local
+> changes and the database migration required before release.
+
 *Written 2026-09-12. Verified against the real source tree and `git log`, not
 reconstructed from memory. Where a fact came from a live database query, the
 date of that query is stated — the Supabase MCP connection has since dropped,

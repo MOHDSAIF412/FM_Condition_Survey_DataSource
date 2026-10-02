@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { 
   Plus, 
   Search, 
@@ -27,6 +27,14 @@ export default function SurveyList({
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedDept, setSelectedDept] = useState('ALL');
   const [selectedPriority, setSelectedPriority] = useState('ALL');
+  useEffect(() => {
+    const focus = (event) => {
+      if (event.detail.scope !== 'snag') return;
+      setSearchQuery(''); setSelectedDept('ALL'); setSelectedPriority('ALL');
+    };
+    window.addEventListener('fm:focus-field', focus);
+    return () => window.removeEventListener('fm:focus-field', focus);
+  }, []);
 
   // Compute distinct recent locations to offer quick chips
   const recentLocations = useMemo(() => {

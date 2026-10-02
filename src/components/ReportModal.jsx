@@ -24,8 +24,8 @@ import {
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { PRIORITY_LEVELS, DEPARTMENTS, calculateSurveyStats, snagLabel } from '../types/survey';
-import { generateSurveyPDF } from '../utils/pdfGenerator';
-import { generateSurveyExcel } from '../utils/excelGenerator';
+import { generateSurveyPDF } from '../utils/reportExports';
+import { generateSurveyExcel } from '../utils/reportExports';
 import { formatMoney } from '../utils/currency';
 import { hydratePhotos } from '../utils/cloudSync';
 import { confirmReportReady } from '../utils/reportCompleteness';

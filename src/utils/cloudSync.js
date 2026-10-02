@@ -6,7 +6,7 @@
  * connection is available and pulls changes from other devices down, which is
  * what makes a phone and a laptop show the same survey.
  *
- * Conflicts are resolved last-write-wins on `revision`.
+ * Uploads commit atomically against the revision the device actually read.
  */
 import { supabase, isCloudConfigured, PHOTO_BUCKET } from './supabaseClient';
 
@@ -98,61 +98,17 @@ export async function downloadPhoto(storagePath) {
 
 /* -------------------------------------------------------------------- push */
 
-/**
- * Pushes the whole survey. Items are replaced wholesale: a survey is tens of
- * rows, so diffing would add failure modes for no real gain, and replacing
- * makes deletes propagate without extra bookkeeping.
- */
+/** Uploads photos, then atomically commits the survey through the database RPC. */
 export async function pushSurvey(survey) {
-  if (!isCloudConfigured || !survey || !survey.id) return { skipped: true };
-
-  // This push replaces the server's items wholesale, so a client pushing a
-  // stale or partially-loaded survey would silently destroy whatever the
-  // server holds.
-  //
-  // Comparing `revision` counters is NOT sufficient: each browser increments
-  // its own local counter on every save, so a device that has been edited a
-  // lot ends up with a higher number than the server without ever having seen
-  // the server's current state. That defeated the first version of this guard
-  // and cost a survey its items.
-  //
-  // The reliable test is the one an ETag makes: only push if this client has
-  // actually seen the server revision it is about to overwrite. `cloudRevision`
-  // is stamped onto the local record whenever we pull, so it means "the server
-  // state I am building on".
+  if (!isCloudConfigured || !survey?.id) return { skipped: true };
   const { data: current, error: readErr } = await supabase
-    .from('condition_surveys')
-    .select('revision')
-    .eq('id', survey.id)
-    .limit(1);
+    .from('condition_surveys').select('revision').eq('id', survey.id).limit(1);
   if (readErr) throw readErr;
-
-  const serverExists = Boolean(current && current.length);
-  const serverRevision = serverExists ? current[0].revision || 0 : 0;
-  const seenRevision = survey.cloudRevision;
-
-  if (serverExists && seenRevision !== undefined && seenRevision !== serverRevision) {
+  const serverRevision = current?.[0]?.revision ?? 0;
+  const seenRevision = survey.cloudRevision ?? null;
+  if (current?.length && seenRevision !== serverRevision) {
     return { conflict: true, reason: 'stale', serverRevision, seenRevision };
   }
-
-  // Belt and braces for the case the ETag check cannot see: a client that has
-  // never pulled (cloudRevision undefined) and holds far less than the server.
-  // Losing most of a survey is never an acceptable silent outcome, so refuse
-  // and make the caller reconcile.
-  if (serverExists && seenRevision === undefined) {
-    const { count, error: countErr } = await supabase
-      .from('survey_items')
-      .select('id', { count: 'exact', head: true })
-      .eq('survey_id', survey.id);
-    if (countErr) throw countErr;
-
-    const serverItems = count || 0;
-    const localItems = (survey.items || []).length;
-    if (serverItems >= 3 && localItems < serverItems / 2) {
-      return { conflict: true, reason: 'destructive', serverItems, localItems };
-    }
-  }
-
   const nextRevision = serverRevision + 1;
 
   // `project_id` is included only when this client knows it. An upsert updates
@@ -173,18 +129,6 @@ export async function pushSurvey(survey) {
   };
   if (survey.projectId) surveyRow.project_id = survey.projectId;
 
-  // `facility_number` is deliberately absent from surveyRow: the column's
-  // sequence default assigns it when the row is first inserted, and an upsert
-  // only touches the columns it is given, so later edits leave it alone. That
-  // is what makes the number collision-proof -- worked out on the device, two
-  // surveyors creating a facility at the same moment both picked the same one.
-  const { data: savedSurvey, error: surveyErr } = await supabase
-    .from('condition_surveys')
-    .upsert(surveyRow)
-    .select('facility_number')
-    .maybeSingle();
-  if (surveyErr) throw surveyErr;
-
   const items = survey.items || [];
 
   // Upload any photo not yet in storage, before rows reference it.
@@ -192,7 +136,7 @@ export async function pushSurvey(survey) {
   const failedPhotoIds = [];
   for (const item of items) {
     for (const photo of item.photos || []) {
-      if (!photo.dataUrl && !photo.storagePath) continue;
+      if (!photo.dataUrl && !photo.storagePath) { failedPhotoIds.push(photo.id); continue; }
 
       // Already in storage and we never loaded the bytes: keep the row pointing
       // at the existing object rather than re-uploading nothing.
@@ -241,17 +185,7 @@ export async function pushSurvey(survey) {
   const deletedItemIds = Array.isArray(survey.deletedItemIds) ? survey.deletedItemIds : [];
   const deletedPhotoIds = Array.isArray(survey.deletedPhotoIds) ? survey.deletedPhotoIds : [];
 
-  if (deletedPhotoIds.length) {
-    const { error } = await supabase.from('survey_photos').delete().in('id', deletedPhotoIds);
-    if (error) throw error;
-  }
-  if (deletedItemIds.length) {
-    const { error } = await supabase.from('survey_items').delete().in('id', deletedItemIds);
-    if (error) throw error;
-  }
-
-  if (items.length) {
-    const rows = items.map((item, position) => ({
+  const rows = items.map((item, position) => ({
       id: item.id,
       survey_id: survey.id,
       position,
@@ -269,26 +203,22 @@ export async function pushSurvey(survey) {
         : {})
     }));
 
-    // Two batches on purpose. A batch upsert writes every column any row in it
-    // names, so one snag carrying custom values would reset them to empty on
-    // every other snag in the batch that does not. Snags with no customValues
-    // at all (made before custom fields existed, or by an older app version)
-    // are sent without the column, which leaves whatever the server holds.
-    const withCustom = rows.filter((r) => 'custom_values' in r);
-    const withoutCustom = rows.filter((r) => !('custom_values' in r));
-    for (const batch of [withCustom, withoutCustom]) {
-      if (!batch.length) continue;
-      const { error: itemErr } = await supabase.from('survey_items').upsert(batch);
-      if (itemErr) throw itemErr;
+  const { data: committed, error: commitError } = await supabase.rpc('fm_commit_survey', {
+    p_survey: surveyRow,
+    p_expected_revision: seenRevision,
+    p_items: rows,
+    p_photos: photoRows,
+    p_deleted_items: deletedItemIds,
+    p_deleted_photos: deletedPhotoIds
+  });
+  if (commitError) {
+    if (commitError.code === 'PGRST202' || commitError.code === '42883') {
+      throw new Error('Safe sync needs a database update. Your work remains saved on this device.');
     }
+    throw commitError;
   }
-
-  if (photoRows.length) {
-    // Upsert by id: re-sending a photo that is already there is a no-op rather
-    // than a duplicate-key failure, which is what makes a retry safe.
-    const { error: photoErr } = await supabase.from('survey_photos').upsert(photoRows);
-    if (photoErr) throw photoErr;
-  }
+  if (committed?.conflict) return committed;
+  if (!committed?.pushed) throw new Error('The server did not confirm this upload. Your work remains on this device.');
 
   return {
     pushed: true,
@@ -301,9 +231,10 @@ export async function pushSurvey(survey) {
     // What the database actually assigned. While offline the facility carries a
     // provisional number worked out on the device; this is the authoritative
     // one and the caller adopts it once the facility has reached the server.
-    facilityNumber: savedSurvey?.facility_number ?? null,
+    facilityNumber: committed.facilityNumber ?? null,
     // We are now the server state, so this is what the next push builds on.
-    cloudRevision: nextRevision
+    cloudRevision: committed.cloudRevision,
+    photoPaths: Object.fromEntries(photoRows.map((p) => [p.id, p.storage_path]))
   };
 }
 

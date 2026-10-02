@@ -5,6 +5,7 @@ import './index.css';
 
 import ErrorBoundary from './components/ErrorBoundary';
 import { initOtaUpdates } from './utils/otaUpdates';
+import { registerOfflineShell } from './utils/offlineShell';
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
@@ -18,3 +19,4 @@ ReactDOM.createRoot(document.getElementById('root')).render(
 // that never reports ready as broken and rolls back to the previous one, which
 // is the safety net that stops a bad update from bricking the app.
 initOtaUpdates();
+registerOfflineShell();

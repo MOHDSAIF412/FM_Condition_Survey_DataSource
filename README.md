@@ -1,68 +1,65 @@
 # FM Condition Survey Portal
 
-Mobile-first Facilities Management condition survey and snagging app. Runs fully
-offline in the browser, captures defects with photos and touch signatures, and
-exports an audit-ready **PDF** and multi-sheet **Excel (.xlsx)** report.
+Facilities inspections for web and Android: projects, facility details, snags,
+photos, GPS, signatures, review/approval, and PDF/Excel reports with AED costs.
 
-## Features
+## Run locally
 
-- Facility & site details with 23 pre-configured facilities and GPS coordinates
-- Asset / defect register with department, priority (P1–P4), quantity and cost
-- Photo evidence per defect, compressed on-device before storage
-- Scorecard with CapEx totals by department and priority
-- Touch signature sign-off for surveyor and client
-- PDF report (cover, CapEx allocation, defect schedule, photo evidence log)
-- Excel report (Executive Summary, Department CapEx, Snag Register, Photo Log)
-- JSON backup / restore
-- Offline-first: all data is stored in the browser's IndexedDB
+Use Node.js 22 or newer and npm:
 
-## Requirements
-
-- Node.js 18 or newer
-
-## Local development
-
-```bash
-npm install
+```sh
+npm ci
 npm run dev
 ```
 
-The dev server listens on port 3000 (override with `PORT`) and is exposed on the
-local network so it can be opened from a phone or tablet on the same Wi-Fi.
+Vite serves port 3000 (override with PORT). Copy .env.example to .env.local and
+configure VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY for authenticated cloud
+access. Use a publishable/anon key, never a service-role key in a browser build.
+Without configuration, the app runs in local-only mode.
 
-## Production build
+## Storage, accounts, and offline use
 
-```bash
-npm run build     # outputs to dist/
-npm run preview   # serve the built app locally
+- Survey drafts and compressed photos live in IndexedDB on the device.
+- Configured builds use Supabase Auth, project membership, and database RLS.
+- Supabase stores survey rows and photos in the private survey-photos bucket.
+- After the first successful production-page load, the application caches its
+  files for offline restart. Check **Sync status → App available offline** before
+  leaving coverage. Development mode does not install a service worker.
+- Android bundles its application files and does not use the web service worker.
+- Only facilities/photos already downloaded or created on the device are usable
+  offline. Creating projects and the first sign-in require a connection.
+- Clearing site data deletes local drafts, offline files, and recovery backups.
+  Use **Backup Survey (JSON)** before clearing storage or changing devices.
+
+Edits upload on reconnect; failed uploads retain their pending flag. A stale
+device copy is kept for comparison instead of overwriting another device's work.
+**Recovery backups** in the account menu downloads copies preserved during
+conflict resolution. These backups remain local and do not enter the sync queue.
+
+## Tests and builds
+
+```sh
+npm test
+npm run build:web
+npm run build
+npm run preview
 ```
 
-## Deploying to Vercel
+build:web produces dist/; build also packages the Android OTA bundle.
+Tests include isolated PostgreSQL migration/RLS/rollback checks through PGlite,
+IndexedDB upload/restart tests, service-worker cache behavior, and report checks.
+See ANDROID.md for native builds.
 
-The repo already contains `vercel.json`. Import the GitHub repository at
-[vercel.com/new](https://vercel.com/new) and deploy — Vercel detects Vite and
-uses the settings below:
+## Deployment
 
-| Setting          | Value           |
-| ---------------- | --------------- |
-| Framework Preset | Vite            |
-| Build Command    | `npm run build` |
-| Output Directory | `dist`          |
-| Install Command  | `npm install`   |
+Vercel uses vercel.json. Set the same two environment variables there before
+building. **Apply the atomic-sync database migration before deploying this
+client**, and coordinate the Android update: older sync clients will be refused
+until updated. The new client keeps work local if the migration is missing.
 
-No environment variables are required.
+See [SYNC_ROLLOUT.md](SYNC_ROLLOUT.md) for prerequisites, validation, and rollback.
+The checked-in migration is not proof that it has been applied to production.
 
-## Where the data lives
-
-Surveys are saved to **IndexedDB in the browser on the device that created
-them**. Nothing is uploaded to a server. That means:
-
-- The app works with no internet connection.
-- Data is **not** shared between devices or users.
-- Clearing the browser's site data deletes the surveys.
-
-Use **More Actions → Backup Survey (JSON)** to export a survey, and
-**Restore Survey (JSON)** to load it on another device.
-
-If surveys need to be shared across devices or surveyors, a hosted database is
-required. See `DATABASE.md`.
+Web updates activate after all tabs for the app are closed and reopened, keeping
+open inspections on one consistent build. Report engines and administration
+screens load on demand and are also cached for offline use.

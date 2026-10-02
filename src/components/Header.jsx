@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import OfflineStatus from './OfflineStatus';
 import { roleLabel as labelForRole, isAdminUser } from '../utils/roles';
 import { can } from '../utils/auth';
 import {
@@ -29,6 +30,7 @@ const MENU_HEADING = 'px-4 pt-2 pb-1 text-[10px] font-bold uppercase tracking-wi
 export default function Header({
   survey,
   onReset,
+  onOpenRecoveries,
   onOpenReport,
   onExportJSON,
   onImportJSON,
@@ -56,7 +58,8 @@ export default function Header({
     ? { label: pendingCount > 0 ? `Offline - ${pendingCount} waiting` : 'Offline',
         cls: 'bg-amber-50 text-amber-700 border-amber-200', dot: 'bg-amber-500' }
     : ({
-        off:     { label: 'Offline Ready',    cls: 'bg-emerald-50 text-emerald-700 border-emerald-200', dot: 'bg-emerald-500' },
+        off:     { label: 'Device storage',   cls: 'bg-emerald-50 text-emerald-700 border-emerald-200', dot: 'bg-emerald-500' },
+        conflict: { label: 'Review sync conflict', cls: 'bg-amber-50 text-amber-700 border-amber-200', dot: 'bg-amber-500' },
         idle:    { label: 'Online',           cls: 'bg-emerald-50 text-emerald-700 border-emerald-200', dot: 'bg-emerald-500' },
         syncing: { label: pendingCount > 0 ? `Syncing ${pendingCount}...` : 'Syncing...',
                    cls: 'bg-sky-50 text-sky-700 border-sky-200', dot: 'bg-sky-500' },
@@ -164,6 +167,7 @@ export default function Header({
                 <div className="fixed inset-0 z-40" onClick={() => setShowBell(false)} />
                 <div className="absolute right-0 mt-2 w-64 bg-white border border-slate-200 rounded-xl shadow-xl py-3 px-4 z-50">
                   <p className="text-xs font-bold text-slate-700 mb-1">Sync status</p>
+                  <OfflineStatus />
                   <p className="text-xs text-slate-600 flex items-center gap-1.5">
                     <span className={`w-1.5 h-1.5 rounded-full ${sync.dot}`} />
                     {sync.label}
@@ -226,6 +230,7 @@ export default function Header({
                   )}
 
                   <p className={MENU_HEADING}>This facility</p>
+                  <button className={MENU_ITEM} onClick={() => { setShowMenu(false); onOpenRecoveries?.(); }}>Recovery backups</button>
 
                   {canDownloadReports && (
                     <button

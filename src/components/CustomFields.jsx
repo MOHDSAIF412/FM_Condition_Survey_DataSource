@@ -1,4 +1,5 @@
 import React, { useMemo } from 'react';
+import { FieldError, useFieldError } from './SubmissionValidation';
 import { Star, LayoutList } from 'lucide-react';
 import { useFormsConfig } from '../config/FormsConfigContext';
 import { sectionsForScope, fieldsForSection, activeOptions, systemField, valuesForScope } from '../config/formConfig';
@@ -54,8 +55,10 @@ export function useSystemFields(scope, record) {
   }, [config, platform, ruleResult, scope]);
 }
 
-function FieldInput({ field, value, onChange, id, cls, required }) {
-  const common = { id, 'aria-required': required || undefined, className: cls.input };
+function FieldInput({ field, value, onChange, id, cls, required, scope, record }) {
+  const error = useFieldError(scope, record, field.key);
+  const common = { id, 'aria-required': required || undefined, 'aria-invalid': error ? true : undefined,
+    'aria-describedby': error ? `${id}-error` : undefined, className: cls.input };
   switch (field.type) {
     case 'textarea':
       return <textarea {...common} rows={2} placeholder={field.placeholder} value={value ?? ''} onChange={(e) => onChange(e.target.value)} />;
@@ -86,7 +89,7 @@ function FieldInput({ field, value, onChange, id, cls, required }) {
       const extra = selected.filter((v) => !opts.some((o) => o.value === v))
         .map((v) => ({ id: `old_${v}`, value: v, label: `${(field.options || []).find((o) => o.value === v)?.label || v} (no longer offered)` }));
       return (
-        <div id={id} role="group" aria-label={field.label} className="flex flex-wrap gap-1.5">
+        <div {...common} role="group" aria-label={field.label} className="flex flex-wrap gap-1.5">
           {[...opts, ...extra].map((o) => {
             const on = selected.includes(o.value);
             return (
@@ -103,13 +106,13 @@ function FieldInput({ field, value, onChange, id, cls, required }) {
     case 'checkbox':
       return (
         <label className="inline-flex items-center gap-2 text-sm text-slate-700 cursor-pointer">
-          <input id={id} type="checkbox" className="w-4 h-4" checked={value === true} onChange={(e) => onChange(e.target.checked)} />
+          <input {...common} type="checkbox" className="w-4 h-4" checked={value === true} onChange={(e) => onChange(e.target.checked)} />
           {field.placeholder || 'Yes'}
         </label>
       );
     case 'yesno':
       return (
-        <div id={id} role="radiogroup" aria-label={field.label} className="inline-flex rounded-xl border border-slate-300 overflow-hidden">
+        <div {...common} role="radiogroup" aria-label={field.label} className="inline-flex rounded-xl border border-slate-300 overflow-hidden">
           {[['yes', 'Yes'], ['no', 'No']].map(([v, l]) => (
             <button key={v} type="button" role="radio" aria-checked={value === v}
               onClick={() => onChange(value === v ? '' : v)}
@@ -121,7 +124,7 @@ function FieldInput({ field, value, onChange, id, cls, required }) {
       );
     case 'rating':
       return (
-        <div id={id} role="radiogroup" aria-label={field.label} className="flex gap-1">
+        <div {...common} role="radiogroup" aria-label={field.label} className="flex gap-1">
           {[1, 2, 3, 4, 5].map((n) => (
             <button key={n} type="button" role="radio" aria-checked={value === n} aria-label={`${n} of 5`}
               onClick={() => onChange(value === n ? '' : n)} className="p-1">
@@ -160,7 +163,8 @@ export function CustomFieldList({ scope, sectionId, record, onChangeValue, idPre
               ? <span className={cls.label}>{field.label}{required && <span className="text-rose-600"> *</span>}</span>
               : <label htmlFor={id} className={cls.label}>{field.label}{required && <span className="text-rose-600"> *</span>}</label>}
             <FieldInput field={field} value={stored[field.key]} onChange={(v) => onChangeValue(field.key, v)}
-              id={id} cls={cls} required={required} />
+              id={id} cls={cls} required={required} scope={scope} record={record} />
+            <FieldError scope={scope} record={record} fieldKey={field.key} id={`${id}-error`} />
             {field.helpText && <p className="text-[11px] text-slate-500 mt-1">{field.helpText}</p>}
           </div>
         );

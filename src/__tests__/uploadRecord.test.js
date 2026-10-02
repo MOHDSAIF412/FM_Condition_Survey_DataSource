@@ -8,7 +8,7 @@ test('marks synced when the server accepts the upload', async () => {
   const markSynced = vi.fn();
   const res = await uploadSurveyRecord(record, { push, markSynced });
   expect(res.pushed).toBe(true);
-  expect(markSynced).toHaveBeenCalledWith('f1');
+  expect(markSynced).toHaveBeenCalledWith('f1', record, { pushed: true });
 });
 
 test('does NOT mark synced when the server refuses the upload', async () => {
@@ -21,15 +21,14 @@ test('does NOT mark synced when the server refuses the upload', async () => {
   expect(markSynced).not.toHaveBeenCalled();
 });
 
-test('re-bases onto the server revision when the server moved on, then marks synced', async () => {
+test('keeps a stale device copy pending instead of rebasing over server changes', async () => {
   const push = vi.fn()
     .mockResolvedValueOnce({ conflict: true, reason: 'stale', serverRevision: 7, seenRevision: 4 })
     .mockResolvedValueOnce({ pushed: true });
   const markSynced = vi.fn();
   await uploadSurveyRecord(record, { push, markSynced });
-  expect(push).toHaveBeenCalledTimes(2);
-  expect(push.mock.calls[1][0]).toMatchObject({ id: 'f1', cloudRevision: 7 });
-  expect(markSynced).toHaveBeenCalledWith('f1');
+  expect(push).toHaveBeenCalledTimes(1);
+  expect(markSynced).not.toHaveBeenCalled();
 });
 
 test('leaves the facility unsent when the network fails', async () => {

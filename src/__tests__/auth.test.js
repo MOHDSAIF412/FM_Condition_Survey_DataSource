@@ -9,7 +9,19 @@ globalThis.localStorage = {
   removeItem: (k) => store.delete(k)
 };
 
-const { can, cachedProfile, clearCachedProfile } = await import('../utils/auth');
+const { can, cachedProfile, clearCachedProfile, noteSignedInAccount } = await import('../utils/auth');
+
+test('account switching clears list caches without deleting pending survey backups', () => {
+  store.clear();
+  noteSignedInAccount('account-a');
+  store.set('fm_projects_cache', '[{"id":"private-a"}]');
+  store.set('fm_survey_list_cache', '[{"id":"survey-a"}]');
+  store.set('fm_current_survey', '{"id":"pending-a","pendingSync":true}');
+  noteSignedInAccount('account-b');
+  expect(store.has('fm_projects_cache')).toBe(false);
+  expect(store.has('fm_survey_list_cache')).toBe(false);
+  expect(JSON.parse(store.get('fm_current_survey')).pendingSync).toBe(true);
+});
 
 describe('can', () => {
   test('admins hold every permission', () => {

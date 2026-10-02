@@ -3,6 +3,8 @@
  * Handles large surveys and compressed photos with no 5MB localStorage limit.
  */
 
+import { settleUpload } from './syncSettlement';
+
 const DB_NAME = 'FM_Condition_Survey_DB';
 const SYNC_CHANNEL = 'fm_survey_sync';
 
@@ -111,23 +113,49 @@ function openDB() {
  * Marks the locally stored survey as successfully pushed to the server.
  * Written directly rather than through React state so it cannot retrigger a save.
  */
-export async function markSurveySynced(surveyId) {
+export async function markSurveySynced(surveyId, uploaded, result) {
   try {
     const db = await openDB();
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
       const tx = db.transaction(STORE_SURVEYS, 'readwrite');
       const store = tx.objectStore(STORE_SURVEYS);
       const req = store.get(surveyId);
+      let settled = false;
       req.onsuccess = () => {
-        if (!req.result) return resolve(false);
-        store.put({ ...req.result, pendingSync: false });
-        resolve(true);
+        if (!req.result || !uploaded || !result?.pushed) return;
+        const next = settleUpload(req.result, uploaded, result);
+        store.put(next);
+        settled = !next.pendingSync;
       };
-      req.onerror = () => resolve(false);
+      tx.oncomplete = () => resolve(settled);
+      tx.onerror = () => reject(tx.error);
+      tx.onabort = () => reject(tx.error || new Error('Sync receipt could not be saved'));
     });
   } catch (e) {
-    return false;
+    throw new Error('Could not save the upload receipt on this device.', { cause: e });
   }
+}
+
+export async function saveSurveyRecovery(survey) {
+  const db = await openDB();
+  const key = `recovery:${survey.id}:${crypto.randomUUID()}`;
+  await new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_SETTINGS, 'readwrite');
+    tx.objectStore(STORE_SETTINGS).put({ key, survey, savedAt: new Date().toISOString() });
+    tx.oncomplete = resolve;
+    tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error || new Error('Recovery backup failed'));
+  });
+  return key;
+}
+
+export async function listSurveyRecoveries() {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const req = db.transaction(STORE_SETTINGS, 'readonly').objectStore(STORE_SETTINGS).getAll();
+    req.onsuccess = () => resolve(req.result.filter((r) => r.key.startsWith('recovery:')));
+    req.onerror = () => reject(req.error);
+  });
 }
 
 /**

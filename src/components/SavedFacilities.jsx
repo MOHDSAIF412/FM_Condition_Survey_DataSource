@@ -11,8 +11,8 @@ import { sortDate } from '../utils/surveySelection';
 import { loadSurveyForReading } from '../utils/surveyLoader';
 import { confirmReportReady } from '../utils/reportCompleteness';
 import NoReportAccess from './NoReportAccess';
-import { generateSurveyPDF } from '../utils/pdfGenerator';
-import { generateSurveyExcel } from '../utils/excelGenerator';
+import { generateSurveyPDF } from '../utils/reportExports';
+import { generateSurveyExcel } from '../utils/reportExports';
 import { formatMoney } from '../utils/currency';
 import { stageOf, STAGE_BY_KEY, isOverdue } from '../utils/workflow';
 import {

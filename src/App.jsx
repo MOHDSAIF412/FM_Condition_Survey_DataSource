@@ -1,21 +1,26 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { SubmissionValidation, focusSubmissionField } from './components/SubmissionValidation';
+import WorkflowBanner from './components/WorkflowBanner';
+import React, { useState, useEffect, useRef, useMemo, lazy, Suspense } from 'react';
 import Header from './components/Header';
+import SyncConflict from './components/SyncConflict';
+import RecoveryBackups from './components/RecoveryBackups';
+import { contentKey, settleUpload } from './utils/syncSettlement';
 import Navigation from './components/Navigation';
 import FacilityInfo from './components/FacilityInfo';
 import SurveyList from './components/SurveyList';
 import AnalyticsView from './components/AnalyticsView';
 import SignatureSection from './components/SignatureSection';
-import ReportModal from './components/ReportModal';
+const ReportModal = lazy(() => import('./components/ReportModal'));
 import SavedFacilities from './components/SavedFacilities';
 import ProjectDashboard from './components/ProjectDashboard';
-import UserManagement from './components/UserManagement';
+const UserManagement = lazy(() => import('./components/UserManagement'));
 import ChangePasswordModal from './components/ChangePasswordModal';
 import Breadcrumb from './components/Breadcrumb';
 import ProjectHero from './components/ProjectHero';
 import ProjectTeam from './components/ProjectTeam';
 import PhotoGallery from './components/PhotoGallery';
-import ReportDashboard from './components/ReportDashboard';
-import AdminDashboard from './admin/AdminDashboard';
+const ReportDashboard = lazy(() => import('./components/ReportDashboard'));
+const AdminDashboard = lazy(() => import('./admin/AdminDashboard'));
 import PortalSidebar from './portal/PortalSidebar';
 import PortalHome from './portal/PortalHome';
 import AllFacilities from './portal/AllFacilities';
@@ -29,10 +34,11 @@ import GlobalSearch from './portal/GlobalSearch';
 import { Capacitor } from '@capacitor/core';
 import { listTemplates, cachedTemplates, applyTemplateToItems, isBlankSnag } from './utils/templates';
 import { useFormsConfig } from './config/FormsConfigContext';
-import { submissionProblems } from './config/rulesEngine';
+import { submissionIssues } from './config/rulesEngine';
 import { createNewSurvey, calculateSurveyStats, facilityCode } from './types/survey';
 import {
   saveSurveyOffline,
+  saveSurveyRecovery,
   loadCurrentSurveyOffline,
   subscribeToSurveyChanges,
   markSurveySynced,
@@ -40,7 +46,7 @@ import {
   listAllSurveysOffline,
   getSurveyOffline
 } from './utils/storage';
-import { generateSurveyExcel } from './utils/excelGenerator';
+import { generateSurveyExcel } from './utils/reportExports';
 import { saveText } from './utils/fileSaver';
 import {
   pushSurvey,
@@ -150,13 +156,19 @@ export default function App({ currentUser = null, onSignOut } = {}) {
    * at submit -- never while saving -- so unfinished or offline work is always
    * kept. Returns true when submission must stop.
    */
+  const [validationSurveyId, setValidationSurveyId] = useState(null);
+  const validationIssues = validationSurveyId === survey?.id ? submissionIssues(formsConfig, survey, platform) : [];
+  function showValidationIssue(issue) {
+    setView('survey');
+    setActiveTab(issue.scope === 'facility' ? 'facility' : 'items');
+    focusSubmissionField(issue);
+  }
   function blockedByRequiredFields(record) {
-    const problems = submissionProblems(formsConfigRef.current, record, platform);
-    if (!problems.length) return false;
-    const name = (record?.facility?.facilityName || 'This facility').trim();
-    const shown = problems.slice(0, 10).map((p) => `• ${p}`).join('\n');
-    const more = problems.length > 10 ? `\n…and ${problems.length - 10} more` : '';
-    alert(`"${name}" cannot be submitted yet. These required fields are empty:\n\n${shown}${more}\n\nIt is saved as a draft.`);
+    const issues = submissionIssues(formsConfigRef.current, record, platform);
+    if (!issues.length) return false;
+    setValidationSurveyId(record.id);
+    if (record.id === surveyRef.current?.id) showValidationIssue(issues[0]);
+    else handleOpenSurvey(record.id).then(() => showValidationIssue(issues[0]));
     return true;
   }
   // Inspection templates, cached so a surveyor with no signal can still start from one.
@@ -166,6 +178,9 @@ export default function App({ currentUser = null, onSignOut } = {}) {
   activeProjectRef.current = activeProject;
 
   const [showReportModal, setShowReportModal] = useState(false);
+  const [conflictId, setConflictId] = useState(null);
+  const [showRecoveries, setShowRecoveries] = useState(false);
+  const uploadInFlight = useRef(null);
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [lastSavedTime, setLastSavedTime] = useState('');
   const [isLoaded, setIsLoaded] = useState(false);
@@ -337,30 +352,6 @@ export default function App({ currentUser = null, onSignOut } = {}) {
     });
   }, []);
 
-  /** Marks exactly the photos the server confirmed, so the badges tell the truth. */
-  function applyPhotoSyncResult(result) {
-    if (!result) return;
-    const synced = new Set(result.syncedPhotoIds || []);
-    const failed = new Set(result.failedPhotoIds || []);
-    if (!synced.size && !failed.size) return;
-
-    setSurvey((prev) => {
-      const next = {
-        ...prev,
-        items: (prev.items || []).map((it) => ({
-          ...it,
-          photos: (it.photos || []).map((p) =>
-            synced.has(p.id) ? { ...p, syncStatus: PHOTO_SYNC.SYNCED }
-            : failed.has(p.id) ? { ...p, syncStatus: PHOTO_SYNC.FAILED }
-            : p
-          )
-        }))
-      };
-      skipCloudPushRef.current = true; // status only, nothing to send back up
-      return next;
-    });
-  }
-
   /**
    * A facility is worth sending to the server once it has anything a person
    * actually entered -- a name, or a snag with a location/defect/photo -- or
@@ -418,102 +409,67 @@ export default function App({ currentUser = null, onSignOut } = {}) {
       if (!stored?.pendingSync) return { skipped: true, reason: 'locked' };
     }
 
-    let pushResult = await pushSurvey(surveyRef.current);
-    applyPhotoSyncResult(pushResult);
-
-    // The server moved on while this device held unsent edits. This used to
-    // throw the edits away and adopt the server copy, while facilities not on
-    // screen (flushPendingSurveys) re-based and kept theirs. The push is an
-    // upsert with explicit deletions, so re-basing merges this device's work
-    // in without removing anything another device added.
-    if (pushResult && pushResult.conflict && pushResult.reason === 'stale'
-        && pushResult.serverRevision !== undefined) {
-      const pushed = surveyRef.current;
-      const rebased = await pushSurvey({ ...pushed, cloudRevision: pushResult.serverRevision });
-      applyPhotoSyncResult(rebased);
-
-      if (rebased && rebased.pushed) {
-        hasUnpushedEditsRef.current = false;
-        // Show the merged result -- unless the surveyor kept typing meanwhile,
-        // in which case keep their screen and let the next push build on the
-        // revision just written.
-        if (surveyRef.current === pushed) {
-          const merged = await pullSurvey(pushed.id, collectKnownPhotos(pushed));
-          if (merged && Array.isArray(merged.items)) {
-            markAsExternalChange();
-            setSurvey(merged);
-            await saveSurveyOffline(merged, { pendingSync: false });
-          }
-        } else {
-          setSurvey((prev) => (prev && prev.id === pushed.id
-            ? { ...prev, cloudRevision: rebased.cloudRevision }
-            : prev));
-        }
-        setSyncState('synced');
-        return rebased;
-      }
-      pushResult = rebased || pushResult;
+    if (uploadInFlight.current) {
+      await uploadInFlight.current;
+      return pushAndSettle();
     }
-
-    // Still refused: this device holds far less than the server, so uploading
-    // would look like a mass deletion. The server copy is the complete one.
-    if (pushResult && pushResult.conflict) {
-      const current = surveyRef.current;
-      const remote = await pullSurvey(current.id, collectKnownPhotos(current));
-      if (remote && Array.isArray(remote.items)) {
-        markAsExternalChange();
-        setSurvey(remote);
-        await saveSurveyOffline(remote, { pendingSync: false });
+    const uploaded = surveyRef.current;
+    const task = (async () => {
+      const saved = await saveSurveyOffline(uploaded);
+      if (saved?.conflict) {
+        await saveSurveyRecovery({ ...uploaded, recoveryUserId: currentUser?.id });
+        throw new Error('Another tab changed this facility. Your copy is in Recovery backups. Reload before syncing.');
       }
-      setSyncState('synced');
-      return pushResult;
-    }
-
-    if (pushResult && pushResult.pushed) {
-      hasUnpushedEditsRef.current = false;
-
-      // Tombstones have been applied server-side; drop them so they are not
-      // replayed forever.
-      const cur = surveyRef.current;
-      if ((cur.deletedItemIds || []).length || (cur.deletedPhotoIds || []).length) {
-        surveyRef.current = { ...cur, deletedItemIds: [], deletedPhotoIds: [] };
+      const pushResult = await pushSurvey(uploaded);
+      if (pushResult?.conflict) {
+        setConflictId(uploaded.id);
+        setSyncState('conflict');
+        return pushResult;
       }
-
-      // Adopt the number the database assigned. A facility created offline
-      // carries a provisional one worked out from what this device could see,
-      // which is exactly how FAC-079 ended up on three different facilities.
-      const assigned = pushResult.facilityNumber;
-      const latest = surveyRef.current;
-      if (assigned && Number(latest.facility?.facilityNumber) !== Number(assigned)) {
-        surveyRef.current = {
-          ...latest,
-          facility: {
-            ...latest.facility,
-            facilityNumber: assigned,
-            facilityCode: facilityCode(assigned)
-          }
-        };
-      }
-    }
-
-    // Remember the server revision we now sit on, so the next push can prove
-    // it is building on current server state rather than guessing from a
-    // local counter.
-    if (pushResult && pushResult.cloudRevision !== undefined) {
-      surveyRef.current = { ...surveyRef.current, cloudRevision: pushResult.cloudRevision };
-      // Only suppress the follow-up save and push when nothing is waiting to be
-      // saved. If the surveyor typed while this push was in flight, skipping
-      // would cancel the save timer for that edit and it would never be written.
-      if (!pendingSaveRef.current) {
+      if (!pushResult?.pushed) return pushResult;
+      const receiptSaved = await markSurveySynced(uploaded.id, uploaded, pushResult);
+      if (surveyRef.current?.id !== uploaded.id) return pushResult;
+      const next = settleUpload(surveyRef.current, uploaded, pushResult);
+      if (!receiptSaved) next.pendingSync = true;
+      hasUnpushedEditsRef.current = next.pendingSync;
+      if (!next.pendingSync) {
+        if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+        pendingSaveRef.current = null;
         skipLocalSaveRef.current = true;
-        skipCloudPushRef.current = true;
       }
-      setSurvey(surveyRef.current);
-    }
+      skipCloudPushRef.current = true;
+      surveyRef.current = next;
+      setSurvey(next);
+      setConflictId((id) => id === uploaded.id ? null : id);
+      setSyncState(next.pendingSync ? 'offline' : 'synced');
+      return pushResult;
+    })();
+    uploadInFlight.current = task;
+    try { return await task; } finally { uploadInFlight.current = null; }
+  }
 
-    await markSurveySynced(surveyRef.current.id);
+  async function useServerAfterRecovery(device, remote) {
+    if (surveyRef.current?.id !== device.id || contentKey(surveyRef.current) !== contentKey(device)) {
+      throw new Error('The device copy changed. Compare again before choosing.');
+    }
+    await saveSurveyRecovery({ ...device, recoveryUserId: currentUser?.id });
+    if (surveyRef.current?.id !== device.id || contentKey(surveyRef.current) !== contentKey(device)) {
+      throw new Error('New edits were made during backup. They remain on this screen.');
+    }
+    const stored = await saveSurveyOffline(remote, { pendingSync: false });
+    if (stored?.conflict) throw new Error('Another tab changed this facility. Reload before choosing a copy.');
+    if (surveyRef.current?.id !== device.id || contentKey(surveyRef.current) !== contentKey(device)) {
+      if (surveyRef.current?.id === device.id) await saveSurveyOffline(surveyRef.current);
+      throw new Error('New edits were made while saving. Compare again; they remain on this device.');
+    }
+    if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+    pendingSaveRef.current = null;
+    hasUnpushedEditsRef.current = false;
+    markAsExternalChange();
+    surveyRef.current = remote;
+    setSurvey(remote);
+    setConflictId(null);
     setSyncState('synced');
-    return pushResult;
   }
 
   /**
@@ -531,8 +487,23 @@ export default function App({ currentUser = null, onSignOut } = {}) {
    * and anything still unsent keeps its pendingSync flag so the next
    * connection retries it.
    */
-  function uploadSurveyRecord(record) {
-    return uploadRecord(record, { push: pushSurvey, markSynced: markSurveySynced });
+  async function uploadSurveyRecord(record) {
+    const result = await uploadRecord(record, { push: pushSurvey, markSynced: markSurveySynced });
+    if (result?.conflict) setConflictId(record.id);
+    if (result?.pushed && surveyRef.current?.id === record.id) {
+      const next = settleUpload(surveyRef.current, record, result);
+      if (result.pendingLocal) next.pendingSync = true;
+      hasUnpushedEditsRef.current = next.pendingSync;
+      if (!next.pendingSync) {
+        if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+        pendingSaveRef.current = null;
+        skipLocalSaveRef.current = true;
+      }
+      skipCloudPushRef.current = true;
+      surveyRef.current = next;
+      setSurvey(next);
+    }
+    return result;
   }
 
   async function flushPendingSurveys() {
@@ -562,13 +533,16 @@ export default function App({ currentUser = null, onSignOut } = {}) {
       try {
         const res = await uploadSurveyRecord(local);
 
-        if (res && res.pushed) {
+        if (res && res.pushed && !res.failedPhotoIds?.length) {
           flushed++;
+        } else if (res?.pushed && res.failedPhotoIds?.length) {
+          failed++;
+          problems.push(`${label}: photos are still waiting to upload`);
         } else if (res && res.conflict) {
           // 'destructive': this device holds far less than the server. Refusing
           // is correct -- uploading would look like a mass deletion.
           failed++;
-          problems.push(`${label}: server has more data than this device, left untouched`);
+          problems.push(`${label}: changed on another device; open the facility to compare copies`);
         }
       } catch (err) {
         failed++;
@@ -608,6 +582,8 @@ export default function App({ currentUser = null, onSignOut } = {}) {
       if (surveyRef.current) {
         const res = await pushAndSettle();
         pushedCurrent = Boolean(res && res.pushed);
+        if (res?.conflict) currentError = new Error("This facility changed on another device. Open it to compare copies; your edits are kept here.");
+        else if (res?.failedPhotoIds?.length) currentError = new Error("Some photos are still waiting to upload.");
       }
     } catch (err) {
       currentError = err;
@@ -665,6 +641,11 @@ export default function App({ currentUser = null, onSignOut } = {}) {
 
   /** The button in Saved Facilities. */
   const handleSyncNow = syncEverything;
+  useEffect(() => {
+    if (!isLoaded || !isCloudConfigured || !online || syncState !== 'offline') return;
+    const timer = setTimeout(() => { syncEverything().catch(reportSyncFailure); }, 30000);
+    return () => clearTimeout(timer);
+  }, [isLoaded, online, syncState]);
 
   // Load from IndexedDB on initial launch
   useEffect(() => {
@@ -801,6 +782,8 @@ export default function App({ currentUser = null, onSignOut } = {}) {
         // Refused because another tab had newer data. Take theirs rather than
         // silently destroying it.
         if (result && result.conflict) {
+          await saveSurveyRecovery({ ...survey, recoveryUserId: currentUser?.id });
+          setShowRecoveries(true);
           markAsExternalChange();
           setSurvey(result.stored);
         }
@@ -924,7 +907,7 @@ export default function App({ currentUser = null, onSignOut } = {}) {
         const res = await uploadSurveyRecord(submitted);
         // A refused push (the server holds far more) is not an upload; the
         // facility stays flagged unsent so it is not quietly dropped.
-        setSyncState(res && res.pushed ? 'synced' : 'offline');
+        setSyncState(res?.conflict ? 'conflict' : res?.pushed && !res.failedPhotoIds?.length ? 'synced' : 'offline');
       } catch (err) {
         console.info('Submitted facility will upload when there is a connection:', err.message);
         reportSyncFailure(err);
@@ -979,7 +962,7 @@ export default function App({ currentUser = null, onSignOut } = {}) {
     const name = current?.facility?.facilityName || current?.facility?.buildingName;
 
     if (!name || !String(name).trim()) {
-      alert('Enter the Facility Name before submitting.');
+      blockedByRequiredFields(current);
       setActiveTab('facility');
       return;
     }
@@ -994,10 +977,7 @@ export default function App({ currentUser = null, onSignOut } = {}) {
       setActiveTab('items');
       return;
     }
-    if (blockedByRequiredFields(current)) {
-      setActiveTab('items');
-      return;
-    }
+    if (blockedByRequiredFields(current)) return;
     if (!confirm(`Submit "${name}" and start a new facility?
 
 It stays available in the facility list for reports.`)) {
@@ -1025,7 +1005,7 @@ It stays available in the facility list for reports.`)) {
         const res = await uploadSurveyRecord(submitted);
         // A refused push (the server holds far more) is not an upload; the
         // facility stays flagged unsent so it is not quietly dropped.
-        setSyncState(res && res.pushed ? 'synced' : 'offline');
+        setSyncState(res?.conflict ? 'conflict' : res?.pushed && !res.failedPhotoIds?.length ? 'synced' : 'offline');
       } catch (err) {
         console.info('Submitted facility will upload when there is a connection:', err.message);
         reportSyncFailure(err);
@@ -1763,6 +1743,8 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
   const urgentCount = stats?.priorityCounts?.[1] || 0;
 
   return (
+    <SubmissionValidation.Provider value={validationSurveyId === survey?.id}>
+    <Suspense fallback={<div role="status" className="p-6 text-slate-600">Loading screen…</div>}>
     <div className="min-h-screen bg-[#f4f8fd] flex font-sans">
       {isWebPortal && (
         <PortalSidebar
@@ -1780,6 +1762,7 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
       {/* Top Header */}
       <Header
         survey={survey || {}}
+        onOpenRecoveries={() => setShowRecoveries((v) => !v)}
         onReset={handleReset}
         onOpenReport={() => setShowReportModal(true)}
         onExportJSON={handleExportJSON}
@@ -2159,6 +2142,14 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
       </div>
       )}
 
+      {showRecoveries && <RecoveryBackups userId={currentUser?.id} onClose={() => setShowRecoveries(false)} />}
+      {conflictId === survey?.id && <SyncConflict key={survey.id} survey={survey} onUseServer={useServerAfterRecovery} />}
+      {validationIssues.length > 0 && <section role="alert" className="mx-4 my-2 p-4 rounded-xl border border-rose-200 bg-rose-50">
+        <h2 className="font-semibold text-rose-900">Complete these fields before submitting. Your draft is kept.</h2>
+        <ul className="list-disc pl-5 mt-2 text-sm text-rose-800">{validationIssues.map((issue, index) => <li key={index}>
+          <button className="underline py-1" onClick={() => showValidationIssue(issue)}>{issue.label}</button>
+        </li>)}</ul>
+      </section>}
       {/* Tab panels stay MOUNTED and are hidden with CSS rather than unmounted.
           Conditional rendering meant every tab tap tore down and rebuilt the
           whole subtree -- measured at 1,608 DOM nodes for 8 assets, and ~9,300
@@ -2245,33 +2236,7 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
       )}
       </div>
     </div>
-  );
-}
-
-/** The open facility's review stage, the reviewer's note, and the steps allowed. */
-function WorkflowBanner({ stage, note, approvedAt, actions = [], busy, onStep }) {
-  const look = {
-    changes_requested: 'bg-rose-50 border-rose-200 text-rose-800',
-    submitted: 'bg-sky-50 border-sky-200 text-sky-800',
-    in_review: 'bg-violet-50 border-violet-200 text-violet-800',
-    approved: 'bg-emerald-50 border-emerald-200 text-emerald-800'
-  }[stage] || 'bg-slate-50 border-slate-200 text-slate-700';
-  const text = {
-    changes_requested: `Sent back for changes${note ? `: \u201c${note}\u201d` : '.'} Fix it, then submit again.`,
-    submitted: 'Submitted, waiting for review.',
-    in_review: 'In review: a reviewer is checking this facility.',
-    approved: `Approved${approvedAt ? ` on ${new Date(approvedAt).toLocaleDateString()}` : ''}. Locked: a Manager or Admin can reopen it.`
-  }[stage];
-  return (
-    <div role="status" className={`rounded-xl border px-3 py-2 text-[13px] flex items-center gap-2 flex-wrap ${look}`}>
-      <span className="font-bold">{STAGE_BY_KEY[stage]?.label}</span>
-      <span className="flex-1 min-w-[200px]">{text}</span>
-      {actions.map((a) => (
-        <button key={a} type="button" disabled={!!busy} onClick={() => onStep(a)}
-          className="px-3 py-1 rounded-lg bg-white/80 hover:bg-white border border-black/10 text-xs font-bold disabled:opacity-50">
-          {busy === a ? '\u2026' : ACTION_LABELS[a]}
-        </button>
-      ))}
-    </div>
+    </Suspense>
+    </SubmissionValidation.Provider>
   );
 }

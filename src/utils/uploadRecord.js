@@ -10,14 +10,11 @@
  * database.
  */
 export async function uploadSurveyRecord(record, { push, markSynced }) {
-  let res = await push(record);
-
-  // The server moved on while this device was offline. The push is an upsert
-  // with explicit tombstones, so re-basing merges this device's work in without
-  // deleting anything already there.
-  if (res && res.conflict && res.reason === 'stale' && res.serverRevision !== undefined) {
-    res = await push({ ...record, cloudRevision: res.serverRevision });
+  const res = await push(record);
+  // A stale revision is a conflict, never permission to overwrite newer data.
+  if (res?.pushed) {
+    const settled = await markSynced(record.id, record, res);
+    return { ...res, pendingLocal: settled === false };
   }
-  if (res && res.pushed) await markSynced(record.id);
   return res;
 }

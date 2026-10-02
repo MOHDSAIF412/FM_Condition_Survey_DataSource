@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { FieldError, useFieldError } from './SubmissionValidation';
 import {
   Building,
   MapPin,
@@ -16,6 +17,7 @@ import { CreateTemplatePicker } from './TemplatePicker';
 import { CustomFieldList, CustomSections, FacilitySectionCard, useSystemFields } from './CustomFields';
 
 export default function FacilityInfo({ facility = {}, onChange, onCreate, creating, created, onNewFacility, templates = [], canStartFromTemplate = false }) {
+  const nameError = useFieldError('facility', facility, 'facilityName');
   const [templateId, setTemplateId] = useState('');
   const [isGettingGps, setIsGettingGps] = useState(false);
   const [gpsError, setGpsError] = useState('');
@@ -150,6 +152,8 @@ export default function FacilityInfo({ facility = {}, onChange, onCreate, creati
             </label>
             <input
               id="facility-name"
+              aria-invalid={nameError ? true : undefined}
+              aria-describedby={nameError ? 'facility-name-error' : undefined}
               type="text"
               /* Bound to facilityName alone. It used to fall back to
                  `|| facility.buildingName`, so clearing the field made it
@@ -165,6 +169,7 @@ export default function FacilityInfo({ facility = {}, onChange, onCreate, creati
               onChange={(e) => onChange({ ...facility, facilityName: e.target.value })}
               className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-sky-500 text-sm font-semibold"
             />
+            <FieldError scope="facility" record={facility} fieldKey="facilityName" id="facility-name-error" />
           </div>
 
           {f('facilityType').visible && <div>

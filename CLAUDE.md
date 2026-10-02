@@ -1,5 +1,10 @@
 # PROJECT CONTEXT
 
+> Historical reference. For the current local implementation, start with
+> README.md, CLOUD_SYNC.md, and SYNC_ROLLOUT.md. Authentication, roles, workflows,
+> and atomic sync supersede the older no-login/last-write-wins descriptions below.
+> The 2026-10-02 migration has not been applied to production in this session.
+
 *Last updated: 2026-09-07, end of the second session that day. Written and
 re-verified by inspecting the actual source tree, `git log`, and the live
 Supabase database — not from memory of the conversation. If a later session

@@ -1,4 +1,5 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
+import { FieldError, useFieldError } from './SubmissionValidation';
 import { 
   Camera, 
   Image as ImageIcon, 
@@ -50,6 +51,13 @@ function AssetItemCard({
   // (~9,300 nodes at 50 assets). The card header still shows name, location,
   // priority, cost and photo count, so the list stays scannable while closed.
   const [isExpanded, setIsExpanded] = useState(false);
+  const locationError = useFieldError('snag', item, 'location');
+  const defectError = useFieldError('snag', item, 'defectDescription');
+  useEffect(() => {
+    const focus = (event) => { if (event.detail.itemId === item.id) setIsExpanded(true); };
+    window.addEventListener('fm:focus-field', focus);
+    return () => window.removeEventListener('fm:focus-field', focus);
+  }, [item.id]);
   const [previewPhotoIndex, setPreviewPhotoIndex] = useState(null);
   const [isProcessingPhoto, setIsProcessingPhoto] = useState(false);
   const [processingCount, setProcessingCount] = useState(0);
@@ -180,7 +188,7 @@ function AssetItemCard({
   const photosList = item.photos || [];
 
   return (
-    <div className={`bg-white rounded-2xl border transition-all shadow-sm overflow-hidden ${
+    <div id={`snag-${item.id}-card`} tabIndex={-1} className={`bg-white rounded-2xl border transition-all shadow-sm overflow-hidden ${
       item.priority === 1 
         ? 'border-rose-300 ring-1 ring-rose-200' 
         : item.priority === 2
@@ -287,11 +295,14 @@ function AssetItemCard({
 
             <input
               id={`snag-location-${item.id}`}
+              aria-invalid={locationError ? true : undefined}
+              aria-describedby={locationError ? `snag-location-${item.id}-error` : undefined}
               type="text"
               value={item.location || ''}
               onChange={(e) => handleFieldChange('location', e.target.value)}
               className="w-full px-3.5 py-2.5 text-sm rounded-xl border border-slate-300 focus:ring-2 focus:ring-sky-500 focus:outline-none font-medium text-slate-700"
             />
+            <FieldError scope="snag" record={item} fieldKey="location" id={`snag-location-${item.id}-error`} />
 
             {recentLocations && recentLocations.length > 0 && (
               <div className="flex items-center gap-1.5 mt-2 flex-wrap">
@@ -392,11 +403,14 @@ function AssetItemCard({
             </label>
             <textarea
               id={`snag-defect-${item.id}`}
+              aria-invalid={defectError ? true : undefined}
+              aria-describedby={defectError ? `snag-defect-${item.id}-error` : undefined}
               rows={2}
               value={item.defectDescription || ''}
               onChange={(e) => handleFieldChange('defectDescription', e.target.value)}
               className="w-full px-3 py-2 text-sm rounded-xl border border-slate-300 focus:ring-2 focus:ring-sky-500 focus:outline-none"
             />
+            <FieldError scope="snag" record={item} fieldKey="defectDescription" id={`snag-defect-${item.id}-error`} />
           </div>
 
           {/* Quantity and Estimated Cost */}
@@ -457,6 +471,7 @@ function AssetItemCard({
                 <Camera className="w-4 h-4 text-sky-600" />
                 <span className="text-xs font-bold text-slate-700 uppercase">
                   {sys.sectionLabel('snag_photos', 'Snag Photos & Evidence')} ({photosList.length} Attached)
+                  <FieldError scope="snag" record={item} fieldKey="photos" id={`snag-${item.id}-photos`} />
                   {f('photos').required && <span className="text-rose-600"> * required</span>}
                 </span>
               </div>

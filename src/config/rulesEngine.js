@@ -103,7 +103,7 @@ export function fieldState(field, ruleResult, platform = 'web') {
  * Required fields left empty on one facility or snag, as labels. Built-in
  * fields are not checked here: they already have their own handling.
  */
-export function missingRequired(config, scope, record, platform = 'web') {
+export function missingRequiredFields(config, scope, record, platform = 'web') {
   const values = valuesForScope(scope, record);
   const ruleResult = evaluateRules(config?.rules, scope, values);
   const missing = [];
@@ -115,9 +115,25 @@ export function missingRequired(config, scope, record, platform = 'web') {
     // Built-ins are only checked when a rule makes them required (e.g. photos).
     if (field.system && ruleResult.required[field.key] !== true) continue;
     const type = field.key === 'photos' ? 'multiselect' : field.type;
-    if (isEmptyValue(type, values[field.key])) missing.push(field.label);
+    if (isEmptyValue(type, values[field.key])) missing.push(field);
   }
   return missing;
+}
+
+export function missingRequired(config, scope, record, platform = 'web') {
+  return missingRequiredFields(config, scope, record, platform).map((field) => field.label);
+}
+
+export function submissionIssues(config, survey, platform = 'web') {
+  const issues = missingRequiredFields(config, 'facility', survey?.facility || {}, platform)
+    .map((f) => ({ scope:'facility', key:f.key, label:`Facility: ${f.label}` }));
+  if (!String(survey?.facility?.facilityName || '').trim()) issues.unshift({ scope:'facility', key:'facilityName', label:'Enter the facility name' });
+  (survey?.items || []).forEach((item, index) => {
+    missingRequiredFields(config, 'snag', item, platform).forEach((f) => {
+      issues.push({ scope:'snag', itemId:item.id, key:f.key, label:`Snag #${index+1}: ${f.label}` });
+    });
+  });
+  return issues;
 }
 
 /**

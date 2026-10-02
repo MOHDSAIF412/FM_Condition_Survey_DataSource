@@ -19,7 +19,7 @@ async function loadProfile(session) {
   if (isOnline()) {
     try {
       const fresh = await withTimeout(getMyProfile(), 6000, 'Loading profile');
-      if (fresh) return fresh;
+      if (fresh?.id === userId) return fresh;
     } catch { /* fall back to the cached profile */ }
   }
   return cachedProfile(userId);
@@ -52,19 +52,26 @@ export default function AuthGate() {
     }
 
     let cancelled = false;
+    let generation = 0;
+    const adopt = async (next) => {
+      const turn = ++generation;
+      noteSignedInAccount(next?.user?.id);
+      setProfile(null);
+      setSession(next);
+      const loaded = next ? await loadProfile(next) : null;
+      if (cancelled || turn !== generation) return;
+      setProfile(loaded);
+      setChecking(false);
+    };
     (async () => {
       const existing = await getSession();
-      if (cancelled) return;
-      noteSignedInAccount(existing?.user?.id);
-      setSession(existing);
-      if (existing) setProfile(await loadProfile(existing));
-      setChecking(false);
+      if (cancelled || generation !== 0) return;
+      await adopt(existing);
     })();
 
-    const unsubscribe = onAuthChange(async (next) => {
-      noteSignedInAccount(next?.user?.id);
-      setSession(next);
-      setProfile(next ? await loadProfile(next) : null);
+    const unsubscribe = onAuthChange((next) => {
+      // Do not await Supabase calls inside its auth notification lock.
+      setTimeout(() => { if (!cancelled) adopt(next); }, 0);
     });
 
     return () => { cancelled = true; unsubscribe(); };
@@ -91,9 +98,9 @@ export default function AuthGate() {
   // The published form configuration (fields and rules set in the Admin
   // Dashboard) is loaded once signed in and cached for offline use.
   return (
-    <FormsConfigProvider enabled>
+    <FormsConfigProvider enabled key={session.user?.id}>
       <App
-        currentUser={profile ? { ...profile, sessionEmail: session.user?.email } : { id: session.user?.id, email: session.user?.email, role: 'user' }}
+        currentUser={profile?.id === session.user?.id ? { ...profile, sessionEmail: session.user?.email } : { id: session.user?.id, email: session.user?.email, role: 'user' }}
         onSignOut={async () => { await signOut(); clearCachedProfile(); setSession(null); setProfile(null); }}
       />
     </FormsConfigProvider>

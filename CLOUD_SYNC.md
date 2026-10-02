@@ -1,66 +1,44 @@
 # Cloud sync
 
-Surveys now sync across devices through Supabase. A change made on a phone
-appears on a laptop within a second or two, and vice versa.
+IndexedDB keeps the device copy. Supabase Auth, project membership, and RLS
+control cloud access. The browser uses a publishable key; administration that
+requires elevated access runs in supabase/functions/admin-users.
 
-**IndexedDB is still the source of truth on site.** The app works with no
-signal; the cloud is a layer on top, not a replacement. That ordering is
-deliberate - a surveyor in a plant room with no bars must never be blocked.
+## Uploads
 
-## What syncs
+1. Save the device snapshot locally.
+2. Upload photo objects, retaining failed photos for retry.
+3. Call fm_commit_survey with the last observed server revision.
+4. In one transaction, the RPC locks the survey, checks that revision, updates
+   its metadata, applies explicit deletions, and upserts its snags/photo rows.
+5. Save the receipt locally. Newer edits and failed photos remain pending.
 
-Assets, photos, facility details, signatures and deletions. All of it.
+The RPC runs with the caller's permissions. Existing RLS, approval locks, delete
+archives, and mass-delete limits remain in force. A child-row error rolls back
+the parent revision and every row change. Storage objects upload before that
+transaction; unused uploads can remain if the transaction fails. No automatic
+Storage cleanup is introduced.
 
-## How it behaves
+## Conflicts and retries
 
-| Situation | What happens |
-| --- | --- |
-| Edit on phone, laptop open | Laptop updates live, no refresh |
-| Delete an asset | Disappears everywhere |
-| Add a photo | Uploads, other devices download it |
-| No signal | Keeps working, badge shows **Offline** |
-| Signal returns | Pending work uploads, badge shows **Synced** |
-| Fresh device, empty storage | Pulls the whole survey down |
-| Two devices edit at once | Last write wins |
+The app never automatically substitutes a new revision into an old snapshot.
+A conflict keeps the local copy pending and offers a comparison plus JSON
+download. Choosing the server copy first saves a separate recovery record in
+IndexedDB; find it in **Recovery backups**. Reconcile remaining changes manually
+against the server copy. This is deliberate conflict review, not field merging.
 
-The badge in the header shows the state: **Cloud Sync On**, **Syncing…**,
-**Synced**, or **Offline**.
+Connectivity restoration, manual Sync, and a 30-second retry while online with
+waiting work process pending uploads. Failed photos keep their bytes and are
+retried against the confirmed server revision. Access refusals require corrected
+permissions or sign-in; conflicting copies require review.
 
-## Setup
+## Configuration and release
 
-`.env.local` holds the credentials (gitignored):
+Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY locally and in Vercel.
+Without them, the app runs locally without cloud/authentication.
 
-```
-VITE_SUPABASE_URL=https://yymyqygpyxbndifrgjvo.supabase.co
-VITE_SUPABASE_ANON_KEY=sb_publishable_...
-```
-
-**The same two variables must be set in Vercel**, or the deployed site will
-silently run in local-only mode: *Project → Settings → Environment Variables*,
-then redeploy. Without them nothing breaks, but nothing syncs either.
-
-## Tables
-
-Standalone, referencing nothing in the existing CAFM schema:
-
-- `condition_surveys` - facility, signatures, notes, revision
-- `survey_items` - one row per asset/defect
-- `survey_photos` - captions and the storage path, never the image bytes
-- `survey-photos` storage bucket - private, 10 MB per file, JPEG/PNG/WebP
-
-## Security
-
-The app has no login, so **every device shares one workspace**: anyone who can
-open the app sees and edits the same surveys. Access is granted to the `anon`
-role but scoped strictly to these three tables and that one bucket - it cannot
-touch any CAFM table.
-
-Since the Vercel site is public, treat this as: anyone who finds the URL can
-read and edit survey data. If that is not acceptable, the fix is a login, and
-surveys then get scoped per user.
-
-## Known limitation
-
-Deleting an asset removes its photo rows, but the image files stay in the
-bucket. Harmless, though storage use creeps up over time. A periodic cleanup
-job would fix it.
+The new client requires 20261002_atomic_survey_sync.sql. Read
+[SYNC_ROLLOUT.md](SYNC_ROLLOUT.md) before release. That migration refuses old
+direct sync writers, which must update before retrying; it does not delete their
+device work. Project assignment, due dates, review transitions, and explicit
+facility deletion retain their existing permission checks.
