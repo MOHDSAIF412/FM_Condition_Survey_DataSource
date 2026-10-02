@@ -1,7 +1,16 @@
 # Atomic sync release — 2026-10-02
 
-Status: implementation and isolated tests are local. No production database
-migration, deployment, or physical Android verification has been performed.
+Status (2026-10-03): production database migration applied successfully after
+inspecting the live columns, permission function, approval locks, and archive
+triggers. All three atomic guards are installed; all three tables retain RLS.
+The RPC uses invoker permissions, allows authenticated callers, and denies anon.
+Before/after counts match: 87 surveys, 786 items, and 1,658 photos. Schema
+preflight evidence was saved locally; no full data backup was taken because
+this migration changes only new functions/triggers and has a paired rollback.
+The tested release is ready for the production web/OTA deployment. Debug APK
+built successfully. Physical Android and two-account staging checks remain
+unverified; the 178 automated tests include isolated PostgreSQL conflict,
+RLS, approval-lock, and rollback coverage.
 
 ## Prerequisites
 
