@@ -57,7 +57,10 @@ async function getSafeImageDataUrl(dataUrl) {
  * the published default layout is used; the built-in Standard layout draws
  * the report exactly as it was before layouts existed.
  */
-export async function generateSurveyPDF(survey, selectedFacility = 'ALL', options = {}) {
+export async function generateSurveyPDF(input, selectedFacility = 'ALL', options = {}) {
+  // One survey or many. Several produce a single combined PDF.
+  const surveys = (Array.isArray(input) ? input : [input]).filter(Boolean);
+  if (!surveys.length) return null;
   const layout = resolveLayout(options.layout);
   const show = layout.sections;
   const costs = layout.showCosts;
@@ -76,39 +79,6 @@ export async function generateSurveyPDF(survey, selectedFacility = 'ALL', option
 
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
-  
-  const allItems = survey.items || [];
-  const itemsToReport = selectedFacility === 'ALL'
-    ? allItems
-    : allItems.filter((i) => (i.location || 'General') === selectedFacility);
-
-  const stats = calculateSurveyStats(itemsToReport);
-  const facility = survey.facility || {};
-  const googleLoc = facility.googleLocation || {};
-
-  // Common Header & Footer helper
-  const renderHeader = (title) => {
-    doc.setFillColor(40, 65, 124); // slate-900
-    doc.rect(0, 0, pageWidth, 18, 'F');
-
-    // Subtle OCS white badge in header
-    try {
-      // Transparent trimmed mark sits straight on the navy band -- no white chip.
-      const L = logoBox(20);
-      doc.addImage(OCS_LOGO_WHITE, 'PNG', pageWidth - 20 - L.w, (18 - L.h) / 2, L.w, L.h);
-    } catch (e) {}
-
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(9.5);
-    doc.setTextColor(255, 255, 255);
-    const facilityHeader = facility.facilityName || facility.buildingName || 'Facility Condition Audit';
-    doc.text(doc.splitTextToSize(facilityHeader.toUpperCase(), pageWidth - 90)[0], 20, 11);
-
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(8);
-    doc.setTextColor(148, 163, 184); // slate-400
-    doc.text(title, pageWidth - 40, 11, { align: 'right' });
-  };
 
   const renderFooter = (pageNo, totalPages) => {
     doc.setFillColor(248, 250, 252);
@@ -123,535 +93,579 @@ export async function generateSurveyPDF(survey, selectedFacility = 'ALL', option
     doc.text(`Page ${pageNo} of ${totalPages}`, pageWidth - 20, pageHeight - 5, { align: 'right' });
   };
 
-  // Each section opens a new page -- except the first one drawn, which uses the
-  // page the document starts with.
-  let started = false;
-  const newPage = () => {
-    if (started) doc.addPage();
+  // Several facilities go into ONE document: each starts on a fresh page and
+  // keeps its own cover, totals and register, so a combined report reads as
+  // the single-facility report repeated, not a merged jumble.
+  for (let n = 0; n < surveys.length; n++) {
+    const survey = surveys[n];
+    if (n > 0) doc.addPage();
+
+    const allItems = survey.items || [];
+    const itemsToReport = selectedFacility === 'ALL'
+      ? allItems
+      : allItems.filter((i) => (i.location || 'General') === selectedFacility);
+
+    const stats = calculateSurveyStats(itemsToReport);
+    const facility = survey.facility || {};
+    const googleLoc = facility.googleLocation || {};
+
+    // Common Header & Footer helper
+    const renderHeader = (title) => {
+      doc.setFillColor(40, 65, 124); // slate-900
+      doc.rect(0, 0, pageWidth, 18, 'F');
+
+      // Subtle OCS white badge in header
+      try {
+        // Transparent trimmed mark sits straight on the navy band -- no white chip.
+        const L = logoBox(20);
+        doc.addImage(OCS_LOGO_WHITE, 'PNG', pageWidth - 20 - L.w, (18 - L.h) / 2, L.w, L.h);
+      } catch (e) {}
+
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(9.5);
+      doc.setTextColor(255, 255, 255);
+      const facilityHeader = facility.facilityName || facility.buildingName || 'Facility Condition Audit';
+      doc.text(doc.splitTextToSize(facilityHeader.toUpperCase(), pageWidth - 90)[0], 20, 11);
+
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(8);
+      doc.setTextColor(148, 163, 184); // slate-400
+      doc.text(title, pageWidth - 40, 11, { align: 'right' });
+    };
+
+
+    // Each section opens a new page -- except the first one drawn, which uses the
+    // page the document starts with.
+    let started = false;
+    const newPage = () => {
+      if (started) doc.addPage();
+      started = true;
+      return doc.internal.getNumberOfPages();
+    };
+    // Running header again on every page an autoTable spills onto.
+    const continuing = (firstPage, title) => () => {
+      if (doc.internal.getCurrentPageInfo().pageNumber > firstPage) renderHeader(`${title} (CONT.)`);
+    };
+
+    if (show.cover) {
     started = true;
-    return doc.internal.getNumberOfPages();
-  };
-  // Running header again on every page an autoTable spills onto.
-  const continuing = (firstPage, title) => () => {
-    if (doc.internal.getCurrentPageInfo().pageNumber > firstPage) renderHeader(`${title} (CONT.)`);
-  };
+    // ==========================================
+    // PAGE 1: EXECUTIVE COVER PAGE
+    // ==========================================
+    doc.setFillColor(40, 65, 124); // slate-900
+    doc.rect(0, 0, pageWidth, 85, 'F');
 
-  if (show.cover) {
-  started = true;
-  // ==========================================
-  // PAGE 1: EXECUTIVE COVER PAGE
-  // ==========================================
-  doc.setFillColor(40, 65, 124); // slate-900
-  doc.rect(0, 0, pageWidth, 85, 'F');
+    // OCS Company Logo on Cover
+    try {
+      const L = logoBox(38);
+      doc.addImage(OCS_LOGO_WHITE, 'PNG', pageWidth - 20 - L.w, 16, L.w, L.h);
+    } catch (logoErr) {
+      console.warn('Failed embedding OCS logo on cover:', logoErr);
+    }
 
-  // OCS Company Logo on Cover
-  try {
-    const L = logoBox(38);
-    doc.addImage(OCS_LOGO_WHITE, 'PNG', pageWidth - 20 - L.w, 16, L.w, L.h);
-  } catch (logoErr) {
-    console.warn('Failed embedding OCS logo on cover:', logoErr);
-  }
-
-  // Badge
-  const badge = (layout.title || DEFAULT_TITLE.pdf).toUpperCase();
-  doc.setFontSize(8);
-  doc.setFont('helvetica', 'bold');
-  doc.setFillColor(241, 94, 34); // sky-600
-  doc.roundedRect(20, 16, Math.min(Math.max(85, doc.getTextWidth(badge) + 8), pageWidth - 80), 7, 2, 2, 'F');
-  doc.setTextColor(255, 255, 255);
-  doc.text(doc.splitTextToSize(badge, pageWidth - 88)[0], 24, 21);
-
-  // Title
-  doc.setFontSize(20);
-  doc.setFont('helvetica', 'bold');
-  doc.setTextColor(255, 255, 255);
-  const facilityTitle = facility.facilityName || facility.buildingName || 'Facilities Condition Audit';
-  doc.text(doc.splitTextToSize(facilityTitle, pageWidth - 80), 20, 36);
-
-  doc.setFontSize(12);
-  doc.setFont('helvetica', 'normal');
-  doc.setTextColor(186, 230, 253);
-  doc.text(facility.buildingName || 'Condition Assessment Report', 20, 47);
-
-  // Google Location Link on Cover
-  doc.setFillColor(30, 41, 59);
-  doc.roundedRect(20, 55, pageWidth - 40, 20, 2, 2, 'F');
-  doc.setFontSize(8);
-  doc.setFont('helvetica', 'bold');
-  doc.setTextColor(52, 211, 153);
-  doc.text('GOOGLE LOCATION & GPS PIN:', 24, 62);
-  doc.setFont('helvetica', 'normal');
-  doc.setTextColor(255, 255, 255);
-  const locLine = `${googleLoc.address || facility.address || 'Site Address'} (GPS: ${googleLoc.latitude || 'N/A'}, ${googleLoc.longitude || 'N/A'})`;
-  doc.text(doc.splitTextToSize(locLine, pageWidth - 95), 24, 69);
-
-  if (googleLoc.mapsUrl) {
-    doc.setTextColor(56, 189, 248);
-    doc.setFont('helvetica', 'bold');
-    doc.textWithLink('[Open Google Maps]', pageWidth - 55, 69, { url: googleLoc.mapsUrl });
-  }
-
-  // Facility Metadata Grid
-  let curY = 97;
-  doc.setFontSize(11);
-  doc.setFont('helvetica', 'bold');
-  doc.setTextColor(15, 23, 42);
-  doc.text('FACILITY & AUDIT SPECIFICATION', 20, curY);
-
-  doc.setDrawColor(40, 65, 124);
-  doc.setLineWidth(0.8);
-  doc.line(20, curY + 2, 45, curY + 2);
-
-  curY += 10;
-  const metaBoxY = curY;
-  doc.setFillColor(248, 250, 252);
-  doc.setDrawColor(226, 232, 240);
-  doc.roundedRect(20, metaBoxY, pageWidth - 40, 45, 3, 3, 'FD');
-
-  const col1X = 26;
-  const col2X = 110;
-  let rowY = metaBoxY + 8;
-
-  const printMeta = (label, val, x, y) => {
+    // Badge
+    const badge = (layout.title || DEFAULT_TITLE.pdf).toUpperCase();
     doc.setFontSize(8);
     doc.setFont('helvetica', 'bold');
-    doc.setTextColor(100, 116, 139);
-    doc.text(label, x, y);
-    doc.setFontSize(9);
+    doc.setFillColor(241, 94, 34); // sky-600
+    doc.roundedRect(20, 16, Math.min(Math.max(85, doc.getTextWidth(badge) + 8), pageWidth - 80), 7, 2, 2, 'F');
+    doc.setTextColor(255, 255, 255);
+    doc.text(doc.splitTextToSize(badge, pageWidth - 88)[0], 24, 21);
+
+    // Title
+    doc.setFontSize(20);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(255, 255, 255);
+    const facilityTitle = facility.facilityName || facility.buildingName || 'Facilities Condition Audit';
+    doc.text(doc.splitTextToSize(facilityTitle, pageWidth - 80), 20, 36);
+
+    doc.setFontSize(12);
     doc.setFont('helvetica', 'normal');
-    doc.setTextColor(15, 23, 42);
-    // Clip to the column so long values (e.g. a consultancy name) cannot run
-    // out past the metadata box and off the page edge.
-    const maxW = (x === col1X ? col2X - x : pageWidth - 26 - x) - 36;
-    const full = String(val || 'N/A');
-    let shown = full;
-    if (doc.getTextWidth(shown) > maxW) {
-      // Trim to fit and mark it, so a clipped value reads as deliberate
-      // truncation rather than a rendering bug.
-      while (shown.length > 1 && doc.getTextWidth(shown + '...') > maxW) {
-        shown = shown.slice(0, -1);
-      }
-      shown = shown.replace(/[\s,;:.-]+$/, '') + '...';
+    doc.setTextColor(186, 230, 253);
+    doc.text(facility.buildingName || 'Condition Assessment Report', 20, 47);
+
+    // Google Location Link on Cover
+    doc.setFillColor(30, 41, 59);
+    doc.roundedRect(20, 55, pageWidth - 40, 20, 2, 2, 'F');
+    doc.setFontSize(8);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(52, 211, 153);
+    doc.text('GOOGLE LOCATION & GPS PIN:', 24, 62);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(255, 255, 255);
+    const locLine = `${googleLoc.address || facility.address || 'Site Address'} (GPS: ${googleLoc.latitude || 'N/A'}, ${googleLoc.longitude || 'N/A'})`;
+    doc.text(doc.splitTextToSize(locLine, pageWidth - 95), 24, 69);
+
+    if (googleLoc.mapsUrl) {
+      doc.setTextColor(56, 189, 248);
+      doc.setFont('helvetica', 'bold');
+      doc.textWithLink('[Open Google Maps]', pageWidth - 55, 69, { url: googleLoc.mapsUrl });
     }
-    doc.text(shown, x + 35, y);
-  };
 
-  // Rebalanced after the reference-code row was removed, so the grid does not
-  // open with a hole in the left column. Only fields that have a value are
-  // printed, so an empty facility does not render a column of "N/A".
-  const metaPairs = [
-    ['Inspection Date:', facility.surveyDate],
-    ['Lead Inspector:', facility.surveyorName],
-    ['Gross Int. Area:', facility.grossInternalArea],
-    ['Consultancy:', facility.surveyorCompany],
-    ['Building Levels:', facility.floorsCount],
-    ['Client / Owner:', facility.clientName],
-    ['Weather / Temp:', facility.weatherCondition],
-    ['Facility Mgr:', facility.facilityManager],
-    ['Total Snags:', `${stats.total} Snags`],
-    ['GPS Accuracy:', googleLoc.accuracy ? `${googleLoc.accuracy} m` : null],
-    // Facility fields added in the Admin Dashboard with "PDF report" on.
-    ...reportFieldsFor('facility', 'pdf', [facility]).map((f) => [`${f.label.length > 18 ? f.label.slice(0, 16) + '..' : f.label}:`, reportValue(f, facility, 'facility')])
-  ].filter(([, v]) => v !== null && v !== undefined && String(v).trim() !== '');
+    // Facility Metadata Grid
+    let curY = 97;
+    doc.setFontSize(11);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(15, 23, 42);
+    doc.text('FACILITY & AUDIT SPECIFICATION', 20, curY);
 
-  metaPairs.forEach(([label, value], i) => {
-    const col = i % 2 === 0 ? col1X : col2X;
-    printMeta(label, value, col, rowY);
-    if (i % 2 === 1) rowY += 8;
-  });
-  if (metaPairs.length % 2 === 1) rowY += 8;
+    doc.setDrawColor(40, 65, 124);
+    doc.setLineWidth(0.8);
+    doc.line(20, curY + 2, 45, curY + 2);
 
-  // Executive KPI summary cards
-  curY = metaBoxY + 54;
-  const kpiWidth = (pageWidth - 40 - 9) / 4;
-
-  const drawKpiCard = (x, y, label, val, sub, color) => {
+    curY += 10;
+    const metaBoxY = curY;
     doc.setFillColor(248, 250, 252);
     doc.setDrawColor(226, 232, 240);
-    doc.roundedRect(x, y, kpiWidth, 26, 2, 2, 'FD');
+    doc.roundedRect(20, metaBoxY, pageWidth - 40, 45, 3, 3, 'FD');
 
+    const col1X = 26;
+    const col2X = 110;
+    let rowY = metaBoxY + 8;
+
+    const printMeta = (label, val, x, y) => {
+      doc.setFontSize(8);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(100, 116, 139);
+      doc.text(label, x, y);
+      doc.setFontSize(9);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(15, 23, 42);
+      // Clip to the column so long values (e.g. a consultancy name) cannot run
+      // out past the metadata box and off the page edge.
+      const maxW = (x === col1X ? col2X - x : pageWidth - 26 - x) - 36;
+      const full = String(val || 'N/A');
+      let shown = full;
+      if (doc.getTextWidth(shown) > maxW) {
+        // Trim to fit and mark it, so a clipped value reads as deliberate
+        // truncation rather than a rendering bug.
+        while (shown.length > 1 && doc.getTextWidth(shown + '...') > maxW) {
+          shown = shown.slice(0, -1);
+        }
+        shown = shown.replace(/[\s,;:.-]+$/, '') + '...';
+      }
+      doc.text(shown, x + 35, y);
+    };
+
+    // Rebalanced after the reference-code row was removed, so the grid does not
+    // open with a hole in the left column. Only fields that have a value are
+    // printed, so an empty facility does not render a column of "N/A".
+    const metaPairs = [
+      ['Inspection Date:', facility.surveyDate],
+      ['Lead Inspector:', facility.surveyorName],
+      ['Gross Int. Area:', facility.grossInternalArea],
+      ['Consultancy:', facility.surveyorCompany],
+      ['Building Levels:', facility.floorsCount],
+      ['Client / Owner:', facility.clientName],
+      ['Weather / Temp:', facility.weatherCondition],
+      ['Facility Mgr:', facility.facilityManager],
+      ['Total Snags:', `${stats.total} Snags`],
+      ['GPS Accuracy:', googleLoc.accuracy ? `${googleLoc.accuracy} m` : null],
+      // Facility fields added in the Admin Dashboard with "PDF report" on.
+      ...reportFieldsFor('facility', 'pdf', [facility]).map((f) => [`${f.label.length > 18 ? f.label.slice(0, 16) + '..' : f.label}:`, reportValue(f, facility, 'facility')])
+    ].filter(([, v]) => v !== null && v !== undefined && String(v).trim() !== '');
+
+    metaPairs.forEach(([label, value], i) => {
+      const col = i % 2 === 0 ? col1X : col2X;
+      printMeta(label, value, col, rowY);
+      if (i % 2 === 1) rowY += 8;
+    });
+    if (metaPairs.length % 2 === 1) rowY += 8;
+
+    // Executive KPI summary cards
+    curY = metaBoxY + 54;
+    const kpiWidth = (pageWidth - 40 - 9) / 4;
+
+    const drawKpiCard = (x, y, label, val, sub, color) => {
+      doc.setFillColor(248, 250, 252);
+      doc.setDrawColor(226, 232, 240);
+      doc.roundedRect(x, y, kpiWidth, 26, 2, 2, 'FD');
+
+      doc.setFontSize(7.5);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(100, 116, 139);
+      doc.text(label, x + 4, y + 6);
+
+      doc.setFontSize(14);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(color[0], color[1], color[2]);
+      doc.text(String(val), x + 4, y + 16);
+
+      doc.setFontSize(6.5);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(148, 163, 184);
+      doc.text(sub, x + 4, y + 22);
+    };
+
+    drawKpiCard(20, curY, 'AUDITED SNAGS', stats.total, 'Snag Elements', [40, 65, 124]);
+    drawKpiCard(20 + kpiWidth + 3, curY, 'ATTACHED PHOTOS', stats.totalPhotos, 'Defect Evidence', [2, 132, 199]);
+    drawKpiCard(20 + (kpiWidth + 3) * 2, curY, 'URGENT HAZARDS', stats.priorityCounts[1], 'Priority 1 Life Safety', [220, 38, 38]);
+    if (costs) {
+      drawKpiCard(20 + (kpiWidth + 3) * 3, curY, 'REMEDIAL CAPEX', formatMoney(stats.totalCost), 'Estimated Budget', [40, 65, 124]);
+    } else {
+      drawKpiCard(20 + (kpiWidth + 3) * 3, curY, 'ESSENTIAL (P2)', stats.priorityCounts[2], 'Priority 2 Repairs', [234, 88, 12]);
+    }
+
+    // Scope notes block
+    curY += 34;
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(15, 23, 42);
+    doc.text('SURVEY SCOPE & EXECUTIVE METHODOLOGY', 20, curY);
+
+    doc.setFontSize(8);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(71, 85, 105);
+    const scopeText = facility.scopeNotes || 'Visual condition and snagging survey conducted across all accessible structural, mechanical, electrical, and life-safety building components.';
+    doc.text(doc.splitTextToSize(scopeText, pageWidth - 40), 20, curY + 6);
+
+    // Digital Signatures
+    if (show.signatures) {
+    curY += 26;
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(15, 23, 42);
+    doc.text('FORMAL STAKEHOLDER SIGN-OFF', 20, curY);
+
+    const sigBoxW = (pageWidth - 40 - 6) / 2;
+    const sigY = curY + 5;
+
+    // Surveyor Box
+    doc.setFillColor(248, 250, 252);
+    doc.setDrawColor(226, 232, 240);
+    doc.roundedRect(20, sigY, sigBoxW, 30, 2, 2, 'FD');
     doc.setFontSize(7.5);
     doc.setFont('helvetica', 'bold');
-    doc.setTextColor(100, 116, 139);
-    doc.text(label, x + 4, y + 6);
-
-    doc.setFontSize(14);
-    doc.setFont('helvetica', 'bold');
-    doc.setTextColor(color[0], color[1], color[2]);
-    doc.text(String(val), x + 4, y + 16);
-
-    doc.setFontSize(6.5);
+    doc.setTextColor(15, 23, 42);
+    doc.text(`Lead Surveyor: ${survey.signatures?.surveyor?.name || facility.surveyorName || 'N/A'}`, 24, sigY + 6);
     doc.setFont('helvetica', 'normal');
-    doc.setTextColor(148, 163, 184);
-    doc.text(sub, x + 4, y + 22);
-  };
+    doc.text(`Date: ${survey.signatures?.surveyor?.date || facility.surveyDate || ''}`, 24, sigY + 11);
 
-  drawKpiCard(20, curY, 'AUDITED SNAGS', stats.total, 'Snag Elements', [40, 65, 124]);
-  drawKpiCard(20 + kpiWidth + 3, curY, 'ATTACHED PHOTOS', stats.totalPhotos, 'Defect Evidence', [2, 132, 199]);
-  drawKpiCard(20 + (kpiWidth + 3) * 2, curY, 'URGENT HAZARDS', stats.priorityCounts[1], 'Priority 1 Life Safety', [220, 38, 38]);
-  if (costs) {
-    drawKpiCard(20 + (kpiWidth + 3) * 3, curY, 'REMEDIAL CAPEX', formatMoney(stats.totalCost), 'Estimated Budget', [40, 65, 124]);
-  } else {
-    drawKpiCard(20 + (kpiWidth + 3) * 3, curY, 'ESSENTIAL (P2)', stats.priorityCounts[2], 'Priority 2 Repairs', [234, 88, 12]);
-  }
-
-  // Scope notes block
-  curY += 34;
-  doc.setFontSize(9);
-  doc.setFont('helvetica', 'bold');
-  doc.setTextColor(15, 23, 42);
-  doc.text('SURVEY SCOPE & EXECUTIVE METHODOLOGY', 20, curY);
-
-  doc.setFontSize(8);
-  doc.setFont('helvetica', 'normal');
-  doc.setTextColor(71, 85, 105);
-  const scopeText = facility.scopeNotes || 'Visual condition and snagging survey conducted across all accessible structural, mechanical, electrical, and life-safety building components.';
-  doc.text(doc.splitTextToSize(scopeText, pageWidth - 40), 20, curY + 6);
-
-  // Digital Signatures
-  if (show.signatures) {
-  curY += 26;
-  doc.setFontSize(9);
-  doc.setFont('helvetica', 'bold');
-  doc.setTextColor(15, 23, 42);
-  doc.text('FORMAL STAKEHOLDER SIGN-OFF', 20, curY);
-
-  const sigBoxW = (pageWidth - 40 - 6) / 2;
-  const sigY = curY + 5;
-
-  // Surveyor Box
-  doc.setFillColor(248, 250, 252);
-  doc.setDrawColor(226, 232, 240);
-  doc.roundedRect(20, sigY, sigBoxW, 30, 2, 2, 'FD');
-  doc.setFontSize(7.5);
-  doc.setFont('helvetica', 'bold');
-  doc.setTextColor(15, 23, 42);
-  doc.text(`Lead Surveyor: ${survey.signatures?.surveyor?.name || facility.surveyorName || 'N/A'}`, 24, sigY + 6);
-  doc.setFont('helvetica', 'normal');
-  doc.text(`Date: ${survey.signatures?.surveyor?.date || facility.surveyDate || ''}`, 24, sigY + 11);
-
-  if (survey.signatures?.surveyor?.signatureData) {
-    try {
-      doc.addImage(survey.signatures.surveyor.signatureData, 'PNG', 24, sigY + 14, 50, 13);
-    } catch (e) {
-      console.warn('Could not embed surveyor signature', e);
-    }
-  }
-
-  // Client Box
-  doc.setFillColor(248, 250, 252);
-  doc.setDrawColor(226, 232, 240);
-  doc.roundedRect(20 + sigBoxW + 6, sigY, sigBoxW, 30, 2, 2, 'FD');
-  doc.setFontSize(7.5);
-  doc.setFont('helvetica', 'bold');
-  doc.setTextColor(15, 23, 42);
-  doc.text(`Client / FM: ${survey.signatures?.client?.name || facility.clientName || 'N/A'}`, 20 + sigBoxW + 10, sigY + 6);
-  doc.setFont('helvetica', 'normal');
-  doc.text(`Date: ${survey.signatures?.client?.date || facility.surveyDate || ''}`, 20 + sigBoxW + 10, sigY + 11);
-
-  if (survey.signatures?.client?.signatureData) {
-    try {
-      doc.addImage(survey.signatures.client.signatureData, 'PNG', 20 + sigBoxW + 10, sigY + 14, 50, 13);
-    } catch (e) {
-      console.warn('Could not embed client signature', e);
-    }
-  }
-  }
-  }
-
-
-  // ==========================================
-  // PAGE 2: DEPARTMENTAL CAPEX & PRIORITY MATRIX
-  // ==========================================
-  if (show.departmentCapex || show.prioritySchedule) {
-  const breakdownTitle = 'DEPARTMENTAL ALLOCATION & PRIORITY SCHEDULE';
-  const breakdownPage = newPage();
-  renderHeader(breakdownTitle);
-
-  let currentY = 28;
-  let sectionNo = 0;
-
-  if (show.departmentCapex) {
-  doc.setFontSize(11);
-  doc.setFont('helvetica', 'bold');
-  doc.setTextColor(15, 23, 42);
-  doc.text(`${++sectionNo}. ${costs ? 'REMEDIAL CAPEX' : 'SNAGS'} BY MAINTENANCE DEPARTMENT / TRADE`, 20, currentY);
-
-  // Department Table
-  const deptTableRows = Object.keys(DEPARTMENTS).map((dKey) => {
-    const dept = DEPARTMENTS[dKey];
-    const dStat = stats.departmentStats[dKey] || { count: 0, cost: 0 };
-    const pct = stats.totalCost > 0 ? ((dStat.cost / stats.totalCost) * 100).toFixed(1) : '0.0';
-    return costs
-      ? [dept.name, dStat.count, formatMoney(dStat.cost), `${pct}%`]
-      : [dept.name, dStat.count];
-  });
-
-  deptTableRows.push(costs
-    ? ['TOTAL (All Departments Combined)', stats.total, formatMoney(stats.totalCost), '100.0%']
-    : ['TOTAL (All Departments Combined)', stats.total]);
-
-  doc.autoTable({
-    startY: currentY + 4,
-    head: [costs
-      ? ['Maintenance Department / Trade', 'Defect Count', 'Remedial Budget (AED)', 'CapEx Share (%)']
-      : ['Maintenance Department / Trade', 'Defect Count']],
-    body: deptTableRows,
-    theme: 'grid',
-    headStyles: { fillColor: [40, 65, 124], textColor: [255, 255, 255], fontSize: 8.5, fontStyle: 'bold' },
-    bodyStyles: { fontSize: 8, textColor: [30, 41, 59] },
-    columnStyles: costs ? {
-      0: { fontStyle: 'bold', cellWidth: 70 },
-      1: { halign: 'center', cellWidth: 30 },
-      2: { halign: 'right', fontStyle: 'bold', cellWidth: 40 },
-      3: { halign: 'center', cellWidth: 30 }
-    } : {
-      0: { fontStyle: 'bold', cellWidth: 130 },
-      1: { halign: 'center', cellWidth: 40 }
-    },
-    didParseCell: function(data) {
-      if (data.row.index === deptTableRows.length - 1) {
-        data.cell.styles.fontStyle = 'bold';
-        data.cell.styles.fillColor = [241, 245, 249];
+    if (survey.signatures?.surveyor?.signatureData) {
+      try {
+        doc.addImage(survey.signatures.surveyor.signatureData, 'PNG', 24, sigY + 14, 50, 13);
+      } catch (e) {
+        console.warn('Could not embed surveyor signature', e);
       }
-    },
-    margin: { top: 26, left: 20, right: 20, bottom: 18 },
-    didDrawPage: continuing(breakdownPage, breakdownTitle)
-  });
+    }
 
-  currentY = doc.lastAutoTable.finalY + 12;
-  }
+    // Client Box
+    doc.setFillColor(248, 250, 252);
+    doc.setDrawColor(226, 232, 240);
+    doc.roundedRect(20 + sigBoxW + 6, sigY, sigBoxW, 30, 2, 2, 'FD');
+    doc.setFontSize(7.5);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(15, 23, 42);
+    doc.text(`Client / FM: ${survey.signatures?.client?.name || facility.clientName || 'N/A'}`, 20 + sigBoxW + 10, sigY + 6);
+    doc.setFont('helvetica', 'normal');
+    doc.text(`Date: ${survey.signatures?.client?.date || facility.surveyDate || ''}`, 20 + sigBoxW + 10, sigY + 11);
 
-  if (show.prioritySchedule) {
-  // Priority Schedule Table
-  doc.setFontSize(11);
-  doc.setFont('helvetica', 'bold');
-  doc.setTextColor(15, 23, 42);
-  doc.text(`${++sectionNo}. REMEDIATION PRIORITY & TIMEFRAME SCHEDULE`, 20, currentY);
-
-  const priorityRows = [
-    // Timeframes come from Settings (the built-in wording unless changed there).
-    ['Priority 1 (Urgent)', PRIORITY_LEVELS[1].timeframe, 'Life safety, health, statutory compliance, or operational breakdown.', stats.priorityCounts[1]],
-    ['Priority 2 (Essential)', PRIORITY_LEVELS[2].timeframe, 'Essential repairs to prevent secondary structural or system degradation.', stats.priorityCounts[2]],
-    ['Priority 3 (Desirable)', PRIORITY_LEVELS[3].timeframe, 'Desirable refurbishment to optimize energy efficiency or aesthetics.', stats.priorityCounts[3]],
-    ['Priority 4 (Long Term)', PRIORITY_LEVELS[4].timeframe, 'Routine long-term lifecycle replacements and preventative monitoring.', stats.priorityCounts[4]]
-  ];
-
-  doc.autoTable({
-    startY: currentY + 4,
-    head: [['Priority Level', 'Target Timeframe', 'Standard Urgency Criteria', 'Items']],
-    body: priorityRows,
-    theme: 'grid',
-    headStyles: { fillColor: [30, 41, 59], textColor: [255, 255, 255], fontSize: 8.5, fontStyle: 'bold' },
-    bodyStyles: { fontSize: 8, textColor: [30, 41, 59] },
-    columnStyles: {
-      0: { fontStyle: 'bold', cellWidth: 38 },
-      1: { cellWidth: 42, fontStyle: 'bold' },
-      2: { cellWidth: 75 },
-      3: { halign: 'center', cellWidth: 15, fontStyle: 'bold' }
-    },
-    didParseCell: function(data) {
-      if (data.section === 'body') {
-        if (data.row.index === 0 && data.column.index === 0) data.cell.styles.textColor = [220, 38, 38];
-        if (data.row.index === 1 && data.column.index === 0) data.cell.styles.textColor = [234, 88, 12];
+    if (survey.signatures?.client?.signatureData) {
+      try {
+        doc.addImage(survey.signatures.client.signatureData, 'PNG', 20 + sigBoxW + 10, sigY + 14, 50, 13);
+      } catch (e) {
+        console.warn('Could not embed client signature', e);
       }
-    },
-    margin: { top: 26, left: 20, right: 20, bottom: 18 },
-    didDrawPage: continuing(breakdownPage, breakdownTitle)
-  });
-  }
-  }
+    }
+    }
+    }
 
 
-  // ==========================================
-  // PAGE 3: DETAILED SNAG AUDIT SCHEDULE (FACILITY-WISE)
-  // ==========================================
-  if (show.register) {
-  const scheduleTitle = selectedFacility === 'ALL'
-    ? 'DETAILED SNAG AUDIT SCHEDULE'
-    : `AUDIT SCHEDULE — ${selectedFacility.toUpperCase()}`;
-  const assetSchedulePage = newPage();
-  renderHeader(scheduleTitle);
+    // ==========================================
+    // PAGE 2: DEPARTMENTAL CAPEX & PRIORITY MATRIX
+    // ==========================================
+    if (show.departmentCapex || show.prioritySchedule) {
+    const breakdownTitle = 'DEPARTMENTAL ALLOCATION & PRIORITY SCHEDULE';
+    const breakdownPage = newPage();
+    renderHeader(breakdownTitle);
 
-  // The layout's columns, sharing the page width in proportion. The Standard
-  // layout's add up to exactly the width, so its table is unchanged.
-  const columns = registerColumns(layout, 'pdf');
-  const tableWidth = pageWidth - 40;
-  const totalWeight = columns.reduce((n, c) => n + c.weight, 0) || 1;
-  const COLUMN_STYLE = {
-    number: { halign: 'center', fontStyle: 'bold' },
-    name: { fontStyle: 'bold' },
-    location: { fontStyle: 'bold' },
-    department: { halign: 'center' },
-    priority: { halign: 'center', fontStyle: 'bold' },
-    defect: {},
-    quantity: { halign: 'center' },
-    cost: { halign: 'right', fontStyle: 'bold' }
-  };
-  const columnStyles = Object.fromEntries(columns.map((c, i) => [i, {
-    cellWidth: Math.round((c.weight / totalWeight) * tableWidth * 100) / 100, ...COLUMN_STYLE[c.key]
-  }]));
-  const priorityIndex = columns.findIndex((c) => c.key === 'priority');
+    let currentY = 28;
+    let sectionNo = 0;
 
-  // Snag fields added in the Admin Dashboard with "PDF report" on. They are
-  // printed under the observations, so the table keeps its page-fitted widths.
-  const customSnagFields = reportFieldsFor('snag', 'pdf', itemsToReport);
-  const assetTableRows = itemsToReport.map((item, index) => {
-    const deptName = (DEPARTMENTS[item.department]?.name || 'General').split('&')[0];
-    const extra = customSnagFields
-      .map((f) => [f.label, reportValue(f, item, 'snag')])
-      .filter(([, v]) => v)
-      .map(([l, v]) => `${l}: ${v}`);
-    const cell = {
-      number: String(index + 1),
-      name: snagLabel(item, index),
-      location: item.location || 'General Site Area',
-      department: deptName,
-      priority: `P${item.priority}`,
-      defect: [item.defectDescription || 'No significant defect identified.', ...extra].join('\n'),
-      quantity: `${item.quantity || 1}${item.unit ? ` ${item.unit}` : ''}`,
-      cost: formatMoney(item.estimatedCost)
+    if (show.departmentCapex) {
+    doc.setFontSize(11);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(15, 23, 42);
+    doc.text(`${++sectionNo}. ${costs ? 'REMEDIAL CAPEX' : 'SNAGS'} BY MAINTENANCE DEPARTMENT / TRADE`, 20, currentY);
+
+    // Department Table
+    const deptTableRows = Object.keys(DEPARTMENTS).map((dKey) => {
+      const dept = DEPARTMENTS[dKey];
+      const dStat = stats.departmentStats[dKey] || { count: 0, cost: 0 };
+      const pct = stats.totalCost > 0 ? ((dStat.cost / stats.totalCost) * 100).toFixed(1) : '0.0';
+      return costs
+        ? [dept.name, dStat.count, formatMoney(dStat.cost), `${pct}%`]
+        : [dept.name, dStat.count];
+    });
+
+    deptTableRows.push(costs
+      ? ['TOTAL (All Departments Combined)', stats.total, formatMoney(stats.totalCost), '100.0%']
+      : ['TOTAL (All Departments Combined)', stats.total]);
+
+    doc.autoTable({
+      startY: currentY + 4,
+      head: [costs
+        ? ['Maintenance Department / Trade', 'Defect Count', 'Remedial Budget (AED)', 'CapEx Share (%)']
+        : ['Maintenance Department / Trade', 'Defect Count']],
+      body: deptTableRows,
+      theme: 'grid',
+      headStyles: { fillColor: [40, 65, 124], textColor: [255, 255, 255], fontSize: 8.5, fontStyle: 'bold' },
+      bodyStyles: { fontSize: 8, textColor: [30, 41, 59] },
+      columnStyles: costs ? {
+        0: { fontStyle: 'bold', cellWidth: 70 },
+        1: { halign: 'center', cellWidth: 30 },
+        2: { halign: 'right', fontStyle: 'bold', cellWidth: 40 },
+        3: { halign: 'center', cellWidth: 30 }
+      } : {
+        0: { fontStyle: 'bold', cellWidth: 130 },
+        1: { halign: 'center', cellWidth: 40 }
+      },
+      didParseCell: function(data) {
+        if (data.row.index === deptTableRows.length - 1) {
+          data.cell.styles.fontStyle = 'bold';
+          data.cell.styles.fillColor = [241, 245, 249];
+        }
+      },
+      margin: { top: 26, left: 20, right: 20, bottom: 18 },
+      didDrawPage: continuing(breakdownPage, breakdownTitle)
+    });
+
+    currentY = doc.lastAutoTable.finalY + 12;
+    }
+
+    if (show.prioritySchedule) {
+    // Priority Schedule Table
+    doc.setFontSize(11);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(15, 23, 42);
+    doc.text(`${++sectionNo}. REMEDIATION PRIORITY & TIMEFRAME SCHEDULE`, 20, currentY);
+
+    const priorityRows = [
+      // Timeframes come from Settings (the built-in wording unless changed there).
+      ['Priority 1 (Urgent)', PRIORITY_LEVELS[1].timeframe, 'Life safety, health, statutory compliance, or operational breakdown.', stats.priorityCounts[1]],
+      ['Priority 2 (Essential)', PRIORITY_LEVELS[2].timeframe, 'Essential repairs to prevent secondary structural or system degradation.', stats.priorityCounts[2]],
+      ['Priority 3 (Desirable)', PRIORITY_LEVELS[3].timeframe, 'Desirable refurbishment to optimize energy efficiency or aesthetics.', stats.priorityCounts[3]],
+      ['Priority 4 (Long Term)', PRIORITY_LEVELS[4].timeframe, 'Routine long-term lifecycle replacements and preventative monitoring.', stats.priorityCounts[4]]
+    ];
+
+    doc.autoTable({
+      startY: currentY + 4,
+      head: [['Priority Level', 'Target Timeframe', 'Standard Urgency Criteria', 'Items']],
+      body: priorityRows,
+      theme: 'grid',
+      headStyles: { fillColor: [30, 41, 59], textColor: [255, 255, 255], fontSize: 8.5, fontStyle: 'bold' },
+      bodyStyles: { fontSize: 8, textColor: [30, 41, 59] },
+      columnStyles: {
+        0: { fontStyle: 'bold', cellWidth: 38 },
+        1: { cellWidth: 42, fontStyle: 'bold' },
+        2: { cellWidth: 75 },
+        3: { halign: 'center', cellWidth: 15, fontStyle: 'bold' }
+      },
+      didParseCell: function(data) {
+        if (data.section === 'body') {
+          if (data.row.index === 0 && data.column.index === 0) data.cell.styles.textColor = [220, 38, 38];
+          if (data.row.index === 1 && data.column.index === 0) data.cell.styles.textColor = [234, 88, 12];
+        }
+      },
+      margin: { top: 26, left: 20, right: 20, bottom: 18 },
+      didDrawPage: continuing(breakdownPage, breakdownTitle)
+    });
+    }
+    }
+
+
+    // ==========================================
+    // PAGE 3: DETAILED SNAG AUDIT SCHEDULE (FACILITY-WISE)
+    // ==========================================
+    if (show.register) {
+    const scheduleTitle = selectedFacility === 'ALL'
+      ? 'DETAILED SNAG AUDIT SCHEDULE'
+      : `AUDIT SCHEDULE — ${selectedFacility.toUpperCase()}`;
+    const assetSchedulePage = newPage();
+    renderHeader(scheduleTitle);
+
+    // The layout's columns, sharing the page width in proportion. The Standard
+    // layout's add up to exactly the width, so its table is unchanged.
+    const columns = registerColumns(layout, 'pdf');
+    const tableWidth = pageWidth - 40;
+    const totalWeight = columns.reduce((n, c) => n + c.weight, 0) || 1;
+    const COLUMN_STYLE = {
+      number: { halign: 'center', fontStyle: 'bold' },
+      name: { fontStyle: 'bold' },
+      location: { fontStyle: 'bold' },
+      department: { halign: 'center' },
+      priority: { halign: 'center', fontStyle: 'bold' },
+      defect: {},
+      quantity: { halign: 'center' },
+      cost: { halign: 'right', fontStyle: 'bold' }
     };
-    return columns.map((c) => cell[c.key]);
-  });
+    const columnStyles = Object.fromEntries(columns.map((c, i) => [i, {
+      cellWidth: Math.round((c.weight / totalWeight) * tableWidth * 100) / 100, ...COLUMN_STYLE[c.key]
+    }]));
+    const priorityIndex = columns.findIndex((c) => c.key === 'priority');
 
-  doc.autoTable({
-    startY: 26,
-    head: [columns.map((c) => c.label)],
-    body: assetTableRows,
-    theme: 'grid',
-    headStyles: { fillColor: [12, 74, 110], textColor: [255, 255, 255], fontSize: 8, fontStyle: 'bold' },
-    bodyStyles: { fontSize: 7.5, textColor: [30, 41, 59], cellPadding: 2.5 },
-    columnStyles,
-    didParseCell: function(data) {
-      if (data.section === 'body') {
-        if (data.column.index === priorityIndex) {
-          const text = data.cell.text.join('');
-          if (text.includes('P1')) data.cell.styles.textColor = [220, 38, 38];
-          if (text.includes('P2')) data.cell.styles.textColor = [249, 115, 22];
-        }
-      }
-    },
-    margin: { top: 26, left: 20, right: 20, bottom: 18 },
-    didDrawPage: continuing(assetSchedulePage, scheduleTitle)
-  });
-  }
+    // Snag fields added in the Admin Dashboard with "PDF report" on. They are
+    // printed under the observations, so the table keeps its page-fitted widths.
+    const customSnagFields = reportFieldsFor('snag', 'pdf', itemsToReport);
+    const assetTableRows = itemsToReport.map((item, index) => {
+      const deptName = (DEPARTMENTS[item.department]?.name || 'General').split('&')[0];
+      const extra = customSnagFields
+        .map((f) => [f.label, reportValue(f, item, 'snag')])
+        .filter(([, v]) => v)
+        .map(([l, v]) => `${l}: ${v}`);
+      const cell = {
+        number: String(index + 1),
+        name: snagLabel(item, index),
+        location: item.location || 'General Site Area',
+        department: deptName,
+        priority: `P${item.priority}`,
+        defect: [item.defectDescription || 'No significant defect identified.', ...extra].join('\n'),
+        quantity: `${item.quantity || 1}${item.unit ? ` ${item.unit}` : ''}`,
+        cost: formatMoney(item.estimatedCost)
+      };
+      return columns.map((c) => cell[c.key]);
+    });
 
-
-  // ==========================================
-  // PAGE 4: DEFECT PHOTO EVIDENCE LOG
-  // ==========================================
-  const itemsWithPhotos = itemsToReport.filter((item) => photosFor(layout, item.photos || []).length > 0);
-
-  if (itemsWithPhotos.length > 0) {
-    newPage();
-    renderHeader('DEFECT PHOTOGRAPHIC EVIDENCE LOG');
-
-    let photoY = 28;
-
-    for (let i = 0; i < itemsWithPhotos.length; i++) {
-      const item = itemsWithPhotos[i];
-      const deptName = DEPARTMENTS[item.department]?.name || 'General FM';
-      const snagPhotos = photosFor(layout, item.photos || []);
-      const totalSnagPhotos = snagPhotos.length;
-
-      for (let p = 0; p < totalSnagPhotos; p++) {
-        const photo = snagPhotos[p];
-
-        if (photoY + 75 > pageHeight - 20) {
-          doc.addPage();
-          renderHeader('DEFECT PHOTOGRAPHIC EVIDENCE LOG (CONT.)');
-          photoY = 28;
-        }
-
-        const safeDataUrl = await getSafeImageDataUrl(photo.dataUrl);
-
-        // Photo card container
-        doc.setFillColor(248, 250, 252);
-        doc.setDrawColor(203, 213, 225);
-        doc.roundedRect(20, photoY, pageWidth - 40, 68, 2, 2, 'FD');
-
-        if (safeDataUrl) {
-          try {
-            doc.addImage(safeDataUrl, 'JPEG', 24, photoY + 5, 80, 58);
-          } catch (imgErr) {
-            console.warn('Failed embedding image in PDF:', imgErr);
+    doc.autoTable({
+      startY: 26,
+      head: [columns.map((c) => c.label)],
+      body: assetTableRows,
+      theme: 'grid',
+      headStyles: { fillColor: [12, 74, 110], textColor: [255, 255, 255], fontSize: 8, fontStyle: 'bold' },
+      bodyStyles: { fontSize: 7.5, textColor: [30, 41, 59], cellPadding: 2.5 },
+      columnStyles,
+      didParseCell: function(data) {
+        if (data.section === 'body') {
+          if (data.column.index === priorityIndex) {
+            const text = data.cell.text.join('');
+            if (text.includes('P1')) data.cell.styles.textColor = [220, 38, 38];
+            if (text.includes('P2')) data.cell.styles.textColor = [249, 115, 22];
           }
         }
+      },
+      margin: { top: 26, left: 20, right: 20, bottom: 18 },
+      didDrawPage: continuing(assetSchedulePage, scheduleTitle)
+    });
+    }
 
-        // Details next to photo
-        const infoX = 110;
-        const titleWidth = pageWidth - infoX - 25;
-        doc.setFont('helvetica', 'bold');
-        doc.setTextColor(15, 23, 42);
 
-        // Step the title down a size until it fits the card, then clip it.
-        let assetTitle = snagLabel(item, i);
-        let titleSize = 10;
-        doc.setFontSize(titleSize);
-        while (titleSize > 8 && doc.getTextWidth(assetTitle) > titleWidth) {
-          titleSize -= 0.5;
-          doc.setFontSize(titleSize);
-        }
-        if (doc.getTextWidth(assetTitle) > titleWidth) {
-          assetTitle = doc.splitTextToSize(assetTitle, titleWidth)[0];
-        }
-        doc.text(assetTitle, infoX, photoY + 11);
+    // ==========================================
+    // PAGE 4: DEFECT PHOTO EVIDENCE LOG
+    // ==========================================
+    const itemsWithPhotos = itemsToReport.filter((item) => photosFor(layout, item.photos || []).length > 0);
 
-        // Multi-photo count & caption
-        doc.setFontSize(8);
-        doc.setFont('helvetica', 'bold');
-        doc.setTextColor(2, 132, 199);
-        const photoLabel = `Photo ${p + 1} of ${totalSnagPhotos}: ${photo.caption || 'Defect Evidence'}`;
-        doc.text(doc.splitTextToSize(photoLabel, pageWidth - infoX - 25), infoX, photoY + 18);
+    if (itemsWithPhotos.length > 0) {
+      newPage();
+      renderHeader('DEFECT PHOTOGRAPHIC EVIDENCE LOG');
 
-        // Location & Google GPS
-        doc.setFontSize(7.5);
-        doc.setFont('helvetica', 'normal');
-        doc.setTextColor(100, 116, 139);
-        const infoWidth = pageWidth - infoX - 25;
-        const locDetail = `Dept: ${deptName} • Loc: ${item.location || 'N/A'}`;
-        doc.text(doc.splitTextToSize(locDetail, infoWidth)[0], infoX, photoY + 25);
+      let photoY = 28;
 
-        // Google GPS pin
-        if (googleLoc.latitude) {
-          doc.setFontSize(7);
-          doc.setTextColor(5, 150, 105); // emerald-600
-          const gpsLine = `Google GPS: ${googleLoc.latitude}, ${googleLoc.longitude}`;
-          doc.text(doc.splitTextToSize(gpsLine, infoWidth)[0], infoX, photoY + 31);
-        }
+      for (let i = 0; i < itemsWithPhotos.length; i++) {
+        const item = itemsWithPhotos[i];
+        const deptName = DEPARTMENTS[item.department]?.name || 'General FM';
+        const snagPhotos = photosFor(layout, item.photos || []);
+        const totalSnagPhotos = snagPhotos.length;
 
-        // Priority Badge
-        doc.setFontSize(8);
-        doc.setFont('helvetica', 'bold');
-        doc.setTextColor(
-          item.priority === 1 ? 220 : item.priority === 2 ? 234 : 30,
-          item.priority === 1 ? 38 : item.priority === 2 ? 88 : 41,
-          item.priority === 1 ? 38 : item.priority === 2 ? 12 : 59
-        );
-        const urgencyLine = `Remedial Urgency: Priority ${item.priority} (${PRIORITY_LEVELS[item.priority]?.timeframe})`;
-        doc.text(doc.splitTextToSize(urgencyLine, infoWidth)[0], infoX, photoY + 38);
+        for (let p = 0; p < totalSnagPhotos; p++) {
+          const photo = snagPhotos[p];
 
-        // Defect notes
-        doc.setFontSize(7.5);
-        doc.setFont('helvetica', 'normal');
-        doc.setTextColor(51, 65, 85);
-        doc.text('Observed Defect:', infoX, photoY + 45);
-        const splitDefect = doc
-          .splitTextToSize(item.defectDescription || 'None recorded', infoWidth)
-          .slice(0, 4);
-        doc.text(splitDefect, infoX, photoY + 50);
+          if (photoY + 75 > pageHeight - 20) {
+            doc.addPage();
+            renderHeader('DEFECT PHOTOGRAPHIC EVIDENCE LOG (CONT.)');
+            photoY = 28;
+          }
 
-        // Action & Cost
-        if (costs) {
+          const safeDataUrl = await getSafeImageDataUrl(photo.dataUrl);
+
+          // Photo card container
+          doc.setFillColor(248, 250, 252);
+          doc.setDrawColor(203, 213, 225);
+          doc.roundedRect(20, photoY, pageWidth - 40, 68, 2, 2, 'FD');
+
+          if (safeDataUrl) {
+            try {
+              doc.addImage(safeDataUrl, 'JPEG', 24, photoY + 5, 80, 58);
+            } catch (imgErr) {
+              console.warn('Failed embedding image in PDF:', imgErr);
+            }
+          }
+
+          // Details next to photo
+          const infoX = 110;
+          const titleWidth = pageWidth - infoX - 25;
           doc.setFont('helvetica', 'bold');
           doc.setTextColor(15, 23, 42);
-          doc.text(`Remedial Estimate: ${formatMoney(item.estimatedCost)}`, infoX, photoY + 63);
-        }
 
-        photoY += 73;
+          // Step the title down a size until it fits the card, then clip it.
+          let assetTitle = snagLabel(item, i);
+          let titleSize = 10;
+          doc.setFontSize(titleSize);
+          while (titleSize > 8 && doc.getTextWidth(assetTitle) > titleWidth) {
+            titleSize -= 0.5;
+            doc.setFontSize(titleSize);
+          }
+          if (doc.getTextWidth(assetTitle) > titleWidth) {
+            assetTitle = doc.splitTextToSize(assetTitle, titleWidth)[0];
+          }
+          doc.text(assetTitle, infoX, photoY + 11);
+
+          // Multi-photo count & caption
+          doc.setFontSize(8);
+          doc.setFont('helvetica', 'bold');
+          doc.setTextColor(2, 132, 199);
+          const photoLabel = `Photo ${p + 1} of ${totalSnagPhotos}: ${photo.caption || 'Defect Evidence'}`;
+          doc.text(doc.splitTextToSize(photoLabel, pageWidth - infoX - 25), infoX, photoY + 18);
+
+          // Location & Google GPS
+          doc.setFontSize(7.5);
+          doc.setFont('helvetica', 'normal');
+          doc.setTextColor(100, 116, 139);
+          const infoWidth = pageWidth - infoX - 25;
+          const locDetail = `Dept: ${deptName} • Loc: ${item.location || 'N/A'}`;
+          doc.text(doc.splitTextToSize(locDetail, infoWidth)[0], infoX, photoY + 25);
+
+          // Google GPS pin
+          if (googleLoc.latitude) {
+            doc.setFontSize(7);
+            doc.setTextColor(5, 150, 105); // emerald-600
+            const gpsLine = `Google GPS: ${googleLoc.latitude}, ${googleLoc.longitude}`;
+            doc.text(doc.splitTextToSize(gpsLine, infoWidth)[0], infoX, photoY + 31);
+          }
+
+          // Priority Badge
+          doc.setFontSize(8);
+          doc.setFont('helvetica', 'bold');
+          doc.setTextColor(
+            item.priority === 1 ? 220 : item.priority === 2 ? 234 : 30,
+            item.priority === 1 ? 38 : item.priority === 2 ? 88 : 41,
+            item.priority === 1 ? 38 : item.priority === 2 ? 12 : 59
+          );
+          const urgencyLine = `Remedial Urgency: Priority ${item.priority} (${PRIORITY_LEVELS[item.priority]?.timeframe})`;
+          doc.text(doc.splitTextToSize(urgencyLine, infoWidth)[0], infoX, photoY + 38);
+
+          // Defect notes
+          doc.setFontSize(7.5);
+          doc.setFont('helvetica', 'normal');
+          doc.setTextColor(51, 65, 85);
+          doc.text('Observed Defect:', infoX, photoY + 45);
+          const splitDefect = doc
+            .splitTextToSize(item.defectDescription || 'None recorded', infoWidth)
+            .slice(0, 4);
+          doc.text(splitDefect, infoX, photoY + 50);
+
+          // Action & Cost
+          if (costs) {
+            doc.setFont('helvetica', 'bold');
+            doc.setTextColor(15, 23, 42);
+            doc.text(`Remedial Estimate: ${formatMoney(item.estimatedCost)}`, infoX, photoY + 63);
+          }
+
+          photoY += 73;
+        }
       }
     }
+
+    options.onProgress?.(n + 1, surveys.length);
   }
 
   // Stamp "Page X of Y" on every page once the total is known
@@ -663,7 +677,10 @@ export async function generateSurveyPDF(survey, selectedFacility = 'ALL', option
 
   // Save the PDF
   const facilitySuffix = selectedFacility !== 'ALL' ? `_${selectedFacility.replace(/[^a-z0-9]/gi, '_')}` : '';
-  const safeFilename = (facility.facilityName || facility.buildingName || 'FM_Condition_Survey')
+  const firstFacility = surveys[0].facility || {};
+  const safeFilename = surveys.length > 1
+    ? `all_facilities_${surveys.length}`
+    : (firstFacility.facilityName || firstFacility.buildingName || 'FM_Condition_Survey')
     .replace(/[^a-z0-9]/gi, '_')
     .replace(/_+/g, '_')
     .replace(/^_|_$/g, '')

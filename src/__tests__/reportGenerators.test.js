@@ -76,6 +76,27 @@ describe('Excel follows the layout', () => {
   });
 });
 
+describe('several facilities in one PDF', () => {
+  test('one document holds every facility, and is named for the set', async () => {
+    saved.length = 0;
+    const second = { ...survey, id: 's2', facility: { facilityName: 'Feed Store' }, items: [{ ...survey.items[0], id: 'i3', assetName: 'Door closer' }] };
+    const name = await generateSurveyPDF([survey, second], 'ALL', { layout: standardLayout() });
+    expect(saved).toHaveLength(1);                       // one file, not one per facility
+    expect(name).toBe('all_facilities_2_audit_report.pdf');
+    const text = new TextDecoder('latin1').decode(await saved[0].arrayBuffer());
+    expect(text).toContain('Stable Block A');
+    expect(text).toContain('Feed Store');
+    expect(text).toContain('Door closer');
+  });
+
+  test('progress is reported per facility', async () => {
+    saved.length = 0;
+    const seen = [];
+    await generateSurveyPDF([survey, { ...survey, id: 's3' }], 'ALL', { layout: standardLayout(), onProgress: (d, t) => seen.push(`${d}/${t}`) });
+    expect(seen).toEqual(['1/2', '2/2']);
+  });
+});
+
 describe('PDF follows the layout', () => {
   test('Standard shows costs; the client layout does not', async () => {
     expect(await pdfText(standardLayout())).toMatch(/AED/);
