@@ -22,6 +22,9 @@ import PhotoGallery from './components/PhotoGallery';
 const ReportDashboard = lazy(() => import('./components/ReportDashboard'));
 const AdminDashboard = lazy(() => import('./admin/AdminDashboard'));
 import PortalSidebar from './portal/PortalSidebar';
+import { createQhse, isQhse } from './qhse/model';
+const QhseHub = lazy(() => import('./qhse/QhseInspection').then(m => ({ default: m.QhseHub })));
+const QhseInspection = lazy(() => import('./qhse/QhseInspection'));
 import PortalHome from './portal/PortalHome';
 import AllFacilities from './portal/AllFacilities';
 import ReviewApproval from './portal/ReviewApproval';
@@ -654,7 +657,7 @@ export default function App({ currentUser = null, onSignOut } = {}) {
         const saved = await loadCurrentSurveyOffline();
 
         const localHasUnpushedWork =
-          saved && saved.pendingSync && Array.isArray(saved.items) && saved.items.length > 0;
+          saved && saved.pendingSync && Array.isArray(saved.items) && (saved.items.length > 0 || isQhse(saved));
 
         // Work done with no signal has not reached the server yet. Pulling here
         // would overwrite it with the older server copy and lose the survey.
@@ -1363,9 +1366,24 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
     if (target.admin) { openAdmin(target.admin); return; }
     if (target.view === 'allFacilities') { openFacilityList('all'); return; }
     if (target.view === 'facilities' && !activeProjectRef.current) { setView('projects'); return; }
-    if (target.view === 'home') refreshSurveyList();
+    if (target.view === 'home' || target.view === 'qhse') refreshSurveyList();
     setView(target.view);
   };
+
+  async function startQhse(projectId) {
+    if (!mayEditSurveys) return;
+    if (surveyRef.current) {
+      const kept = await saveSurveyOffline(surveyRef.current);
+      if (kept?.conflict) throw new Error('Resolve the current inspection conflict before starting another.');
+    }
+    const fresh = createQhse(projectId, await nextFacilityNumber());
+    const saved = await saveSurveyOffline(fresh, { pendingSync: false });
+    if (saved?.conflict) throw new Error('Could not create the inspection.');
+    skipCloudPushRef.current = true;
+    surveyRef.current = fresh; setSurvey(fresh);
+    setActiveProject(projects.find(p => p.id === projectId) || null);
+    setView('survey'); await refreshSurveyList();
+  }
 
   /** Opens a facility from the dashboard or search, with its project as context. */
   const openSurveyFromPortal = async (surveyId) => {
@@ -1778,13 +1796,13 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
         // On the hub screens the subtitle is the project you are in, not a
         // facility -- "New Facility Assessment" there would be misleading.
         contextLabel={
-          view === 'survey'
+          view === 'survey' && isQhse(survey) ? 'QHSE Inspection' : view === 'survey'
             ? ''
             : (activeProject ? `${activeProject.projectNumber} · ${activeProject.name}` : 'ADEC')
         }
         // Reports need a facility behind them, so the shortcut only belongs on
         // the survey screens; the hub screens have their own Reports entry.
-        showReports={view === 'survey'}
+        showReports={view === 'survey' && !isQhse(survey)}
         onOpenUsers={() => (isWebPortal ? openAdmin('users') : setView('users'))}
         onOpenNav={isWebPortal ? () => setNavOpen(true) : undefined}
         searchSlot={isWebPortal ? (
@@ -1808,7 +1826,7 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
       {/* Navigation belongs to a chosen facility: the five tabs all act on one
           survey, so showing them before a facility is picked would offer
           modules with nothing behind them. */}
-      {view === 'survey' && (
+      {view === 'survey' && !isQhse(survey) && (
         <Navigation
           activeTab={activeTab}
           setActiveTab={handleTabChange}
@@ -1839,6 +1857,19 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
       )}
 
       {/* Project picker: nothing project-specific is reachable until one is chosen. */}
+      {!isWebPortal && view !== 'survey' && <button className="mx-4 my-2 text-[#293771] underline text-left" onClick={() => { refreshSurveyList(); setView('qhse'); }}>QHSE Inspection</button>}
+      {view === 'qhse' && <main className="flex-1 px-3 sm:px-8 py-6 safe-area-content-pb">
+        <QhseHub surveys={surveyList.filter(isQhse)} projects={projects} canEdit={mayEditSurveys} cloudConfigured={isCloudConfigured}
+          onCreate={startQhse} onOpen={openSurveyFromPortal} />
+      </main>}
+      {view === 'survey' && isQhse(survey) && <main className="flex-1 max-w-6xl w-full mx-auto px-3 sm:px-6 py-6 safe-area-content-pb">
+        <QhseInspection survey={survey} canEdit={mayEditOpen} canDelete={!isCloudConfigured || mayDeleteSnags} canExport={!isCloudConfigured || mayDownloadReports}
+          onFacility={handleUpdateFacility} onItem={handleUpdateItem} onDelete={handleDeleteItem}
+          onAdd={item => { if (mayEditOpen) setSurvey(prev => ({ ...prev, items: [...prev.items, item] })); }}
+          onSignatures={signatures => { if (mayEditOpen) setSurvey(prev => ({ ...prev, signatures })); }}
+          onBack={async () => { const saved = await saveSurveyOffline(surveyRef.current); if (!saved?.conflict) { await refreshSurveyList(); setView('qhse'); } }}
+          onBackup={handleExportJSON} />
+      </main>}
       {view === 'projects' && (
         <main className="flex-1 w-full px-3 sm:px-8 pt-4 sm:pt-6 safe-area-content-pb md:pb-8">
           <ProjectDashboard
@@ -2051,7 +2082,7 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
       {/* Main Content Area */}
       {/* Facility bar: which facility is open, switch to another, and submit
           this one when it is finished. */}
-      {view === 'survey' && (
+      {view === 'survey' && !isQhse(survey) && (
       <div className="bg-white border-b border-slate-200">
         <div className="max-w-6xl mx-auto px-3 sm:px-6 py-2 flex items-center gap-3 flex-wrap">
           <div className="flex items-center gap-2 min-w-0 w-full sm:w-auto sm:flex-1">
@@ -2156,7 +2187,7 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
           at 50 assets, which is what made switching feel slow. Keeping them
           mounted makes a switch a style change instead of a rebuild, and it
           also preserves each tab's scroll position and in-progress input. */}
-      {view === 'survey' && (
+      {view === 'survey' && !isQhse(survey) && (
       <main className="flex-1 max-w-6xl w-full mx-auto px-3 sm:px-6 pt-4 sm:pt-6 safe-area-content-pb md:pb-8">
         {/* A role without Edit surveys sees the facility with every control
             disabled. The database refuses its changes anyway; this keeps the

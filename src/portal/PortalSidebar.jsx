@@ -21,6 +21,7 @@ function buildNav({ access = {}, hasOpenProject }) {
   const isAdmin = !!access.config;
   return [
     { key: 'home', label: 'Dashboard', icon: Home, target: { view: 'home' } },
+    { key: 'qhse', label: 'QHSE Inspection', icon: LayoutList, target: { view: 'qhse' } },
     // Forms, sections, fields and dropdown options share one page; rules have their own.
     access.config && {
       key: 'builder', label: 'Survey Builder', icon: LayoutList,

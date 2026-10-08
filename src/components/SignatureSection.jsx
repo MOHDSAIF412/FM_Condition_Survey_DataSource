@@ -1,7 +1,7 @@
 import React, { useRef, useEffect, useCallback } from 'react';
 import { PenTool, RotateCcw, Check, User, Calendar, ShieldCheck } from 'lucide-react';
 
-function CanvasSignaturePad({ value, onSave, label }) {
+export function CanvasSignaturePad({ value, onSave, label }) {
   const canvasRef = useRef(null);
   const isDrawing = useRef(false);
   const sizeRef = useRef({ w: 0, h: 0 });

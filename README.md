@@ -36,6 +36,22 @@ device copy is kept for comparison instead of overwriting another device's work.
 **Recovery backups** in the account menu downloads copies preserved during
 conflict resolution. These backups remain local and do not enter the sync queue.
 
+## QHSE inspections
+
+Open **QHSE Inspection** from the portal menu (or the project screen on Android).
+Choose an accessible project for cloud storage, then enter the report's project
+name, location, region, site, report number, inspection date, inspector and personnel.
+Each finding records a location, manually entered type, description, severity,
+CAFM reference and Open/Closed status, with multiple captioned photos. Inspector
+sign-off and PDF/Excel exports are available inside the inspection.
+
+QHSE uses the existing IndexedDB, photo bucket and atomic survey sync. Its module
+and report metadata are stored in `facility`; finding fields use `custom_values`.
+No database migration is required. Existing survey edit, deletion, export and
+project membership permissions apply. QHSE reports use the supplied OCS palette;
+critical, moderate and no-impact findings use red, orange and green respectively.
+Export QHSE and FM inspections separately. JSON backup remains available.
+
 ## Tests and builds
 
 ```sh
