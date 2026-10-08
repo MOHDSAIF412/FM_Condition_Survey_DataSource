@@ -7,16 +7,16 @@ import ErrorBoundary from './components/ErrorBoundary';
 import { initOtaUpdates } from './utils/otaUpdates';
 import { registerOfflineShell } from './utils/offlineShell';
 
+function BootReady() {
+  React.useEffect(() => { initOtaUpdates(); registerOfflineShell(); }, []);
+  return null;
+}
+
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <ErrorBoundary>
       <AuthGate />
+      <BootReady />
     </ErrorBoundary>
   </React.StrictMode>
 );
-
-// Must run after the app has actually rendered. The updater treats a bundle
-// that never reports ready as broken and rolls back to the previous one, which
-// is the safety net that stops a bad update from bricking the app.
-initOtaUpdates();
-registerOfflineShell();

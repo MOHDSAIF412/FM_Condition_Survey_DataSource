@@ -14,6 +14,8 @@ const ReportModal = lazy(() => import('./components/ReportModal'));
 import SavedFacilities from './components/SavedFacilities';
 import ProjectDashboard from './components/ProjectDashboard';
 import ModulePicker from './components/ModulePicker';
+import AutomaticUpdates from './components/AutomaticUpdates';
+import { allowOtaAtSafeScreen } from './utils/otaUpdates';
 const UserManagement = lazy(() => import('./components/UserManagement'));
 import ChangePasswordModal from './components/ChangePasswordModal';
 import Breadcrumb from './components/Breadcrumb';
@@ -211,6 +213,14 @@ export default function App({ currentUser = null, onSignOut } = {}) {
   // pushed. While it is set, a pull must never replace local state -- the
   // server is by definition behind us.
   const hasUnpushedEditsRef = useRef(false);
+  const localSavesInFlight = useRef(0);
+  const localSaveFailed = useRef(false);
+  useEffect(() => allowOtaAtSafeScreen(() =>
+    isLoaded && view === 'modules' && !navOpen && !showPasswordModal
+    && !showReportModal && !showRecoveries && !conflictId
+    && !pendingSaveRef.current && !uploadInFlight.current
+    && !localSavesInFlight.current && !localSaveFailed.current
+  ), [isLoaded, view, navOpen, showPasswordModal, showReportModal, showRecoveries, conflictId]);
 
   function markAsExternalChange() {
     skipLocalSaveRef.current = true;
@@ -767,11 +777,13 @@ export default function App({ currentUser = null, onSignOut } = {}) {
     const outgoing = pendingSaveRef.current;
     if (outgoing && outgoing.id !== survey?.id) {
       pendingSaveRef.current = null;
+      localSavesInFlight.current += 1;
       saveSurveyOffline(outgoing)
         .then(() => {
           if (isCloudConfigured && isOnline()) flushPendingSurveys().catch(() => {});
         })
-        .catch((err) => console.error('Could not save the facility being left:', err));
+        .catch((err) => { localSaveFailed.current = true; console.error('Could not save the facility being left:', err); })
+        .finally(() => { localSavesInFlight.current -= 1; });
     }
 
     // This change came from another tab, so it is already saved.
@@ -789,6 +801,7 @@ export default function App({ currentUser = null, onSignOut } = {}) {
 
     saveTimeoutRef.current = setTimeout(async () => {
       if (pendingSaveRef.current === survey) pendingSaveRef.current = null;
+      localSavesInFlight.current += 1;
       try {
         const result = await saveSurveyOffline(survey);
 
@@ -802,7 +815,10 @@ export default function App({ currentUser = null, onSignOut } = {}) {
         }
         setLastSavedTime(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
       } catch (err) {
+        localSaveFailed.current = true;
         console.error('Auto-save error:', err);
+      } finally {
+        localSavesInFlight.current -= 1;
       }
     }, 600);
 
@@ -1981,7 +1997,7 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
       )}
 
       {/* Project picker: nothing project-specific is reachable until one is chosen. */}
-      {view === 'modules' && <main className="flex-1 px-4 sm:px-8 py-8 safe-area-content-pb"><ModulePicker onSelect={module => navigatePortal({ module })} /></main>}
+      {view === 'modules' && <main className="flex-1 px-4 sm:px-8 py-8 safe-area-content-pb"><AutomaticUpdates /><ModulePicker onSelect={module => navigatePortal({ module })} /></main>}
       {view === 'qhse' && <main className="flex-1 max-w-6xl w-full mx-auto px-3 sm:px-8 py-6 safe-area-content-pb">
         <QhseHub surveys={surveyList.filter(s => isQhse(s) && s.projectId === activeProject?.id)} project={activeProject} canEdit={mayEditSurveys} canDelete={!isCloudConfigured || mayDeleteSnags} onAction={handleQhseAction}
           onBack={handleAppBack} legacySurveys={surveyList.filter(s => s.projectId === activeProject?.id && isLegacyQhse(s) && !isLocked(s))} onMove={handleMoveLegacyQhse} onCreate={startQhse} onOpen={openSurveyFromPortal} />
