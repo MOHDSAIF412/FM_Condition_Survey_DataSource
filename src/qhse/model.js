@@ -16,6 +16,11 @@ export function createQhse(projectId = null, number = 1, project = {}, template 
 export function createFinding() {
   return { ...createDefaultAsset('', 'GENERAL'), customValues: { qhseType: '', severity: '', cafmReference: '', findingStatus: 'Open' } };
 }
+export function createPhotoEvidence(photos = [], location = '') {
+  const item = createFinding();
+  return { ...item, location, defectDescription: 'Report photo evidence', photos,
+    customValues: { ...item.customValues, qhseEvidenceOnly: true } };
+}
 export function findingData(item) {
   return { location: item.location || '', description: item.defectDescription || '',
     type: item.customValues?.qhseType || '', severity: item.customValues?.severity || '',
@@ -59,6 +64,7 @@ export function inspectionIssues(survey) {
     if (!String(inspectionValue(survey, field)).trim()) issues.push(`Enter ${field.label.toLowerCase()}.`);
   }
   for (const [index, item] of (survey.items || []).entries()) {
+    if (item.customValues?.qhseEvidenceOnly) continue;
     const f = findingData(item);
     for (const key of activeFields(survey, 'finding').filter(f => f.required).map(f => f.id)) {
       if (!f[key]?.trim()) issues.push(`Finding ${index + 1}: enter ${key}.`);

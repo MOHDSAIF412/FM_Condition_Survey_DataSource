@@ -53,6 +53,19 @@ Each finding records a location, manually entered type, description, severity,
 CAFM reference and Open/Closed status, with multiple captioned photos. Inspector
 sign-off and PDF/Excel exports are available inside the inspection.
 
+The **Photos & remarks** section accepts report photos without creating a finding
+first. Each photo has its own remark, saved in the existing caption field for
+compatibility with older apps and included separately in PDF/Excel. Photos may
+also be attached to individual findings. Back buttons save the current inspection
+before returning to its project. Android Back follows the same hierarchy, closes
+open app menus/modals first, and asks before exiting at the module chooser.
+Android back handling requires APK v1.4 or newer (the native App plugin).
+
+Project QHSE lists identify older records explicitly titled QHSE inspection/audit/
+report and offer **Move to QHSE**. Moving preserves IDs, project membership,
+items, photos and remarks; original facility metadata remains in `migratedFrom`
+and a device recovery backup. Approved records must be reopened first.
+
 QHSE uses the existing IndexedDB, photo bucket and atomic survey sync. Its module
 and report metadata are stored in `facility`; finding fields use `custom_values`.
 No database migration is required. Existing survey edit, deletion, export and

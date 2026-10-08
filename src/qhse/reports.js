@@ -13,8 +13,9 @@ function records(input) {
 }
 const filename = input => `${(input.facility?.qhse?.projectName || 'QHSE').replace(/[^a-zA-Z0-9_-]+/g, '_')}_QHSE_report`;
 const countSummary = survey => {
-  const findings = (survey.items || []).map(findingData);
-  return `${findings.length} findings | ${findings.filter(f => f.status === 'Open').length} open | ${findings.filter(f => f.status === 'Closed').length} closed | ${findings.filter(f => f.status === 'Open' && f.severity === 'Critical -2').length} critical open`;
+  const findings = (survey.items || []).filter(i => !i.customValues?.qhseEvidenceOnly).map(findingData);
+  const reportPhotos = (survey.items || []).filter(i => i.customValues?.qhseEvidenceOnly).reduce((n, i) => n + (i.photos || []).length, 0);
+  return `${findings.length} findings | ${findings.filter(f => f.status === 'Open').length} open | ${findings.filter(f => f.status === 'Closed').length} closed | ${findings.filter(f => f.status === 'Open' && f.severity === 'Critical -2').length} critical open${reportPhotos ? ` | ${reportPhotos} report photos` : ''}`;
 };
 
 export async function generateQhsePDF(input, options = {}) {
@@ -45,16 +46,17 @@ export async function generateQhsePDF(input, options = {}) {
     table([['Finding summary', countSummary(survey)]], doc.lastAutoTable.finalY + 5);
     for (const [index, item] of (survey.items || []).entries()) {
       const f = findingData(item);
+      const entryName = item.customValues?.qhseEvidenceOnly ? 'Report photos' : `Finding ${index + 1}`;
       doc.addPage(); header();
-      doc.setFontSize(12); doc.setTextColor(blue); doc.text(`Finding ${index + 1}`, 15, 32);
-      table(findingDetails(survey, item), 37);
+      doc.setFontSize(12); doc.setTextColor(blue); doc.text(entryName, 15, 32);
+      table(item.customValues?.qhseEvidenceOnly ? [['Evidence', 'Report photographs']] : findingDetails(survey, item), 37);
       let y = doc.lastAutoTable.finalY + 8;
       for (const [pi, photo] of f.photos.entries()) {
         const caption = doc.splitTextToSize(`Photo ${pi + 1} of ${f.photos.length}${photo.caption ? ': ' + photo.caption : ''}`, 176);
         const captionHeight = caption.length * 4;
         if (y + 84 + captionHeight > 276) { doc.addPage(); header(); y = 32; }
         doc.setFontSize(10); doc.setTextColor(`#${riskColor(f.severity)}`);
-        doc.text(`Finding ${index + 1} | ${f.location}`, 15, y, { maxWidth: 176 });
+        doc.text(`${entryName}${f.location ? ` | ${f.location}` : ''}`, 15, y, { maxWidth: 176 });
         y += 7;
         const image = doc.getImageProperties(photo.dataUrl);
         const scale = Math.min(176 / image.width, 68 / image.height);
@@ -62,7 +64,7 @@ export async function generateQhsePDF(input, options = {}) {
         doc.addImage(photo.dataUrl, image.fileType, 15 + (176 - w) / 2, y, w, h);
         y += 72;
         // autoTable allows even exceptionally long captions to continue safely.
-        table([[`Finding ${index + 1}, photo ${pi + 1} of ${f.photos.length}`, photo.caption || '']], y);
+        table([[`${entryName}, photo ${pi + 1} of ${f.photos.length} — remark`, photo.caption || '']], y);
         y = doc.lastAutoTable.finalY + 8;
       }
     }
@@ -101,7 +103,7 @@ export async function generateQhseExcel(input, options = {}) {
     const fields = activeFields(survey, 'finding');
     const evidenceColumn = fields.length + 2;
     ws.columns = [8, ...fields.map(f => f.type === 'textarea' ? 65 : 25), 12, 38, 45].map(width => ({ width }));
-    ws.addRow(['Finding', ...fields.map(f => f.label), 'Photo', 'Evidence', 'Caption']);
+    ws.addRow(['Finding', ...fields.map(f => f.label), 'Photo', 'Evidence', 'Remark']);
     for (const [index, item] of (survey.items || []).entries()) {
       const f = findingData(item);
       for (const [pi, photo] of (f.photos.length ? f.photos : [null]).entries()) {

@@ -1,3 +1,4 @@
+import BackButton from './BackButton';
 import React, { useState, useMemo, useEffect } from 'react';
 import {
   FolderPlus,
@@ -77,7 +78,7 @@ export default function ProjectDashboard({
 
   return (
     <div className="space-y-7 pb-10">
-      {onBack && <button onClick={onBack} className="text-sm font-semibold text-[#293771]">← Choose module</button>}
+      {onBack && <BackButton onClick={onBack}>Choose module</BackButton>}
       {/* Hero -- a plain sky gradient, deliberately no photo/illustration */}
       <div className="relative overflow-hidden bg-gradient-to-br from-sky-400 via-sky-300 to-blue-200 rounded-3xl p-7 sm:p-10 shadow-lg">
         <div className="relative flex items-start justify-between gap-4 flex-wrap">

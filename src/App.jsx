@@ -23,6 +23,10 @@ import PhotoGallery from './components/PhotoGallery';
 const ReportDashboard = lazy(() => import('./components/ReportDashboard'));
 const AdminDashboard = lazy(() => import('./admin/AdminDashboard'));
 import PortalSidebar from './portal/PortalSidebar';
+import BackButton from './components/BackButton';
+import { backTarget, installAndroidBackHandler } from './utils/backNavigation';
+import { App as NativeApp } from '@capacitor/app';
+import { isLegacyQhse, moveLegacyQhse } from './qhse/legacy';
 import { createQhse, isQhse } from './qhse/model';
 const QhseHub = lazy(() => import('./qhse/QhseInspection').then(m => ({ default: m.QhseHub })));
 const QhseInspection = lazy(() => import('./qhse/QhseInspection'));
@@ -1115,7 +1119,7 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
   const handleOpenSurvey = async (surveyId) => {
     // Already loaded (the facility the app opened in the background, or the
     // one last worked on): show it. Returning silently made "Open" look dead.
-    if (surveyId === survey?.id) { setView('survey'); return; }
+    if (surveyId === survey?.id) { setView('survey'); return surveyRef.current; }
     setSyncState('syncing');
 
     const local = await getSurveyOffline(surveyId);
@@ -1186,6 +1190,7 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
       else reportSyncFailure(remoteError);
     }
     setView('survey');
+    return chosen;
   };
 
   /**
@@ -1426,6 +1431,60 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
   };
 
   const dashboardCrumb = isWebPortal ? () => navigatePortal({ view: 'home' }) : undefined;
+
+  const backBusy = useRef(false);
+  const backAction = useRef(null);
+  const parentScreen = backTarget({ view, qhse: isQhse(survey), hasProject: !!activeProject, activeTab });
+  async function handleAppBack(native = false) {
+    if (backBusy.current) return;
+    if (navOpen) { setNavOpen(false); return; }
+    if (showReportModal) { setShowReportModal(false); return; }
+    if (showPasswordModal) { setShowPasswordModal(false); return; }
+    if (showRecoveries) { setShowRecoveries(false); return; }
+    backBusy.current = true;
+    try {
+      if ((view === 'survey' || !parentScreen) && mayEditOpen) {
+        const saved = await saveSurveyOffline(surveyRef.current);
+        if (saved?.conflict) { setConflictId(surveyRef.current.id); setSyncState('conflict'); return; }
+      }
+      if (!parentScreen) {
+        if (native === true && confirm('Close the app? Your saved drafts and photos will remain on this device.')) await NativeApp.exitApp();
+        return;
+      }
+      if (parentScreen.tab) setActiveTab(parentScreen.tab);
+      setView(parentScreen.view);
+      refreshSurveyList();
+    } catch (error) { alert(`Could not go back safely: ${error.message}`); }
+    finally { backBusy.current = false; }
+  }
+  backAction.current = () => handleAppBack(true);
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform() || !Capacitor.isPluginAvailable('App')) return;
+    const remove = installAndroidBackHandler(NativeApp, () => backAction.current?.());
+    return () => { remove().catch(error => console.warn('Back listener cleanup:', error.message)); };
+  }, []);
+
+  async function handleMoveLegacyQhse(id) {
+    if (!mayEditSurveys) throw new Error('Your role cannot move inspections.');
+    const row = surveyList.find(s => s.id === id);
+    if (!row || !isLegacyQhse(row) || row.projectId !== activeProjectRef.current?.id) throw new Error('Select the project containing this older QHSE report.');
+    if (isLocked(row)) throw new Error('This approved report must be reopened before moving it.');
+    if (mayEditOpen) {
+      const kept = await saveSurveyOffline(surveyRef.current);
+      if (kept?.conflict) throw new Error('Resolve the current draft conflict before moving another report.');
+    }
+    const record = await handleOpenSurvey(id);
+    if (!record) throw new Error('The older report could not be opened.');
+    if (isLocked(record)) throw new Error('This approved report must be reopened before moving it.');
+    await saveSurveyRecovery({ ...record, recoveryUserId: currentUser?.id });
+    const moved = moveLegacyQhse(record, activeProjectRef.current);
+    const saved = await saveSurveyOffline(moved);
+    if (saved?.conflict) throw new Error('This report changed on another device. Compare the copies before moving it.');
+    surveyRef.current = moved; setSurvey(moved);
+    skipCloudPushRef.current = false; hasUnpushedEditsRef.current = true;
+    setWorkModule('qhse'); setView('survey');
+    await refreshSurveyList();
+  }
 
   // A new screen starts at its top, with its breadcrumb in view -- not at the
   // scroll position the previous screen was left at.
@@ -1838,6 +1897,8 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
         onSignOut={onSignOut ? handleSignOut : undefined}
       />
 
+      {parentScreen && !['projects', 'qhse'].includes(view) && !(view === 'survey' && isQhse(survey)) && <div className="px-3 sm:px-8 py-3"><BackButton onClick={() => handleAppBack()}>Back to {parentScreen.label}</BackButton></div>}
+
       {showPasswordModal && (
         <ChangePasswordModal onClose={() => setShowPasswordModal(false)} />
       )}
@@ -1879,14 +1940,14 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
       {view === 'modules' && <main className="flex-1 px-4 sm:px-8 py-8 safe-area-content-pb"><ModulePicker onSelect={module => navigatePortal({ module })} /></main>}
       {view === 'qhse' && <main className="flex-1 max-w-6xl w-full mx-auto px-3 sm:px-8 py-6 safe-area-content-pb">
         <QhseHub surveys={surveyList.filter(s => isQhse(s) && s.projectId === activeProject?.id)} project={activeProject} canEdit={mayEditSurveys}
-          onBack={() => { setWorkModule('qhse'); setView('projects'); }} onCreate={startQhse} onOpen={openSurveyFromPortal} />
+          onBack={handleAppBack} legacySurveys={surveyList.filter(s => s.projectId === activeProject?.id && isLegacyQhse(s) && !isLocked(s))} onMove={handleMoveLegacyQhse} onCreate={startQhse} onOpen={openSurveyFromPortal} />
       </main>}
       {view === 'survey' && isQhse(survey) && <main className="flex-1 max-w-6xl w-full mx-auto px-3 sm:px-6 py-6 safe-area-content-pb">
         <QhseInspection project={activeProject} survey={survey} canEdit={mayEditOpen} canDelete={!isCloudConfigured || mayDeleteSnags} canExport={!isCloudConfigured || mayDownloadReports}
-          onFacility={handleUpdateFacility} onItem={handleUpdateItem} onDelete={handleDeleteItem}
-          onAdd={item => { if (mayEditOpen) setSurvey(prev => ({ ...prev, items: [...prev.items, item] })); }}
+          onFacility={handleUpdateFacility} onItem={(item, options) => { if (surveyRef.current?.id !== survey.id) throw new Error('Reopen the original inspection to attach these photos.'); handleUpdateItem(item, options); }} onDelete={handleDeleteItem}
+          onAdd={async item => { if (!mayEditOpen) return; if (surveyRef.current?.id !== survey.id) throw new Error('Reopen the original inspection to attach these photos.'); const next = { ...surveyRef.current, items: [...surveyRef.current.items, item] }; surveyRef.current = next; setSurvey(next); await saveSurveyOffline(next); }}
           onSignatures={signatures => { if (mayEditOpen) setSurvey(prev => ({ ...prev, signatures })); }}
-          onBack={async () => { setWorkModule('qhse'); const saved = await saveSurveyOffline(surveyRef.current); if (!saved?.conflict) { await refreshSurveyList(); setView('qhse'); } }}
+          onBack={handleAppBack}
           onBackup={handleExportJSON} />
       </main>}
       {view === 'projects' && (
@@ -1895,7 +1956,7 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
             key={workModule}
             moduleName={workModule === 'qhse' ? 'QHSE Inspection' : 'Condition Survey'}
             countLabel={workModule === 'qhse' ? 'inspections' : 'facilities'}
-            onBack={() => setView('modules')}
+            onBack={handleAppBack}
             projects={workModule === 'qhse' ? projects.map(p => ({ ...p, facilityCount: surveyList.filter(s => isQhse(s) && s.projectId === p.id).length })) : projects}
             loading={projectsLoading}
             online={online}

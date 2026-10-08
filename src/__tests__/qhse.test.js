@@ -1,6 +1,6 @@
 import { test, expect, vi } from 'vitest';
 import { mkdirSync, writeFileSync } from 'node:fs';
-import { createQhse, createFinding, findingData, inspectionIssues, isQhse, activeFields, reportDetails, findingDetails } from '../qhse/model';
+import { createQhse, createFinding, createPhotoEvidence, findingData, inspectionIssues, isQhse, activeFields, reportDetails, findingDetails } from '../qhse/model';
 vi.mock('../utils/fileSaver', () => ({ saveBlob: vi.fn() }));
 const { generateQhsePDF, generateQhseExcel } = await import('../qhse/reports');
 const ExcelJS = (await import('exceljs')).default;
@@ -22,6 +22,22 @@ function pdfText(buffer) {
   }
   return [...raw.matchAll(/<([0-9a-f]+)>\s*Tj/gi)].map(m => (m[1].match(/.{4}/g) || []).map(g => glyphs.get(g.toLowerCase()) || '').join('')).join('\n');
 }
+test('five report photos retain five independent remarks through JSON, PDF and Excel without requiring a finding', async () => {
+  const s = createQhse('p', 1, { name: 'Photo inspection', location: 'QA location' });
+  s.items = [createPhotoEvidence(Array.from({ length: 5 }, (_, i) => ({ id: `evidence-${i}`, dataUrl: photo, caption: `UNIQUE_REMARK_${i + 1}` })), s.facility.address)];
+  expect(inspectionIssues(s)).toEqual([]);
+  const restored = JSON.parse(JSON.stringify(s));
+  const pdf = await generateQhsePDF(restored, { returnBlob: true }); const text = pdfText(Buffer.from(await pdf.arrayBuffer()));
+  for (let i = 1; i <= 5; i++) expect(text).toContain(`UNIQUE_REMARK_${i}`);
+  vi.stubGlobal('Image', class { naturalWidth = 1; naturalHeight = 1; set src(v) { queueMicrotask(() => this.onload()); } });
+  try {
+    const excel = await generateQhseExcel(restored, { returnBlob: true }); const wb = new ExcelJS.Workbook(); await wb.xlsx.load(await excel.arrayBuffer());
+    const sheet = wb.getWorksheet('Findings 1'); expect(sheet.getImages()).toHaveLength(5); expect(sheet.rowCount).toBe(6);
+    for (let i = 1; i <= 5; i++) expect(sheet.getCell(`J${i + 1}`).value).toBe(`UNIQUE_REMARK_${i}`);
+    writeFileSync('outputs/qhse-qa/five-photo-remarks.pdf', Buffer.from(await pdf.arrayBuffer()));
+    writeFileSync('outputs/qhse-qa/five-photo-remarks.xlsx', Buffer.from(await excel.arrayBuffer()));
+  } finally { vi.unstubAllGlobals(); }
+});
 test('new inspection has no reference project data and validation identifies incomplete findings', () => {
   const survey = createQhse('p'); expect(isQhse(survey)).toBe(true); expect(survey.items).toEqual([]);
   expect(survey.facility.qhse.projectName).toBe(''); expect(inspectionIssues(survey)).toHaveLength(2);
