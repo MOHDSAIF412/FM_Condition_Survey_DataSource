@@ -17,6 +17,8 @@ const NO_UPDATE = {
   message: 'No new version available',
   error: 'no_new_version_available'
 };
+// Update downloads must come from our deployment, never a caller-supplied host.
+const UPDATE_ORIGIN = 'https://fm-condition-survey-data-source.vercel.app';
 
 export default async function handler(req, res) {
   // The plugin POSTs; allow GET too so the endpoint can be opened in a browser
@@ -26,9 +28,7 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'method_not_allowed' });
   }
 
-  const host = req.headers['x-forwarded-host'] || req.headers.host;
-  const proto = req.headers['x-forwarded-proto'] || 'https';
-  const origin = `${proto}://${host}`;
+  const origin = UPDATE_ORIGIN;
 
   let manifest;
   try {
@@ -42,7 +42,9 @@ export default async function handler(req, res) {
     return res.status(200).json(NO_UPDATE);
   }
 
-  if (!manifest || !manifest.version || !manifest.path) {
+  if (!manifest || !/^\d+\.\d+\.\d+$/.test(manifest.version || '')
+      || !/^\/ota\/bundle-\d+\.\d+\.\d+\.zip$/.test(manifest.path || '')
+      || manifest.path !== `/ota/bundle-${manifest.version}.zip`) {
     return res.status(200).json(NO_UPDATE);
   }
 

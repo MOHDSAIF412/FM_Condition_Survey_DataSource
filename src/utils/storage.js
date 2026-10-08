@@ -4,8 +4,8 @@
  */
 
 import { settleUpload } from './syncSettlement';
+import { deviceStorageScope } from './deviceAccount';
 
-const DB_NAME = 'FM_Condition_Survey_DB';
 const SYNC_CHANNEL = 'fm_survey_sync';
 
 /**
@@ -47,11 +47,11 @@ function getSyncChannel() {
  * Notifies other tabs in this browser that the survey changed.
  * Does nothing across devices -- that needs a server.
  */
-function broadcastChange(survey) {
+function broadcastChange(survey, scope) {
   const ch = getSyncChannel();
   if (!ch) return;
   try {
-    ch.postMessage({ type: 'survey-saved', id: survey.id, revision: survey.revision, writerId: TAB_ID });
+    ch.postMessage({ type: 'survey-saved', id: survey.id, revision: survey.revision, writerId: TAB_ID, accountId: scope.accountId });
   } catch (e) {
     // A closed channel is not worth failing a save over.
   }
@@ -62,11 +62,13 @@ function broadcastChange(survey) {
  * reload instead of showing stale data. Returns an unsubscribe function.
  */
 export function subscribeToSurveyChanges(onExternalChange) {
+  const accountId = deviceStorageScope().accountId;
   const ch = getSyncChannel();
   if (!ch) return () => {};
   const handler = (event) => {
     const msg = event.data;
     if (!msg || msg.type !== 'survey-saved') return;
+    if ((msg.accountId || null) !== accountId) return;
     if (msg.writerId === TAB_ID) return; // our own write echoing back
     onExternalChange(msg);
   };
@@ -80,9 +82,9 @@ const DB_VERSION = 2;
 const STORE_SURVEYS = 'surveys';
 const STORE_SETTINGS = 'settings';
 
-function openDB() {
+function openDB(scope = deviceStorageScope()) {
   return new Promise((resolve, reject) => {
-    const request = indexedDB.open(DB_NAME, DB_VERSION);
+    const request = indexedDB.open(scope.database, DB_VERSION);
 
     request.onupgradeneeded = (event) => {
       const db = event.target.result;
@@ -165,8 +167,9 @@ export async function listSurveyRecoveries() {
  *        server copy overwrite work done with no signal.
  */
 export async function saveSurveyOffline(survey, options = {}) {
+  const scope = deviceStorageScope();
   try {
-    const db = await openDB();
+    const db = await openDB(scope);
     return new Promise((resolve, reject) => {
       const tx = db.transaction(STORE_SURVEYS, 'readwrite');
       const store = tx.objectStore(STORE_SURVEYS);
@@ -176,8 +179,9 @@ export async function saveSurveyOffline(survey, options = {}) {
 
       existingReq.onsuccess = () => {
         const existing = existingReq.result;
-        const seen = lastKnownRevisions.has(survey.id)
-          ? lastKnownRevisions.get(survey.id)
+        const revisionKey = `${scope.database}:${survey.id}`;
+        const seen = lastKnownRevisions.has(revisionKey)
+          ? lastKnownRevisions.get(revisionKey)
           : null;
 
         // Another tab saved something newer than what this tab last saw.
@@ -202,12 +206,12 @@ export async function saveSurveyOffline(survey, options = {}) {
         };
         const req = store.put(dataToSave);
         req.onsuccess = () => {
-          lastKnownRevisions.set(survey.id, nextRevision);
-          broadcastChange(dataToSave);
+          lastKnownRevisions.set(revisionKey, nextRevision);
+          broadcastChange(dataToSave, scope);
           // Also save active ID to localStorage for quick restore
           try {
-            localStorage.setItem('fm_active_survey_id', survey.id);
-            localStorage.setItem('fm_last_saved', new Date().toLocaleTimeString());
+            localStorage.setItem(scope.activeKey, survey.id);
+            localStorage.setItem(scope.savedKey, new Date().toLocaleTimeString());
           } catch (e) {
             // ignore localStorage failure
           }
@@ -221,7 +225,7 @@ export async function saveSurveyOffline(survey, options = {}) {
   } catch (err) {
     console.error('Failed to save to IndexedDB, fallback to localStorage', err);
     try {
-      localStorage.setItem('fm_current_survey', JSON.stringify(survey));
+      localStorage.setItem(scope.fallbackKey, JSON.stringify(survey));
       return survey;
     } catch (lsErr) {
       console.error('LocalStorage also failed', lsErr);
@@ -250,27 +254,28 @@ export async function getSurveyOffline(id) {
 }
 
 export async function loadCurrentSurveyOffline(defaultId = 'active_survey') {
+  const scope = deviceStorageScope();
   try {
-    const activeId = localStorage.getItem('fm_active_survey_id') || defaultId;
-    const db = await openDB();
+    const activeId = localStorage.getItem(scope.activeKey) || defaultId;
+    const db = await openDB(scope);
     return new Promise((resolve) => {
       const tx = db.transaction(STORE_SURVEYS, 'readonly');
       const store = tx.objectStore(STORE_SURVEYS);
       const req = store.get(activeId);
       req.onsuccess = () => {
         if (req.result) {
-          lastKnownRevisions.set(req.result.id, req.result.revision || 0);
+          lastKnownRevisions.set(`${scope.database}:${req.result.id}`, req.result.revision || 0);
           resolve(req.result);
         } else {
           // Check if there is any survey in the store
           const allReq = store.getAll();
           allReq.onsuccess = () => {
             if (allReq.result && allReq.result.length > 0) {
-              lastKnownRevisions.set(allReq.result[0].id, allReq.result[0].revision || 0);
+              lastKnownRevisions.set(`${scope.database}:${allReq.result[0].id}`, allReq.result[0].revision || 0);
               resolve(allReq.result[0]);
             } else {
               // Try fallback localStorage
-              const fallback = localStorage.getItem('fm_current_survey');
+              const fallback = localStorage.getItem(scope.fallbackKey);
               resolve(fallback ? JSON.parse(fallback) : null);
             }
           };
@@ -282,7 +287,7 @@ export async function loadCurrentSurveyOffline(defaultId = 'active_survey') {
   } catch (err) {
     console.warn('Error reading from IndexedDB:', err);
     try {
-      const fallback = localStorage.getItem('fm_current_survey');
+      const fallback = localStorage.getItem(scope.fallbackKey);
       return fallback ? JSON.parse(fallback) : null;
     } catch (e) {
       return null;

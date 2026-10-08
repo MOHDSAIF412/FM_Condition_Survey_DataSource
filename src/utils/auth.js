@@ -10,6 +10,7 @@
  */
 import { supabase, isCloudConfigured, SUPABASE_URL } from './supabaseClient';
 import { hasPermission } from './roles';
+import { selectDeviceAccount } from './deviceAccount';
 
 export async function getSession() {
   if (!isCloudConfigured) return null;
@@ -84,7 +85,7 @@ export function cachedProfile(userId) {
 // work -- and the list screens hide the ones the server no longer lists.
 const ACCOUNT_CACHES = [
   'fm_survey_list_cache', 'fm_projects_cache', 'fm_portal_priority_cache', 'fm_portal_priority_by_survey',
-  'fm_portal_activity_cache', 'fm_roles_cache'
+  'fm_portal_activity_cache', 'fm_roles_cache', 'fm_active_project_id'
 ];
 const LAST_ACCOUNT_KEY = 'fm_last_account';
 
@@ -92,6 +93,7 @@ const LAST_ACCOUNT_KEY = 'fm_last_account';
 export function noteSignedInAccount(userId) {
   if (!userId) return;
   try {
+    selectDeviceAccount(userId);
     const last = localStorage.getItem(LAST_ACCOUNT_KEY);
     if (last && last !== userId) ACCOUNT_CACHES.forEach((k) => localStorage.removeItem(k));
     localStorage.setItem(LAST_ACCOUNT_KEY, userId);
