@@ -86,61 +86,93 @@ export async function generateQhseExcel(input, options = {}) {
   const surveys = records(input);
   const module = await import('exceljs'); const ExcelJS = module.default || module;
   const workbook = new ExcelJS.Workbook(); workbook.creator = 'OCS';
+  const logo = await imageDimensions(OCS_LOGO_TRIMMED);
+  const fill = color => ({ type: 'pattern', pattern: 'solid', fgColor: { argb: `FF${color}` } });
+  const bottomRule = color => ({ bottom: { style: 'thin', color: { argb: `FF${color}` } } });
+  // Pixel extents avoid Excel's fractional-column anchors squeezing images.
+  const addPicture = (sheet, source, col, row, x, y, width, height) => {
+    const id = workbook.addImage({ base64: source, extension: source.startsWith('data:image/png') ? 'png' : 'jpeg' });
+    sheet.addImage(id, { tl: { nativeCol: col, nativeRow: row, nativeColOff: Math.round(x * 9525), nativeRowOff: Math.round(y * 9525) },
+      ext: { width, height }, editAs: 'oneCell' });
+  };
   for (const [si, survey] of surveys.entries()) {
-    const info = workbook.addWorksheet(`Inspection ${si + 1}`);
-    info.columns = [{ width: 24 }, { width: 90 }];
-    const logoId = workbook.addImage({ base64: OCS_LOGO_TRIMMED, extension: 'png' });
-    info.getRow(1).height = 45;
-    info.addImage(logoId, { tl: { col: 0, row: 0 }, br: { col: 0.48, row: 0.77 }, editAs: 'oneCell' });
+    const info = workbook.addWorksheet(`Inspection ${si + 1}`, { views: [{ showGridLines: false }],
+      properties: { tabColor: { argb: `FF${BRAND.blue}` } },
+      pageSetup: { orientation: 'portrait', paperSize: 9, fitToPage: true, fitToWidth: 1, fitToHeight: 0,
+        horizontalCentered: true, margins: { left: 0.3, right: 0.3, top: 0.4, bottom: 0.4, header: 0.2, footer: 0.2 } } });
+    info.columns = [{ width: 28 }, { width: 78 }];
+    const logoWidth = 180, logoHeight = logoWidth * logo.height / logo.width;
+    info.getRow(1).height = (logoHeight + 24) * 3 / 4;
+    addPicture(info, OCS_LOGO_TRIMMED, 0, 0, 8, 12, logoWidth, logoHeight);
     info.addRow(['QHSE Site Inspection Report', '']);
-    info.addRows(reportDetails(survey).map(([k,v]) => [k,v || '']));
+    info.mergeCells('A2:B2');
+    info.addRows(reportDetails(survey).map(([k,v]) => [k,v === '' || v == null ? null : v]));
     info.addRow(['Finding summary', countSummary(survey)]);
     const sign = survey.signatures?.surveyor || {};
-    info.addRow(['Inspector', sign.name || survey.facility.surveyorName || '']); info.addRow(['Sign-off date', sign.date || '']);
-    const sr = info.addRow(['Signature', sign.signatureData ? '' : 'Pending']);
-    if (sign.signatureData) { sr.height = 60; const id = workbook.addImage({ base64: sign.signatureData, extension: 'png' }); info.addImage(id, { tl: { col: 1, row: sr.number - 1 }, br: { col: 1.35, row: sr.number - 0.12 }, editAs: 'oneCell' }); }
-    const ws = workbook.addWorksheet(`Findings ${si + 1}`, { views: [{ state: 'frozen', ySplit: 1 }], pageSetup: { orientation: 'landscape', paperSize: 9, fitToPage: true, fitToWidth: 1, fitToHeight: 0, printTitlesRow: '1:1' } });
+    info.addRow(['Inspector', sign.name || survey.facility.surveyorName || null]); info.addRow(['Sign-off date', sign.date || null]);
+    const sr = info.addRow(['Signature', sign.signatureData ? null : 'Pending']);
+    if (sign.signatureData) { sr.height = 68; addPicture(info, sign.signatureData, 1, sr.number - 1, 8, 8, 240, 70); }
+    const ws = workbook.addWorksheet(`Findings ${si + 1}`, { views: [{ state: 'frozen', ySplit: 1, xSplit: 1, showGridLines: false }],
+      properties: { tabColor: { argb: `FF${BRAND.orange}` } },
+      pageSetup: { orientation: 'landscape', paperSize: 8, fitToPage: true, fitToWidth: 1, fitToHeight: 0, printTitlesRow: '1:1',
+        margins: { left: 0.25, right: 0.25, top: 0.4, bottom: 0.4, header: 0.2, footer: 0.2 } } });
     const fields = activeFields(survey, 'finding');
     const evidenceColumn = fields.length + 2;
-    ws.columns = [8, ...fields.map(f => f.type === 'textarea' ? 65 : 25), 12, 38, 45].map(width => ({ width }));
+    ws.columns = [8, ...fields.map(f => f.type === 'textarea' ? 42 : 20), 10, 38, 42].map(width => ({ width }));
     ws.addRow(['Finding', ...fields.map(f => f.label), 'Photo', 'Evidence', 'Remark']);
     for (const [index, item] of (survey.items || []).entries()) {
       const f = findingData(item);
       for (const [pi, photo] of (f.photos.length ? f.photos : [null]).entries()) {
-        const row = ws.addRow([index + 1, ...findingDetails(survey, item).map(([,value]) => value), photo ? `${pi + 1}/${f.photos.length}` : '', photo ? '' : 'No photo', photo?.caption || '']);
-        row.height = Math.min(409, Math.max(photo ? 120 : 30, ...findingDetails(survey, item).map(([,value], i) => String(value).split('\n').reduce((n, line) => n + Math.max(1, Math.ceil(line.length / (fields[i].type === 'textarea' ? 58 : 23))), 0) * 14 + 10), Math.ceil((photo?.caption || '').length / 40) * 14 + 10));
+        const row = ws.addRow([index + 1, ...findingDetails(survey, item).map(([,value]) => value === '' ? null : value), photo ? `${pi + 1}/${f.photos.length}` : null, photo ? null : 'No photo', photo?.caption || null]);
+        const dimensions = photo ? await imageDimensions(photo.dataUrl) : null;
+        const cellWidth = 38 * 7 + 5, padding = 6;
+        const photoScale = dimensions ? Math.min((cellWidth - padding * 2) / dimensions.width, (409 * 4 / 3 - padding * 2) / dimensions.height) : 0;
+        const photoWidth = dimensions ? dimensions.width * photoScale : 0;
+        const photoHeight = dimensions ? dimensions.height * photoScale : 0;
+        row.height = Math.min(409, Math.max(30, (photoHeight + padding * 2) * 3 / 4,
+          ...findingDetails(survey, item).map(([,value], i) => textHeight(value, fields[i].type === 'textarea' ? 38 : 18)), textHeight(photo?.caption || '', 38)));
         for (const key of ['severity', 'status']) {
           const column = fields.findIndex(field => field.id === key);
           if (column >= 0) row.getCell(column + 2).font = { color: { argb: `FF${key === 'severity' ? riskColor(f.severity) : f.status === 'Closed' ? BRAND.green : BRAND.red}` }, bold: true };
         }
         if (photo) {
-          const dimensions = await imageDimensions(photo.dataUrl);
-          const scale = Math.min(245 / dimensions.width, 145 / dimensions.height);
-          const id = workbook.addImage({ base64: photo.dataUrl, extension: photo.dataUrl.startsWith('data:image/png') ? 'png' : 'jpeg' });
-          ws.addImage(id, { tl: { col: evidenceColumn + 0.03, row: row.number - 0.97 }, br: {
-            col: evidenceColumn + 0.03 + dimensions.width * scale / (38 * 7 + 5),
-            row: row.number - 0.97 + dimensions.height * scale / (row.height * 4 / 3)
-          }, editAs: 'oneCell' });
+          addPicture(ws, photo.dataUrl, evidenceColumn, row.number - 1, (cellWidth - photoWidth) / 2,
+            (row.height * 4 / 3 - photoHeight) / 2, photoWidth, photoHeight);
         }
       }
     }
     ws.autoFilter = { from: { row: 1, column: 1 }, to: { row: ws.rowCount, column: fields.length + 4 } };
     for (const sheet of [info, ws]) sheet.eachRow((row, rn) => {
       row.eachCell({ includeEmpty: true }, cell => {
-        cell.alignment = { vertical: 'top', wrapText: true };
-        cell.font = { name: 'Open Sans', size: 10, color: { argb: `FF${BRAND.grey}` }, ...cell.font };
+        cell.alignment = { vertical: 'middle', horizontal: 'left', wrapText: true, indent: 1 };
+        cell.font = { name: 'Open Sans', size: 11, color: { argb: `FF${BRAND.grey}` }, ...cell.font };
+        cell.border = bottomRule('DDE2ED');
+        if (rn > (sheet === info ? 2 : 1)) cell.fill = fill(rn % 2 ? 'F3F5FA' : 'FFFFFF');
+        if (sheet === info && rn > 2 && cell.col === 1) cell.font = { ...cell.font, bold: true, color: { argb: `FF${BRAND.blue}` } };
         if ((sheet === ws && rn === 1) || (sheet === info && rn === 2)) {
-          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: `FF${BRAND.blue}` } };
-          cell.font = { name: 'Open Sans', size: 11, bold: true, color: { argb: 'FFFFFFFF' } };
+          cell.fill = fill(BRAND.blue);
+          cell.font = { name: 'Open Sans', size: sheet === info ? 16 : 11, bold: true, color: { argb: 'FFFFFFFF' } };
+          cell.alignment = { vertical: 'middle', horizontal: sheet === info ? 'left' : 'center', wrapText: true, indent: sheet === info ? 1 : 0 };
+          cell.border = bottomRule(BRAND.orange);
         }
       });
-      if (sheet === info && rn > 2 && rn !== sr.number) row.height = Math.max(27, Math.ceil(String(row.getCell(2).value || '').length / 80) * 15 + 8);
+      if (sheet === info && rn > 2 && rn !== sr.number) row.height = Math.max(30, textHeight(row.getCell(1).value, 25), textHeight(row.getCell(2).value, 72));
     });
-    ws.getRow(1).height = 32; info.getRow(2).height = 30;
+    ws.getRow(1).height = Math.max(38, ...fields.map(f => textHeight(f.label, f.type === 'textarea' ? 38 : 18)));
+    info.getRow(2).height = 40;
+    info.pageSetup.printArea = `A1:B${info.rowCount}`;
+    ws.pageSetup.printArea = `A1:${ws.getColumn(fields.length + 4).letter}${ws.rowCount}`;
+    for (const sheet of [info, ws]) sheet.headerFooter = {
+      oddHeader: '&C&"Open Sans,Bold"&10OCS QHSE Inspection',
+      oddFooter: '&L&"Open Sans"&9OCS&CQHSE Inspection&RPage &P of &N'
+    };
   }
   const blob = new Blob([await workbook.xlsx.writeBuffer()], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
   if (!options.returnBlob) await saveBlob(blob, `${filename(surveys[0])}.xlsx`, 'QHSE inspection report');
   return blob;
+}
+function textHeight(value, columns) {
+  return String(value || '').split('\n').reduce((n, line) => n + Math.max(1, Math.ceil(line.length / columns)), 0) * 16 + 12;
 }
 function imageDimensions(src) {
   return new Promise((resolve, reject) => {

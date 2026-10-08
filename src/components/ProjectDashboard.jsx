@@ -1,4 +1,5 @@
 import BackButton from './BackButton';
+import ConfirmDelete from './ConfirmDelete';
 import React, { useState, useMemo, useEffect } from 'react';
 import {
   FolderPlus,
@@ -32,6 +33,7 @@ const ACCENTS = [
  */
 export default function ProjectDashboard({
   projects = [],
+  deletedProjects = [], onDeleteProject, onRestoreProject,
   moduleName = 'Condition Survey', countLabel = 'facilities', onBack,
   loading = false,
   online = true,
@@ -41,6 +43,13 @@ export default function ProjectDashboard({
   openCreateSignal = 0
 }) {
   const [showForm, setShowForm] = useState(false);
+  const [showDeleted, setShowDeleted] = useState(false);
+  const [changing, setChanging] = useState(false);
+  const [pendingDelete, setPendingDelete] = useState(null);
+  const changeProject = async (project, restore) => {
+    setChanging(true); setError('');
+    try { await (restore ? onRestoreProject : onDeleteProject)(project); } catch (e) { setError(e.message); } finally { setChanging(false); }
+  };
 
   // "Create New Project" on the dashboard lands here with the form already open.
   useEffect(() => {
@@ -78,6 +87,7 @@ export default function ProjectDashboard({
 
   return (
     <div className="space-y-7 pb-10">
+      {pendingDelete && <ConfirmDelete title="Delete project?" onCancel={() => setPendingDelete(null)} onConfirm={() => { const p = pendingDelete; setPendingDelete(null); changeProject(p, false); }}>Only projects without live inspections or Condition Survey facilities can be deleted. Deleted records and photos are retained. Restore the project from Deleted projects.</ConfirmDelete>}
       {onBack && <BackButton onClick={onBack}>Choose module</BackButton>}
       {/* Hero -- a plain sky gradient, deliberately no photo/illustration */}
       <div className="relative overflow-hidden bg-gradient-to-br from-sky-400 via-sky-300 to-blue-200 rounded-3xl p-7 sm:p-10 shadow-lg">
@@ -213,7 +223,7 @@ export default function ProjectDashboard({
       <div className="flex items-center justify-between border-b border-slate-200">
         <h3 className="text-lg font-bold text-slate-800 inline-flex items-center gap-2.5 pb-3 border-b-2 border-ocs-600 -mb-px">
           <ClipboardList className="w-5 h-5 text-ocs-600" />
-          All Projects ({projects.length})
+          {showDeleted ? `Deleted projects (${deletedProjects.length})` : `All Projects (${projects.length})`}
         </h3>
         <button
           type="button"
@@ -225,7 +235,11 @@ export default function ProjectDashboard({
         </button>
       </div>
 
-      {loading ? (
+      {onDeleteProject && <button type="button" className="min-h-11 text-sm font-semibold text-ocs-600" onClick={() => setShowDeleted(v => !v)}>{showDeleted ? 'Show projects' : `Deleted projects (${deletedProjects.length})`}</button>}
+      {error && !showForm && <p role="alert" className="rounded-lg bg-red-50 p-4 text-red-700">{error}</p>}
+      {showDeleted && <div className="grid lg:grid-cols-2 gap-4">{deletedProjects.map(p => <article key={p.id} className="rounded-xl border bg-white p-5"><h4 className="font-bold text-slate-900">{p.name}</h4><p className="text-sm text-slate-500 mt-2">{p.projectNumber}</p>{onRestoreProject && <button type="button" disabled={changing} onClick={() => changeProject(p, true)} className="min-h-11 mt-3 text-sm font-semibold text-ocs-600">Restore project</button>}</article>)}{!deletedProjects.length && <p className="text-slate-500">No deleted projects.</p>}</div>}
+
+      {!showDeleted && (loading ? (
         <div className="bg-white rounded-2xl border border-slate-200 p-10 text-center text-slate-500 text-sm inline-flex items-center gap-2 w-full justify-center">
           <Loader2 className="w-4 h-4 animate-spin" /> Loading projects…
         </div>
@@ -242,11 +256,11 @@ export default function ProjectDashboard({
           {projects.map((p, idx) => {
             const accent = ACCENTS[idx % ACCENTS.length];
             return (
-              <button
+              <article key={p.id} className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden"><button
                 key={p.id}
                 type="button"
                 onClick={() => onOpenProject(p)}
-                className="group text-left bg-white rounded-2xl border border-slate-200 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-150 overflow-hidden"
+                className="group w-full text-left hover:bg-slate-50 transition-all duration-150"
               >
                 <div className={`h-1.5 ${accent.bar}`} />
                 <div className="p-6">
@@ -287,11 +301,11 @@ export default function ProjectDashboard({
                     </span>
                   </div>
                 </div>
-              </button>
+              </button>{onDeleteProject && <div className="border-t px-6 py-2"><button type="button" disabled={changing} onClick={() => setPendingDelete(p)} className="min-h-11 text-sm font-semibold text-red-700 disabled:opacity-50">Delete project</button></div>}</article>
             );
           })}
         </div>
-      )}
+      ))}
     </div>
   );
 }

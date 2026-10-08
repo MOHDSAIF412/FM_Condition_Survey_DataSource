@@ -13,6 +13,8 @@
  * fully offline, which is what matters on site.
  */
 import { supabase, isCloudConfigured } from './supabaseClient';
+import { readProjectTrash, projectTrashNotes } from './projectTrash';
+import { isDeletedInspection } from '../qhse/lifecycle';
 
 const PROJECTS_CACHE_KEY = 'fm_projects_cache';
 const ACTIVE_PROJECT_KEY = 'fm_active_project_id';
@@ -24,11 +26,11 @@ function cacheProjects(projects) {
   } catch { /* private mode */ }
 }
 
-export function cachedProjects() {
+export function cachedProjects({ includeDeleted = false } = {}) {
   try {
     const raw = localStorage.getItem(PROJECTS_CACHE_KEY);
     const parsed = raw ? JSON.parse(raw) : [];
-    return Array.isArray(parsed) ? parsed : [];
+    return Array.isArray(parsed) ? parsed.filter(p => includeDeleted || !p.deletedAt) : [];
   } catch {
     return [];
   }
@@ -50,13 +52,15 @@ export function setActiveProjectId(projectId) {
 }
 
 function normalise(row) {
+  const trash = readProjectTrash(row.notes);
   return {
     id: row.id,
     projectNumber: row.project_number,
     name: row.name || '',
     client: row.client || '',
     location: row.location || '',
-    notes: row.notes || '',
+    notes: trash?.notes ?? row.notes ?? '',
+    deletedAt: trash?.deletedAt || null,
     status: row.status || 'active',
     dueDate: row.due_date || null,
     createdAt: row.created_at,
@@ -68,8 +72,8 @@ function normalise(row) {
  * Every project, newest first, with how many facilities each holds.
  * Falls back to the cached copy when there is no connection.
  */
-export async function listProjects() {
-  if (!isCloudConfigured) return cachedProjects();
+export async function listProjects({ includeDeleted = false } = {}) {
+  if (!isCloudConfigured) return cachedProjects({ includeDeleted });
 
   const columns = 'id, project_number, name, client, location, notes, status, created_at, updated_at';
   let { data, error } = await supabase
@@ -83,7 +87,7 @@ export async function listProjects() {
 
   if (error) {
     console.warn('[projects] falling back to the cached list:', error.message);
-    return cachedProjects();
+    return cachedProjects({ includeDeleted });
   }
 
   const projects = (data || []).map(normalise);
@@ -102,7 +106,30 @@ export async function listProjects() {
   }
 
   cacheProjects(projects);
-  return projects;
+  return projects.filter(p => includeDeleted || !p.deletedAt);
+}
+
+/** Reversible removal of an empty project. All existing report data stays intact. */
+export async function setProjectDeleted(project, deleted) {
+  if (!isCloudConfigured) {
+    const all = cachedProjects({ includeDeleted: true });
+    const next = all.map(p => p.id === project.id ? { ...p, deletedAt: deleted ? new Date().toISOString() : null } : p);
+    cacheProjects(next); return;
+  }
+  if (deleted) {
+    for (let from = 0; ; from += 1000) {
+      const { data, error } = await supabase.from('condition_surveys').select('id,facility').eq('project_id', project.id).range(from, from + 999);
+      if (error) throw new Error('Could not check the project reports. Try again when connected.');
+      if ((data || []).some(s => !isDeletedInspection(s))) throw new Error('Delete or move the existing inspections and Condition Survey facilities before deleting this shared project.');
+      if (!data || data.length < 1000) break;
+    }
+  }
+  const { data: original, error: readError } = await supabase.from('projects').select('notes,updated_at').eq('id', project.id).single();
+  if (readError) throw new Error('Could not load this project. Check your connection and access.');
+  let update = supabase.from('projects').update({ notes: projectTrashNotes(original.notes, deleted), updated_at: new Date().toISOString() }).eq('id', project.id);
+  update = original.updated_at ? update.eq('updated_at', original.updated_at) : update.is('updated_at', null);
+  const { error } = await update.select('id').single();
+  if (error) throw new Error('Could not change this project. Refresh and check your connection and access.');
 }
 
 /**

@@ -97,6 +97,33 @@ test('Excel includes each photo and keeps findings without photos', async () => 
   expect(sheet.getCell('E2').font.color.argb).toBe('FFB91C2A');
   writeFileSync('outputs/qhse-qa/qhse-example.xlsx', buffer); vi.unstubAllGlobals();
 });
+
+test('Excel photos fill the evidence width, preserve aspect ratio and remain inside their own rows', async () => {
+  let decoded = 0;
+  const dimensions = [[2, 1], [1600, 1200], [900, 1200]]; // Logo, landscape, portrait.
+  vi.stubGlobal('Image', class {
+    set src(value) { [this.naturalWidth, this.naturalHeight] = dimensions[decoded++]; queueMicrotask(() => this.onload()); }
+  });
+  try {
+    const blob = await generateQhseExcel(fixture(), { returnBlob: true });
+    const wb = new ExcelJS.Workbook(); await wb.xlsx.load(await blob.arrayBuffer());
+    const info = wb.getWorksheet('Inspection 1'), sheet = wb.getWorksheet('Findings 1');
+    expect(info.getImages()[0].range.ext.width).toBe(180);
+    expect(info.getCell('A2').font.size).toBe(16); expect(info.getCell('A2').isMerged).toBe(true);
+    expect(sheet.views[0].showGridLines).toBe(false); expect(sheet.views[0].ySplit).toBe(1);
+    for (const [i, image] of sheet.getImages().entries()) {
+      const { tl, ext } = image.range;
+      expect(ext.width).toBeCloseTo(259);
+      expect(ext.width / ext.height).toBeCloseTo(dimensions[i + 1][0] / dimensions[i + 1][1]);
+      expect(tl.nativeCol).toBe(8); expect(tl.nativeRow).toBe(i + 1);
+      expect(tl.nativeColOff / 9525).toBeCloseTo(6);
+      expect(tl.nativeRowOff / 9525 + ext.height).toBeLessThanOrEqual(sheet.getRow(i + 2).height * 4 / 3);
+      expect(sheet.getRow(i + 2).height * 4 / 3 - ext.height).toBeCloseTo(12);
+    }
+    expect(sheet.getRow(3).height).toBeGreaterThan(sheet.getRow(2).height);
+    expect(sheet.autoFilter).toBe('A1:J4'); expect(sheet.pageSetup.printTitlesRow).toBe('1:1');
+  } finally { vi.unstubAllGlobals(); }
+});
 test('exports refuse mixed report types and missing evidence', async () => {
   await expect(generateQhsePDF([fixture(), { facility: {} }])).rejects.toThrow('separately');
   const s = fixture(); delete s.items[0].photos[0].dataUrl;

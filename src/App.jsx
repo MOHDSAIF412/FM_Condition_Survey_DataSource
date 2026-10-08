@@ -28,6 +28,7 @@ import { backTarget, installAndroidBackHandler } from './utils/backNavigation';
 import { App as NativeApp } from '@capacitor/app';
 import { isLegacyQhse, moveLegacyQhse } from './qhse/legacy';
 import { createQhse, isQhse } from './qhse/model';
+import { changeInspectionState, isDeletedInspection } from './qhse/lifecycle';
 const QhseHub = lazy(() => import('./qhse/QhseInspection').then(m => ({ default: m.QhseHub })));
 const QhseInspection = lazy(() => import('./qhse/QhseInspection'));
 import PortalHome from './portal/PortalHome';
@@ -91,7 +92,8 @@ import {
   assignFacilityToProject,
   getActiveProjectId,
   setActiveProjectId,
-  cachedProjects
+  cachedProjects,
+  setProjectDeleted
 } from './utils/projects';
 
 /**
@@ -154,6 +156,7 @@ export default function App({ currentUser = null, onSignOut } = {}) {
   const [adminModule, setAdminModule] = useState('forms');
   const openAdmin = (module) => { setAdminModule(module); setView('admin'); };
   const [projects, setProjects] = useState(() => cachedProjects());
+  const [deletedProjects, setDeletedProjects] = useState(() => cachedProjects({ includeDeleted: true }).filter(p => p.deletedAt));
   const [projectsLoading, setProjectsLoading] = useState(false);
   // Fields, sections and rules published from the Admin Dashboard.
   const { config: formsConfig, version: formsVersion, platform, refresh: refreshFormsConfig } = useFormsConfig();
@@ -1260,8 +1263,9 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
   const refreshProjects = async () => {
     setProjectsLoading(true);
     try {
-      const list = await listProjects();
-      setProjects(list);
+      const all = await listProjects({ includeDeleted: true });
+      const list = all.filter(p => !p.deletedAt);
+      setProjects(list); setDeletedProjects(all.filter(p => p.deletedAt));
       return list;
     } catch (err) {
       console.warn('[projects] could not load:', err.message);
@@ -1484,6 +1488,46 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
     skipCloudPushRef.current = false; hasUnpushedEditsRef.current = true;
     setWorkModule('qhse'); setView('survey');
     await refreshSurveyList();
+  }
+
+  async function handleQhseAction(id, action) {
+    const deleting = ['delete', 'restore'].includes(action);
+    if (!(deleting ? (!isCloudConfigured || mayDeleteSnags) : mayEditSurveys)) throw new Error('You do not have permission for this inspection action.');
+    if (mayEditOpen) {
+      const kept = await saveSurveyOffline(surveyRef.current);
+      if (kept?.conflict) throw new Error('Resolve the current inspection conflict first.');
+    }
+    const record = await handleOpenSurvey(id);
+    if (!record) throw new Error('Could not load the inspection. Check your connection.');
+    const next = changeInspectionState(record, action);
+    if (action === 'delete') await saveSurveyRecovery({ ...record, recoveryUserId: currentUser?.id });
+    const saved = await saveSurveyOffline(next, { pendingSync: true });
+    if (saved?.conflict) throw new Error('This inspection changed in another tab. Resolve the conflict first.');
+    surveyRef.current = saved; setSurvey(saved);
+    skipCloudPushRef.current = false; hasUnpushedEditsRef.current = true;
+    setWorkModule('qhse');
+    if (deleting) setView('qhse');
+    if (isCloudConfigured && isOnline()) {
+      try {
+        setSyncState('syncing'); const result = await uploadSurveyRecord(saved);
+        if (result?.conflict) throw new Error('Saved on this device, but the server copy changed. Resolve the sync conflict before continuing.');
+      } catch (e) { reportSyncFailure(e); if (e.message.includes('server copy changed')) throw e; }
+    }
+    await refreshSurveyList();
+  }
+
+  async function handleProjectTrash(project, deleted) {
+    if (!mayManageProjects) throw new Error('You do not have permission to manage projects.');
+    if (deleted) {
+      const local = await listAllSurveysOffline();
+      if (local.some(s => s.projectId === project.id && !isDeletedInspection(s)))
+        throw new Error('Delete or move the existing inspections and Condition Survey facilities before deleting this shared project.');
+    }
+    await setProjectDeleted(project, deleted);
+    if (deleted && activeProjectRef.current?.id === project.id) {
+      setActiveProject(null); activeProjectRef.current = null; setActiveProjectId(null);
+    }
+    await refreshProjects();
   }
 
   // A new screen starts at its top, with its breadcrumb in view -- not at the
@@ -1939,7 +1983,7 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
       {/* Project picker: nothing project-specific is reachable until one is chosen. */}
       {view === 'modules' && <main className="flex-1 px-4 sm:px-8 py-8 safe-area-content-pb"><ModulePicker onSelect={module => navigatePortal({ module })} /></main>}
       {view === 'qhse' && <main className="flex-1 max-w-6xl w-full mx-auto px-3 sm:px-8 py-6 safe-area-content-pb">
-        <QhseHub surveys={surveyList.filter(s => isQhse(s) && s.projectId === activeProject?.id)} project={activeProject} canEdit={mayEditSurveys}
+        <QhseHub surveys={surveyList.filter(s => isQhse(s) && s.projectId === activeProject?.id)} project={activeProject} canEdit={mayEditSurveys} canDelete={!isCloudConfigured || mayDeleteSnags} onAction={handleQhseAction}
           onBack={handleAppBack} legacySurveys={surveyList.filter(s => s.projectId === activeProject?.id && isLegacyQhse(s) && !isLocked(s))} onMove={handleMoveLegacyQhse} onCreate={startQhse} onOpen={openSurveyFromPortal} />
       </main>}
       {view === 'survey' && isQhse(survey) && <main className="flex-1 max-w-6xl w-full mx-auto px-3 sm:px-6 py-6 safe-area-content-pb">
@@ -1948,6 +1992,7 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
           onAdd={async item => { if (!mayEditOpen) return; if (surveyRef.current?.id !== survey.id) throw new Error('Reopen the original inspection to attach these photos.'); const next = { ...surveyRef.current, items: [...surveyRef.current.items, item] }; surveyRef.current = next; setSurvey(next); await saveSurveyOffline(next); }}
           onSignatures={signatures => { if (mayEditOpen) setSurvey(prev => ({ ...prev, signatures })); }}
           onBack={handleAppBack}
+          onAction={handleQhseAction}
           onBackup={handleExportJSON} />
       </main>}
       {view === 'projects' && (
@@ -1957,7 +2002,10 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
             moduleName={workModule === 'qhse' ? 'QHSE Inspection' : 'Condition Survey'}
             countLabel={workModule === 'qhse' ? 'inspections' : 'facilities'}
             onBack={handleAppBack}
-            projects={workModule === 'qhse' ? projects.map(p => ({ ...p, facilityCount: surveyList.filter(s => isQhse(s) && s.projectId === p.id).length })) : projects}
+            projects={workModule === 'qhse' ? projects.map(p => ({ ...p, facilityCount: surveyList.filter(s => isQhse(s) && !isDeletedInspection(s) && s.projectId === p.id).length })) : projects}
+            deletedProjects={deletedProjects}
+            onDeleteProject={mayManageProjects ? p => handleProjectTrash(p, true) : null}
+            onRestoreProject={mayManageProjects ? p => handleProjectTrash(p, false) : null}
             loading={projectsLoading}
             online={online}
             onOpenProject={handleOpenProject}

@@ -5,7 +5,7 @@ import {
 } from 'lucide-react';
 import { useEscapeKey } from '../utils/useEscapeKey';
 
-export const APP_VERSION = '1.4.1';
+export const APP_VERSION = '1.5';
 
 /**
  * Web portal navigation. A fixed rail on wide screens; a slide-in drawer from
