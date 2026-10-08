@@ -1,11 +1,11 @@
 import { isQhse } from './model';
 
-// Require QHSE and inspection/report together. Generic FM inspections stay put.
+// Recognize report titles and an explicit QHSE suffix; ordinary FM sites stay put.
 export function isLegacyQhse(survey) {
   if (isQhse(survey)) return false;
   if (survey?.facility?.qhse) return true;
   return [survey?.title, survey?.facilityName, survey?.facility?.facilityName, survey?.facility?.buildingName]
-    .some(value => /\bQHSE\b[\s\S]*\b(inspection|audit|report)\b|\b(inspection|audit|report)\b[\s\S]*\bQHSE\b/i.test(value || ''));
+    .some(value => /\bQHSE\b[\s\S]*\b(inspection|audit|report)\b|\b(inspection|audit|report)\b[\s\S]*\bQHSE\b|(?:^|[-–])\s*QHSE\s*$/i.test(value || ''));
 }
 
 export function moveLegacyQhse(survey, project) {

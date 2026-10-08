@@ -28,6 +28,7 @@ test('legacy matching does not move ordinary inspections or a QHSE office', () =
   expect(isLegacyQhse({ title: 'Building inspection' })).toBe(false);
   expect(isLegacyQhse({ facilityName: 'QHSE office' })).toBe(false);
   expect(isLegacyQhse({ title: 'QHSE Site Inspection Report' })).toBe(true);
+  expect(isLegacyQhse({ facility: { facilityName: 'Mall - QHSE' } })).toBe(true);
 });
 test('moving a legacy report preserves record/project IDs, all items, photos, remarks and original metadata', () => {
   const original = { id: 'existing', projectId: 'project', title: 'QHSE Inspection', facility: { facilityName: 'Old title', address: 'Site' },
