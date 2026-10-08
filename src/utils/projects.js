@@ -91,12 +91,12 @@ export async function listProjects() {
   // Facility counts in one query rather than one per project.
   const { data: facilityRows, error: countErr } = await supabase
     .from('condition_surveys')
-    .select('project_id');
+    .select('project_id, facility');
 
   if (!countErr) {
     const counts = {};
     for (const row of facilityRows || []) {
-      if (row.project_id) counts[row.project_id] = (counts[row.project_id] || 0) + 1;
+      if (row.project_id && row.facility?.module !== 'qhse') counts[row.project_id] = (counts[row.project_id] || 0) + 1;
     }
     for (const p of projects) p.facilityCount = counts[p.id] || 0;
   }

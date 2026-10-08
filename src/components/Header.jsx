@@ -111,7 +111,7 @@ export default function Header({
           <div className="min-w-0">
             <div className="flex items-center gap-2.5 min-w-0">
               <h1 className="text-base sm:text-lg font-bold tracking-tight text-slate-900 truncate">
-                FM Condition Survey
+                OCS Workspace
               </h1>
               <span className={`hidden sm:inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-semibold border ${sync.cls}`}>
                 <span aria-hidden="true" className={`w-1.5 h-1.5 rounded-full mr-1.5 ${sync.dot}`} />

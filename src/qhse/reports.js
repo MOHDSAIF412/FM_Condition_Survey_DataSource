@@ -1,4 +1,4 @@
-import { BRAND, findingData, reportDetails, riskColor, isQhse } from './model';
+import { BRAND, findingData, reportDetails, riskColor, isQhse, activeFields, findingDetails } from './model';
 import { OCS_LOGO_TRIMMED } from '../assets/logoTrimmed';
 import { saveBlob } from '../utils/fileSaver';
 import { OpenSansRegular, OpenSansBold } from './fonts/fontData';
@@ -42,12 +42,12 @@ export async function generateQhsePDF(input, options = {}) {
     if (si) doc.addPage();
     header();
     table(reportDetails(survey).map(([a,b]) => [a, b || '']), 30);
-    table([['Finding summary', countSummary(survey)], ['Inspection summary', survey.facility.qhse.summary || '']], doc.lastAutoTable.finalY + 5);
+    table([['Finding summary', countSummary(survey)]], doc.lastAutoTable.finalY + 5);
     for (const [index, item] of (survey.items || []).entries()) {
       const f = findingData(item);
       doc.addPage(); header();
       doc.setFontSize(12); doc.setTextColor(blue); doc.text(`Finding ${index + 1}`, 15, 32);
-      table([['Location', f.location], ['Type', f.type], ['Description', f.description], ['Severity', f.severity], ['CAFM reference', f.cafmReference], ['Status', f.status]], 37);
+      table(findingDetails(survey, item), 37);
       let y = doc.lastAutoTable.finalY + 8;
       for (const [pi, photo] of f.photos.entries()) {
         const caption = doc.splitTextToSize(`Photo ${pi + 1} of ${f.photos.length}${photo.caption ? ': ' + photo.caption : ''}`, 176);
@@ -93,33 +93,36 @@ export async function generateQhseExcel(input, options = {}) {
     info.addRow(['QHSE Site Inspection Report', '']);
     info.addRows(reportDetails(survey).map(([k,v]) => [k,v || '']));
     info.addRow(['Finding summary', countSummary(survey)]);
-    info.addRow(['Inspection summary', survey.facility.qhse.summary || '']);
     const sign = survey.signatures?.surveyor || {};
     info.addRow(['Inspector', sign.name || survey.facility.surveyorName || '']); info.addRow(['Sign-off date', sign.date || '']);
     const sr = info.addRow(['Signature', sign.signatureData ? '' : 'Pending']);
     if (sign.signatureData) { sr.height = 60; const id = workbook.addImage({ base64: sign.signatureData, extension: 'png' }); info.addImage(id, { tl: { col: 1, row: sr.number - 1 }, br: { col: 1.35, row: sr.number - 0.12 }, editAs: 'oneCell' }); }
     const ws = workbook.addWorksheet(`Findings ${si + 1}`, { views: [{ state: 'frozen', ySplit: 1 }], pageSetup: { orientation: 'landscape', paperSize: 9, fitToPage: true, fitToWidth: 1, fitToHeight: 0, printTitlesRow: '1:1' } });
-    ws.columns = [8, 25, 23, 65, 18, 24, 14, 12, 38, 45].map(width => ({ width }));
-    ws.addRow(['Finding', 'Location', 'Type', 'Description', 'Severity', 'CAFM reference', 'Status', 'Photo', 'Evidence', 'Caption']);
+    const fields = activeFields(survey, 'finding');
+    const evidenceColumn = fields.length + 2;
+    ws.columns = [8, ...fields.map(f => f.type === 'textarea' ? 65 : 25), 12, 38, 45].map(width => ({ width }));
+    ws.addRow(['Finding', ...fields.map(f => f.label), 'Photo', 'Evidence', 'Caption']);
     for (const [index, item] of (survey.items || []).entries()) {
       const f = findingData(item);
       for (const [pi, photo] of (f.photos.length ? f.photos : [null]).entries()) {
-        const row = ws.addRow([index + 1, f.location, f.type, f.description, f.severity, f.cafmReference, f.status, photo ? `${pi + 1}/${f.photos.length}` : '', photo ? '' : 'No photo', photo?.caption || '']);
-        row.height = Math.max(photo ? 120 : 30, ...[f.location, f.type, f.description, photo?.caption || ''].map((t,i) => Math.ceil(t.length / [23,21,58,40][i]) * 14 + 10));
-        row.getCell(5).font = { color: { argb: `FF${riskColor(f.severity)}` }, bold: true };
-        row.getCell(7).font = { color: { argb: `FF${f.status === 'Closed' ? BRAND.green : BRAND.red}` }, bold: true };
+        const row = ws.addRow([index + 1, ...findingDetails(survey, item).map(([,value]) => value), photo ? `${pi + 1}/${f.photos.length}` : '', photo ? '' : 'No photo', photo?.caption || '']);
+        row.height = Math.min(409, Math.max(photo ? 120 : 30, ...findingDetails(survey, item).map(([,value], i) => String(value).split('\n').reduce((n, line) => n + Math.max(1, Math.ceil(line.length / (fields[i].type === 'textarea' ? 58 : 23))), 0) * 14 + 10), Math.ceil((photo?.caption || '').length / 40) * 14 + 10));
+        for (const key of ['severity', 'status']) {
+          const column = fields.findIndex(field => field.id === key);
+          if (column >= 0) row.getCell(column + 2).font = { color: { argb: `FF${key === 'severity' ? riskColor(f.severity) : f.status === 'Closed' ? BRAND.green : BRAND.red}` }, bold: true };
+        }
         if (photo) {
           const dimensions = await imageDimensions(photo.dataUrl);
           const scale = Math.min(245 / dimensions.width, 145 / dimensions.height);
           const id = workbook.addImage({ base64: photo.dataUrl, extension: photo.dataUrl.startsWith('data:image/png') ? 'png' : 'jpeg' });
-          ws.addImage(id, { tl: { col: 8.03, row: row.number - 0.97 }, br: {
-            col: 8.03 + dimensions.width * scale / (38 * 7 + 5),
+          ws.addImage(id, { tl: { col: evidenceColumn + 0.03, row: row.number - 0.97 }, br: {
+            col: evidenceColumn + 0.03 + dimensions.width * scale / (38 * 7 + 5),
             row: row.number - 0.97 + dimensions.height * scale / (row.height * 4 / 3)
           }, editAs: 'oneCell' });
         }
       }
     }
-    ws.autoFilter = { from: 'A1', to: `J${ws.rowCount}` };
+    ws.autoFilter = { from: { row: 1, column: 1 }, to: { row: ws.rowCount, column: fields.length + 4 } };
     for (const sheet of [info, ws]) sheet.eachRow((row, rn) => {
       row.eachCell({ includeEmpty: true }, cell => {
         cell.alignment = { vertical: 'top', wrapText: true };

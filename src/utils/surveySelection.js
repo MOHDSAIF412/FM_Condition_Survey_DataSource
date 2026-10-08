@@ -55,7 +55,7 @@ export function mergeSurveyLists(remote = [], local = [], {
   for (const l of local) {
     if (!l || !l.id) continue;
     // A blank scratch survey that was never submitted is noise in this list.
-    if (!l.submittedAt && !(l.items || []).length) continue;
+    if (!l.submittedAt && !(l.items || []).length && l.facility?.module !== 'qhse') continue;
     onDevice.add(l.id);
 
     const existing = merged.get(l.id);
@@ -64,6 +64,7 @@ export function mergeSurveyLists(remote = [], local = [], {
         ...existing,
         projectId: existing.projectId || l.projectId || null,
         pendingSync: !!l.pendingSync,
+        ...(l.pendingSync && l.facility?.module === 'qhse' ? { facility: l.facility, facilityName: l.facility.facilityName, itemCount: (l.items || []).length } : {}),
         cached: false
       });
       continue;

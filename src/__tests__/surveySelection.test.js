@@ -3,6 +3,13 @@ import { chooseSurveyToOpen, sortDate, mergeSurveyLists } from '../utils/surveyS
 
 const snag = (text) => ({ id: text, defectDescription: text, photos: [] });
 
+test('QHSE drafts with no findings remain visible and use pending template changes', () => {
+  const local = { id: 'qhse', projectId: 'p', items: [], pendingSync: true, facility: { module: 'qhse', facilityName: 'Project', qhse: { templateName: 'Safety layout' } } };
+  expect(mergeSurveyLists([], [local])[0].facility.qhse.templateName).toBe('Safety layout');
+  const remote = { ...local, facility: { module: 'qhse', facilityName: 'Project', qhse: {} } };
+  expect(mergeSurveyLists([remote], [local])[0].facility.qhse.templateName).toBe('Safety layout');
+});
+
 describe('chooseSurveyToOpen', () => {
   const remote = { id: 'f1', items: [snag('server snag')], pendingSync: false };
 

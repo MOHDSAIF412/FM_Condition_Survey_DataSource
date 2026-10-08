@@ -31,6 +31,7 @@ const ACCENTS = [
  */
 export default function ProjectDashboard({
   projects = [],
+  moduleName = 'Condition Survey', countLabel = 'facilities', onBack,
   loading = false,
   online = true,
   onOpenProject,
@@ -76,6 +77,7 @@ export default function ProjectDashboard({
 
   return (
     <div className="space-y-7 pb-10">
+      {onBack && <button onClick={onBack} className="text-sm font-semibold text-[#293771]">← Choose module</button>}
       {/* Hero -- a plain sky gradient, deliberately no photo/illustration */}
       <div className="relative overflow-hidden bg-gradient-to-br from-sky-400 via-sky-300 to-blue-200 rounded-3xl p-7 sm:p-10 shadow-lg">
         <div className="relative flex items-start justify-between gap-4 flex-wrap">
@@ -84,7 +86,7 @@ export default function ProjectDashboard({
               <Briefcase className="w-11 h-11 text-white" />
             </div>
             <div className="min-w-0">
-              <h2 className="text-3xl sm:text-4xl font-bold tracking-tight text-slate-900">Projects</h2>
+              <h2 className="text-3xl sm:text-4xl font-bold tracking-tight text-slate-900">{moduleName}</h2>
               <p className="text-slate-800/70 text-base mt-1.5">
                 Choose a project to work in, or start a new one.
               </p>
@@ -102,8 +104,8 @@ export default function ProjectDashboard({
         </div>
 
         {/* Quick stats -- gives the page something to look at even with one project */}
-        <div className="relative grid grid-cols-2 gap-5 mt-7 max-w-2xl">
-          <div className="bg-gradient-to-br from-indigo-500 to-violet-500 rounded-2xl p-5 shadow-md flex items-center gap-4">
+        <div className="relative grid grid-cols-2 gap-3 sm:gap-5 mt-7 max-w-2xl">
+          <div className="bg-gradient-to-br from-indigo-500 to-violet-500 rounded-2xl p-3 sm:p-5 shadow-md flex flex-wrap items-center gap-3">
             <span className="p-3 rounded-xl bg-white/20 shrink-0">
               <FolderKanban className="w-6 h-6 text-white" />
             </span>
@@ -112,12 +114,12 @@ export default function ProjectDashboard({
               <span className="block text-3xl font-bold text-white leading-tight">{totals.projects}</span>
             </span>
           </div>
-          <div className="bg-gradient-to-br from-teal-500 to-emerald-500 rounded-2xl p-5 shadow-md flex items-center gap-4">
+          <div className="bg-gradient-to-br from-teal-500 to-emerald-500 rounded-2xl p-3 sm:p-5 shadow-md flex flex-wrap items-center gap-3">
             <span className="p-3 rounded-xl bg-white/20 shrink-0">
               <Layers className="w-6 h-6 text-white" />
             </span>
             <span className="min-w-0">
-              <span className="block text-[11px] font-bold uppercase tracking-wider text-white/80">Facilities</span>
+              <span className="block text-[11px] font-bold uppercase tracking-wider text-white/80">{countLabel}</span>
               <span className="block text-3xl font-bold text-white leading-tight">{totals.facilities}</span>
             </span>
           </div>
@@ -279,8 +281,8 @@ export default function ProjectDashboard({
                     <Layers className="w-4 h-4 text-ocs-600" />
                     <span className="text-[14px] font-bold">
                       {p.facilityCount === undefined
-                        ? 'Facilities'
-                        : `${p.facilityCount} ${p.facilityCount === 1 ? 'facility' : 'facilities'}`}
+                        ? countLabel
+                        : `${p.facilityCount} ${countLabel}`}
                     </span>
                   </div>
                 </div>

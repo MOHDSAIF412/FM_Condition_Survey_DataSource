@@ -38,9 +38,17 @@ conflict resolution. These backups remain local and do not enter the sync queue.
 
 ## QHSE inspections
 
-Open **QHSE Inspection** from the portal menu (or the project screen on Android).
-Choose an accessible project for cloud storage, then enter the report's project
-name, location, region, site, report number, inspection date, inspector and personnel.
+After signing in, choose **Condition Survey** or **QHSE Inspection** on either platform.
+Select or create a project using the project cards. QHSE inspections inherit its
+name and location and stay in that project's inspection list. Enter the audit
+title, report number, inspection date, prepared-by name, personnel and summary.
+**Build field template** lets editors hide or restore fields and add text, long-text,
+date or number fields to inspection details or each finding. Save a named project
+template to reuse that layout in new blank inspections. Templates are stored with
+their source inspection; archived/deleted source inspections no longer offer that template.
+Hidden values remain stored but are omitted from the form and both exports.
+Permitted administrators can also open the existing survey and checklist builders
+through the mobile menu.
 Each finding records a location, manually entered type, description, severity,
 CAFM reference and Open/Closed status, with multiple captioned photos. Inspector
 sign-off and PDF/Excel exports are available inside the inspection.

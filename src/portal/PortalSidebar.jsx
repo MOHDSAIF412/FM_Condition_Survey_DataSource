@@ -5,7 +5,7 @@ import {
 } from 'lucide-react';
 import { useEscapeKey } from '../utils/useEscapeKey';
 
-export const APP_VERSION = '1.0.0';
+export const APP_VERSION = '1.3';
 
 /**
  * Web portal navigation. A fixed rail on wide screens; a slide-in drawer from
@@ -20,8 +20,10 @@ function buildNav({ access = {}, hasOpenProject }) {
   const soon = (label, stage) => ({ label, disabled: true, stage });
   const isAdmin = !!access.config;
   return [
-    { key: 'home', label: 'Dashboard', icon: Home, target: { view: 'home' } },
-    { key: 'qhse', label: 'QHSE Inspection', icon: LayoutList, target: { view: 'qhse' } },
+    { key: 'modules', label: 'Choose Module', icon: Home, target: { view: 'modules' } },
+    { key: 'condition', label: 'Condition Survey', icon: FolderKanban, target: { module: 'condition' } },
+    { key: 'qhse', label: 'QHSE Inspection', icon: LayoutList, target: { module: 'qhse' } },
+    { key: 'home', label: 'Survey Dashboard', icon: Home, target: { view: 'home' } },
     // Forms, sections, fields and dropdown options share one page; rules have their own.
     access.config && {
       key: 'builder', label: 'Survey Builder', icon: LayoutList,
@@ -31,7 +33,7 @@ function buildNav({ access = {}, hasOpenProject }) {
       ]
     },
     {
-      key: 'reports', label: 'Reports', icon: FileText,
+      key: 'reports', label: 'Survey Reports', icon: FileText,
       children: [
         { label: 'Generate Reports', target: { view: 'reports' } },
         ...(access.config ? [{ label: 'Report Builder', target: { admin: 'reports' } }] : [])
@@ -45,9 +47,9 @@ function buildNav({ access = {}, hasOpenProject }) {
       ]
     },
     {
-      key: 'projects', label: 'Projects', icon: FolderKanban,
+      key: 'projects', label: 'Survey Tools', icon: FolderKanban,
       children: [
-        { label: 'All Projects', target: { view: 'projects' } },
+        { label: 'Survey Projects', target: { module: 'condition' } },
         { label: 'All Facilities', target: { view: 'allFacilities' } },
         ...(hasOpenProject ? [
           { label: 'Facilities', target: { view: 'facilities' } },
@@ -64,10 +66,10 @@ function buildNav({ access = {}, hasOpenProject }) {
   ].filter(Boolean);
 }
 
-const sameTarget = (a, b) => !!a && !!b && a.view === b.view && a.admin === b.admin;
+const sameTarget = (a, b) => !!a && !!b && a.view === b.view && a.admin === b.admin && a.module === b.module;
 
 export default function PortalSidebar({
-  current, access, hasOpenProject, onNavigate, open, onClose
+  current, access, hasOpenProject, onNavigate, open, onClose, desktop = true, workModule
 }) {
   const nav = buildNav({ access, hasOpenProject });
   const groupOf = (target) => nav.find((g) => g.children?.some((c) => sameTarget(c.target, target)))?.key;
@@ -98,7 +100,7 @@ export default function PortalSidebar({
       <div className="px-5 pt-6 pb-5 border-b border-white/10 flex items-start gap-3">
         <div className="flex-1 min-w-0">
           <img src="/ocs-logo-white.png" alt="OCS" className="h-9 w-auto" onError={(e) => { e.target.style.display = 'none'; }} />
-          <p className="text-[15px] font-bold mt-3 leading-tight">FM Condition Survey</p>
+          <p className="text-[15px] font-bold mt-3 leading-tight">OCS Field Workspace</p>
           <p className="text-[11px] text-sky-200/60">Facility Management</p>
         </div>
         <button type="button" onClick={onClose} aria-label="Close menu" className="lg:hidden p-1.5 rounded-lg hover:bg-white/10">
@@ -145,7 +147,7 @@ export default function PortalSidebar({
               </div>
             );
           }
-          const active = !item.disabled && sameTarget(item.target, current);
+          const active = !item.disabled && (item.target?.module ? current?.view !== 'modules' && workModule === item.target.module && ['projects', 'qhse', 'survey', 'facilities'].includes(current?.view) : sameTarget(item.target, current));
           return (
             <button key={item.key} type="button" disabled={item.disabled} onClick={() => go(item.target)}
               aria-current={active ? 'page' : undefined}
@@ -165,7 +167,7 @@ export default function PortalSidebar({
         <div className="relative overflow-hidden rounded-xl border border-white/10 bg-gradient-to-br from-white/10 to-white/0 px-4 py-3 flex items-center gap-3">
           <img src="/ocs-logo-white.png" alt="" aria-hidden="true" className="h-7 w-auto" onError={(e) => { e.target.style.display = 'none'; }} />
           <div className="text-[11px] leading-tight text-sky-100/75">
-            <p className="font-semibold">FM Condition Survey</p>
+            <p className="font-semibold">OCS Field Workspace</p>
             <p>v{APP_VERSION}</p>
           </div>
           <svg aria-hidden="true" viewBox="0 0 120 40" className="absolute -right-2 -bottom-2 w-28 h-10 opacity-40">
@@ -180,10 +182,10 @@ export default function PortalSidebar({
     <>
       {/* Fixed rather than sticky: sticky let the rail scroll up with the last
           40px of a long page, clipping the logo. The spacer keeps its width. */}
-      <div aria-hidden="true" className="hidden lg:block w-64 shrink-0" />
-      <aside className="hidden lg:block fixed inset-y-0 left-0 w-64 z-30">{content}</aside>
+      {desktop && <div aria-hidden="true" className="hidden lg:block w-64 shrink-0" />}
+      {desktop && <aside className="hidden lg:block fixed inset-y-0 left-0 w-64 z-30">{content}</aside>}
       {open && (
-        <div className="lg:hidden fixed inset-0 z-50 flex" role="dialog" aria-modal="true" aria-label="Menu">
+        <div className={`${desktop ? 'lg:hidden ' : ''}fixed inset-0 z-50 flex`} role="dialog" aria-modal="true" aria-label="Menu">
           <div className="w-72 max-w-[85vw] h-full shadow-2xl">{content}</div>
           <button type="button" aria-label="Close menu" className="flex-1 bg-slate-900/50" onClick={onClose} />
         </div>

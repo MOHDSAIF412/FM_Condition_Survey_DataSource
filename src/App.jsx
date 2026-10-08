@@ -13,6 +13,7 @@ import SignatureSection from './components/SignatureSection';
 const ReportModal = lazy(() => import('./components/ReportModal'));
 import SavedFacilities from './components/SavedFacilities';
 import ProjectDashboard from './components/ProjectDashboard';
+import ModulePicker from './components/ModulePicker';
 const UserManagement = lazy(() => import('./components/UserManagement'));
 import ChangePasswordModal from './components/ChangePasswordModal';
 import Breadcrumb from './components/Breadcrumb';
@@ -139,11 +140,12 @@ export default function App({ currentUser = null, onSignOut } = {}) {
    *   'facilities' pick or create a facility inside that project
    *   'survey'     the existing five tabs, always for one chosen facility
    */
-  // The web portal opens on its dashboard; the phone app keeps opening on the project list.
-  const [view, setView] = useState(() => (Capacitor.isNativePlatform() ? 'projects' : 'home'));
+  // Both platforms start by choosing the work module.
+  const [view, setView] = useState('modules');
+  const [workModule, setWorkModule] = useState('condition');
   const [navOpen, setNavOpen] = useState(false);
   const [createProjectSignal, setCreateProjectSignal] = useState(0);
-  // The Admin Dashboard is part of the web portal only; the phone app never offers it.
+  // Builders are available on both platforms to the same permitted roles.
   const isWebPortal = !Capacitor.isNativePlatform();
   const [adminModule, setAdminModule] = useState('forms');
   const openAdmin = (module) => { setAdminModule(module); setView('admin'); };
@@ -179,6 +181,7 @@ export default function App({ currentUser = null, onSignOut } = {}) {
   const [activeProject, setActiveProject] = useState(null);
   const activeProjectRef = useRef(null);
   activeProjectRef.current = activeProject;
+
 
   const [showReportModal, setShowReportModal] = useState(false);
   const [conflictId, setConflictId] = useState(null);
@@ -1283,9 +1286,10 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
   }, [isLoaded]);
 
   const handleOpenProject = (project) => {
+    activeProjectRef.current = project;
     setActiveProject(project);
     setActiveProjectId(project.id);
-    setView('facilities');
+    setView(workModule === 'qhse' ? 'qhse' : 'facilities');
     refreshSurveyList();
   };
 
@@ -1364,22 +1368,28 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
   const navigatePortal = (target) => {
     if (!target) return;
     if (target.admin) { openAdmin(target.admin); return; }
+    if (target.module) { setWorkModule(target.module); setView('projects'); refreshProjects(); refreshSurveyList(); return; }
+    if (target.view !== 'modules' && target.view !== 'admin') setWorkModule('condition');
     if (target.view === 'allFacilities') { openFacilityList('all'); return; }
     if (target.view === 'facilities' && !activeProjectRef.current) { setView('projects'); return; }
     if (target.view === 'home' || target.view === 'qhse') refreshSurveyList();
     setView(target.view);
   };
 
-  async function startQhse(projectId) {
+  async function startQhse(projectId, template = null) {
     if (!mayEditSurveys) return;
     if (surveyRef.current) {
       const kept = await saveSurveyOffline(surveyRef.current);
       if (kept?.conflict) throw new Error('Resolve the current inspection conflict before starting another.');
     }
-    const fresh = createQhse(projectId, await nextFacilityNumber());
-    const saved = await saveSurveyOffline(fresh, { pendingSync: false });
+    const project = projects.find(p => p.id === projectId) || activeProjectRef.current;
+    if (!project || project.id !== projectId) throw new Error('Select a project first.');
+    const fresh = createQhse(projectId, await nextFacilityNumber(), project, template);
+    fresh.facility.surveyorName = currentUser?.full_name || currentUser?.name || '';
+    setWorkModule('qhse');
+    const saved = await saveSurveyOffline(fresh, { pendingSync: true });
     if (saved?.conflict) throw new Error('Could not create the inspection.');
-    skipCloudPushRef.current = true;
+    skipCloudPushRef.current = false;
     surveyRef.current = fresh; setSurvey(fresh);
     setActiveProject(projects.find(p => p.id === projectId) || null);
     setView('survey'); await refreshSurveyList();
@@ -1394,6 +1404,7 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
       setActiveProject(project);
       setActiveProjectId(project.id);
     }
+    setWorkModule(isQhse(row) ? 'qhse' : 'condition');
     await handleOpenSurvey(surveyId);
   };
 
@@ -1465,7 +1476,7 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
 
   // Every list and count works from these: the facilities with each one's
   // due date resolved (its own, else its project's), for Overdue.
-  const listRows = useMemo(() => withDueDates(surveyList, projects), [surveyList, projects]);
+  const listRows = useMemo(() => withDueDates(surveyList.filter(s => !isQhse(s)), projects), [surveyList, projects]);
 
   /** Facilities belonging to the open project, and nothing else. */
   const facilitiesInProject = activeProject
@@ -1487,6 +1498,12 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
   const openIsLocked = !!openStage && isLocked(openStage);
   openLockedRef.current = openIsLocked;
   const mayEditOpen = mayEditSurveys && !openIsLocked;
+  useEffect(() => {
+    if (view !== 'survey' || !mayEditOpen || !activeProject || !isQhse(survey) || survey.projectId !== activeProject.id) return;
+    if (survey.facility?.qhse?.projectName === activeProject.name && survey.facility?.facilityName === activeProject.name) return;
+    setSurvey(prev => ({ ...prev, facility: { ...prev.facility, facilityName: activeProject.name,
+      qhse: { ...prev.facility.qhse, projectName: activeProject.name } } }));
+  }, [view, mayEditOpen, activeProject, survey?.id, survey?.facility?.qhse?.projectName]);
   const [workflowBusy, setWorkflowBusy] = useState(null);
   // Until the database records reviews, the facility screen offers no review
   // steps (they would fail) and shows no review banner.
@@ -1764,13 +1781,15 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
     <SubmissionValidation.Provider value={validationSurveyId === survey?.id}>
     <Suspense fallback={<div role="status" className="p-6 text-slate-600">Loading screen…</div>}>
     <div className="min-h-screen bg-[#f4f8fd] flex font-sans">
-      {isWebPortal && (
+      {(
         <PortalSidebar
+          desktop={isWebPortal}
+          workModule={workModule}
           current={view === 'admin' ? { admin: adminModule } : { view }}
           access={{ config: mayManageConfig, users: mayManageUsers, templates: mayManageTemplates, review: mayReview, admin: isAdminUser(currentUser) }}
           /* Only once a project is open: on the project list a "Facilities"
              entry would point at a project nobody has chosen. */
-          hasOpenProject={!!activeProject && view !== 'projects'}
+          hasOpenProject={!!activeProject && workModule === 'condition' && !['modules', 'projects'].includes(view)}
           onNavigate={navigatePortal}
           open={navOpen}
           onClose={() => setNavOpen(false)}
@@ -1798,13 +1817,13 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
         contextLabel={
           view === 'survey' && isQhse(survey) ? 'QHSE Inspection' : view === 'survey'
             ? ''
-            : (activeProject ? `${activeProject.projectNumber} · ${activeProject.name}` : 'ADEC')
+            : (view === 'modules' ? 'Choose a module' : `${workModule === 'qhse' ? 'QHSE Inspection' : 'Condition Survey'}${activeProject && view !== 'projects' ? ' · ' + activeProject.name : ''}`)
         }
         // Reports need a facility behind them, so the shortcut only belongs on
         // the survey screens; the hub screens have their own Reports entry.
         showReports={view === 'survey' && !isQhse(survey)}
         onOpenUsers={() => (isWebPortal ? openAdmin('users') : setView('users'))}
-        onOpenNav={isWebPortal ? () => setNavOpen(true) : undefined}
+        onOpenNav={() => setNavOpen(true)}
         searchSlot={isWebPortal ? (
           <GlobalSearch
             surveys={surveyList}
@@ -1836,7 +1855,7 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
       )}
 
       {/* Web portal dashboard. */}
-      {view === 'home' && isWebPortal && (
+      {view === 'home' && (
         <main className="flex-1 w-full px-3 sm:px-5 pt-4 md:pb-6">
           <PortalHome
             currentUser={currentUser}
@@ -1857,23 +1876,27 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
       )}
 
       {/* Project picker: nothing project-specific is reachable until one is chosen. */}
-      {!isWebPortal && view !== 'survey' && <button className="mx-4 my-2 text-[#293771] underline text-left" onClick={() => { refreshSurveyList(); setView('qhse'); }}>QHSE Inspection</button>}
-      {view === 'qhse' && <main className="flex-1 px-3 sm:px-8 py-6 safe-area-content-pb">
-        <QhseHub surveys={surveyList.filter(isQhse)} projects={projects} canEdit={mayEditSurveys} cloudConfigured={isCloudConfigured}
-          onCreate={startQhse} onOpen={openSurveyFromPortal} />
+      {view === 'modules' && <main className="flex-1 px-4 sm:px-8 py-8 safe-area-content-pb"><ModulePicker onSelect={module => navigatePortal({ module })} /></main>}
+      {view === 'qhse' && <main className="flex-1 max-w-6xl w-full mx-auto px-3 sm:px-8 py-6 safe-area-content-pb">
+        <QhseHub surveys={surveyList.filter(s => isQhse(s) && s.projectId === activeProject?.id)} project={activeProject} canEdit={mayEditSurveys}
+          onBack={() => { setWorkModule('qhse'); setView('projects'); }} onCreate={startQhse} onOpen={openSurveyFromPortal} />
       </main>}
       {view === 'survey' && isQhse(survey) && <main className="flex-1 max-w-6xl w-full mx-auto px-3 sm:px-6 py-6 safe-area-content-pb">
-        <QhseInspection survey={survey} canEdit={mayEditOpen} canDelete={!isCloudConfigured || mayDeleteSnags} canExport={!isCloudConfigured || mayDownloadReports}
+        <QhseInspection project={activeProject} survey={survey} canEdit={mayEditOpen} canDelete={!isCloudConfigured || mayDeleteSnags} canExport={!isCloudConfigured || mayDownloadReports}
           onFacility={handleUpdateFacility} onItem={handleUpdateItem} onDelete={handleDeleteItem}
           onAdd={item => { if (mayEditOpen) setSurvey(prev => ({ ...prev, items: [...prev.items, item] })); }}
           onSignatures={signatures => { if (mayEditOpen) setSurvey(prev => ({ ...prev, signatures })); }}
-          onBack={async () => { const saved = await saveSurveyOffline(surveyRef.current); if (!saved?.conflict) { await refreshSurveyList(); setView('qhse'); } }}
+          onBack={async () => { setWorkModule('qhse'); const saved = await saveSurveyOffline(surveyRef.current); if (!saved?.conflict) { await refreshSurveyList(); setView('qhse'); } }}
           onBackup={handleExportJSON} />
       </main>}
       {view === 'projects' && (
         <main className="flex-1 w-full px-3 sm:px-8 pt-4 sm:pt-6 safe-area-content-pb md:pb-8">
           <ProjectDashboard
-            projects={projects}
+            key={workModule}
+            moduleName={workModule === 'qhse' ? 'QHSE Inspection' : 'Condition Survey'}
+            countLabel={workModule === 'qhse' ? 'inspections' : 'facilities'}
+            onBack={() => setView('modules')}
+            projects={workModule === 'qhse' ? projects.map(p => ({ ...p, facilityCount: surveyList.filter(s => isQhse(s) && s.projectId === p.id).length })) : projects}
             loading={projectsLoading}
             online={online}
             onOpenProject={handleOpenProject}
@@ -1908,7 +1931,7 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
       {/* Admin / Developer Dashboard: web portal, administrators only. The
           database refuses configuration, template and user changes from anyone
           else, so these checks only decide what is offered. */}
-      {view === 'admin' && isWebPortal && mayOpenAdmin(adminModule) && (
+      {view === 'admin' && mayOpenAdmin(adminModule) && (
         <main className="flex-1 w-full px-3 sm:px-8 pt-4 sm:pt-6 safe-area-content-pb md:pb-8">
           <AdminDashboard
             embedded
@@ -1924,7 +1947,7 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
       )}
 
       {/* Review & Approval: the queue, the steps, the due dates. */}
-      {view === 'review' && isWebPortal && mayReview && (
+      {view === 'review' && mayReview && (
         <>
           <div className="bg-white border-b border-slate-200">
             <div className="max-w-6xl mx-auto px-3 sm:px-6 py-2">
@@ -1945,7 +1968,7 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
       )}
 
       {/* Every facility across projects: where the dashboard's numbers lead. */}
-      {view === 'allFacilities' && isWebPortal && (
+      {view === 'allFacilities' && (
         <>
           <div className="bg-white border-b border-slate-200">
             <div className="max-w-6xl mx-auto px-3 sm:px-6 py-2">
@@ -2071,7 +2094,7 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
           <main className="flex-1 w-full px-3 sm:px-8 pt-4 sm:pt-6 safe-area-content-pb md:pb-8">
             <ReportDashboard
               projects={projects}
-              surveys={surveyList}
+              surveys={listRows}
               initialProjectId={activeProject?.id || null}
               canDownloadReports={mayDownloadReports}
             />
@@ -2099,19 +2122,19 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
             )}
           </div>
 
-          {surveyList.length > 0 && (
+          {listRows.length > 0 && (
             <select
               value={survey?.id || ''}
               onChange={(e) => handleOpenSurvey(e.target.value)}
               className="px-3 py-1.5 rounded-lg border border-slate-300 text-xs font-semibold text-slate-800 bg-white max-w-[240px] min-w-0 flex-1 sm:flex-none"
               title="Open another facility to view or report on it"
             >
-              {!surveyList.some((s2) => s2.id === survey?.id) && (
+              {!listRows.some((s2) => s2.id === survey?.id) && (
                 <option value={survey?.id || ''}>
                   {survey?.facility?.facilityName || 'Current (unsaved)'}
                 </option>
               )}
-              {surveyList.map((s2) => (
+              {listRows.map((s2) => (
                 <option key={s2.id} value={s2.id}>
                   {[s2.facility?.facilityCode, s2.facilityName].filter(Boolean).join(' · ')
                     || `Unnamed facility (${s2.itemCount || 0} snag${s2.itemCount === 1 ? '' : 's'})`}

@@ -1,6 +1,6 @@
 import { test, expect, vi } from 'vitest';
 import { mkdirSync, writeFileSync } from 'node:fs';
-import { createQhse, createFinding, findingData, inspectionIssues, isQhse } from '../qhse/model';
+import { createQhse, createFinding, findingData, inspectionIssues, isQhse, activeFields, reportDetails, findingDetails } from '../qhse/model';
 vi.mock('../utils/fileSaver', () => ({ saveBlob: vi.fn() }));
 const { generateQhsePDF, generateQhseExcel } = await import('../qhse/reports');
 const ExcelJS = (await import('exceljs')).default;
@@ -32,6 +32,38 @@ test('QHSE fields survive the persisted JSON structure used by cloud sync', () =
   const s = fixture(); const item = JSON.parse(JSON.stringify(s.items[0]));
   expect(findingData(item).cafmReference).toBe('QA-123'); expect(findingData(item).photos).toHaveLength(2);
   expect(JSON.parse(JSON.stringify(s.facility)).qhse.reportNumber).toBe('QA-001');
+});
+test('new inspections inherit project identity and copy only template fields', () => {
+  const source = fixture(); source.facility.qhse.layout = { hidden: ['inspection:personnel'], custom: [{ id: 'custom_zone', label: 'Zone', scope: 'inspection', custom: true }] };
+  const next = createQhse('p', 2, { name: 'Selected project', location: 'Selected address' }, source.facility.qhse.layout);
+  expect(next.facility.qhse.projectName).toBe('Selected project'); expect(next.facility.address).toBe('Selected address');
+  expect(next.items).toEqual([]); expect(next.facility.qhse.reportNumber).toBe(''); expect(next.facility.qhse.customValues).toBeUndefined();
+  next.facility.qhse.layout.hidden.push('finding:type'); expect(source.facility.qhse.layout.hidden).toHaveLength(1);
+});
+test('hidden required fields are omitted from validation and custom fields survive JSON', () => {
+  const s = createQhse('p', 1, { name: 'Test project' }); s.items.push(createFinding());
+  s.facility.qhse.layout = { hidden: ['inspection:address', 'finding:location', 'finding:type', 'finding:description', 'finding:severity'], custom: [{ id: 'custom_area', label: 'Area manager', scope: 'inspection', custom: true }] };
+  s.facility.qhse.customValues = { custom_area: 'QA Manager' };
+  expect(inspectionIssues(s)).toEqual([]); expect(activeFields(s, 'inspection').some(f => f.id === 'address')).toBe(false);
+  expect(reportDetails(JSON.parse(JSON.stringify(s)))).toContainEqual(['Area manager', 'QA Manager']);
+  expect(findingDetails(s, s.items[0]).some(([label]) => label === 'Severity')).toBe(false);
+});
+test('both exports include custom fields and omit removed fields while retaining evidence', async () => {
+  const s = fixture(); s.facility.qhse.layout = { hidden: ['inspection:personnel', 'finding:cafmReference'], custom: [
+    { id: 'custom_inspection', label: 'Reviewed by', scope: 'inspection', custom: true },
+    { id: 'custom_action', label: 'Corrective action', scope: 'finding', custom: true, type: 'textarea' }
+  ] };
+  s.facility.qhse.customValues = { custom_inspection: 'QA Reviewer' }; s.items[0].customValues.custom_action = 'REPAIR_ACTION';
+  const pdf = await generateQhsePDF(s, { returnBlob: true }); const text = pdfText(Buffer.from(await pdf.arrayBuffer()));
+  expect(text).toContain('QA Reviewer'); expect(text).toContain('REPAIR_ACTION'); expect(text).not.toContain('QA-123');
+  vi.stubGlobal('Image', class { naturalWidth = 1; naturalHeight = 1; set src(v) { queueMicrotask(() => this.onload()); } });
+  try {
+    const excel = await generateQhseExcel(s, { returnBlob: true }); const wb = new ExcelJS.Workbook(); await wb.xlsx.load(await excel.arrayBuffer());
+    const sheet = wb.getWorksheet('Findings 1'); expect(sheet.getRow(1).values).toContain('Corrective action'); expect(sheet.getRow(1).values).not.toContain('CAFM reference');
+    expect(sheet.getRow(2).values).toContain('REPAIR_ACTION'); expect(sheet.getImages()).toHaveLength(2);
+    writeFileSync('outputs/qhse-qa/qhse-custom-fields.pdf', Buffer.from(await pdf.arrayBuffer()));
+    writeFileSync('outputs/qhse-qa/qhse-custom-fields.xlsx', Buffer.from(await excel.arrayBuffer()));
+  } finally { vi.unstubAllGlobals(); }
 });
 test('PDF contains findings, CAFM references, photo captions and pagination', async () => {
   const blob = await generateQhsePDF(fixture(), { returnBlob: true });
