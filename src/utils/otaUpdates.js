@@ -1,47 +1,89 @@
 import { Capacitor } from '@capacitor/core';
 import { createOtaController } from './otaController';
 
-let started = false;
+let started = false, updater, controller, checking = null;
 let applyGuard = () => false;
-let status = 'App updates download automatically while you are online.';
+let state = { phase: 'idle', message: 'Updates download automatically while online.', version: null, checkedAt: null, percent: null };
 const listeners = new Set();
-export const otaStatus = () => status;
+export const otaStatus = () => state;
 export function subscribeOta(fn) { listeners.add(fn); return () => listeners.delete(fn); }
-function publish(message) { status = message; listeners.forEach(fn => fn()); }
+function publish(changes) { state = { ...state, ...changes }; listeners.forEach(fn => fn()); }
 export function allowOtaAtSafeScreen(guard) {
   applyGuard = guard;
   return () => { if (applyGuard === guard) applyGuard = () => false; };
 }
 
-// Called after React commits, so a broken initial render cannot bless a bundle.
+export function checkOtaUpdate() {
+  if (checking) return checking;
+  if (!updater) return Promise.resolve();
+  checking = runCheck().finally(() => { checking = null; });
+  return checking;
+}
+async function runCheck() {
+  if (navigator.onLine === false) {
+    publish({ phase: 'error', message: 'You are offline. Connect to the internet, then tap Get update.' });
+    return;
+  }
+  publish({ phase: 'checking', message: 'Checking for updates…', percent: null });
+  try {
+    const current = await updater.current();
+    publish({ version: current.bundle.version });
+    const latest = await updater.getLatest();
+    if (!latest.version) throw new Error('The update server did not return a version.');
+    publish({ checkedAt: Date.now() });
+    if (latest.version === current.bundle.version) {
+      publish({ phase: 'current', message: 'Your app is up to date.' });
+      return;
+    }
+    // Only accept this app's HTTPS update bundles.
+    const url = new URL(latest.url);
+    if (url.origin !== 'https://fm-condition-survey-data-source.vercel.app'
+        || !/^\/ota\/bundle-\d+\.\d+\.\d+\.zip$/.test(url.pathname)) throw new Error('Invalid update download address.');
+    publish({ phase: 'downloading', message: 'Downloading update…', percent: 0 });
+    let bundle = await updater.getNextBundle().catch(() => null);
+    if (bundle?.version !== latest.version || !['pending', 'success'].includes(bundle.status)) {
+      bundle = await updater.download({ url: latest.url, version: latest.version });
+    }
+    await updater.next({ id: bundle.id });
+    controller.available(bundle);
+  } catch (error) {
+    publish({ phase: 'error', message: `Could not get the update. ${error?.message || 'Please check your connection.'} Tap Get update to retry.` });
+  }
+}
+
+// Called after React commits; never mark a failed initial render as healthy.
 export async function initOtaUpdates() {
   if (started || !Capacitor.isNativePlatform()) return;
   started = true;
   try {
-    const { CapacitorUpdater: updater } = await import('@capgo/capacitor-updater');
-    const controller = createOtaController(updater,
-      () => document.visibilityState === 'visible' && applyGuard(), publish);
+    updater = (await import('@capgo/capacitor-updater')).CapacitorUpdater;
+    controller = createOtaController(updater,
+      () => document.visibilityState === 'visible' && applyGuard(), message => publish({
+        message, phase: message.startsWith('Installing') ? 'installing' : message.startsWith('Update could') ? 'error' : 'ready', percent: null
+      }));
     await updater.addListener('updateAvailable', info => controller.available(info?.bundle));
-    await updater.addListener('download', info => publish(`Downloading app update… ${Math.round(info.percent || 0)}%`));
-    await updater.addListener('downloadFailed', () => publish('Update download will retry when you reconnect or reopen the app.'));
-    await updater.addListener('updateFailed', () => publish('The previous working version was restored.'));
+    await updater.addListener('download', info => publish({ phase: 'downloading', message: 'Downloading update…', percent: Math.round(info.percent || 0) }));
+    await updater.addListener('noNeedUpdate', () => {
+      // Native also emits this after failures; only a successful explicit check
+      // can clear an error, otherwise a failed download would look successful.
+      if (!checking && !['error', 'ready', 'installing', 'downloading'].includes(state.phase)) publish({ phase: 'current', message: 'Your app is up to date.', checkedAt: Date.now(), percent: null });
+    });
+    await updater.addListener('downloadFailed', () => {
+      if (!checking && !['ready', 'installing'].includes(state.phase)) publish({ phase: 'error', message: 'The update check or download failed. Tap Get update to retry.', percent: null });
+    });
+    await updater.addListener('updateFailed', () => publish({ phase: 'error', message: 'The previous working version was restored. Tap Get update to retry.' }));
     await updater.notifyAppReady();
-    // A download may have completed before React/listeners started.
+    publish({ version: (await updater.current()).bundle.version });
     try { controller.available(await updater.getNextBundle()); } catch { /* older native shell */ }
-    let checking = false;
-    const check = async () => {
-      if (checking || document.visibilityState !== 'visible' || navigator.onLine === false) return;
-      checking = true;
-      try { await updater.triggerUpdateCheck(); }
-      catch { /* older shells still check automatically on foreground */ }
-      finally { checking = false; }
+    const check = () => {
+      if (document.visibilityState === 'visible' && !['ready', 'installing', 'downloading'].includes(state.phase)) checkOtaUpdate();
     };
     window.addEventListener('online', check);
     document.addEventListener('visibilitychange', check);
     setInterval(check, 5 * 60 * 1000);
-    await check();
+    check();
   } catch (error) {
-    publish('Automatic updates are unavailable in this installation.');
+    publish({ phase: 'error', message: 'Automatic updates are unavailable in this installation.' });
     console.warn('[ota] updater unavailable:', error?.message || error);
   }
 }

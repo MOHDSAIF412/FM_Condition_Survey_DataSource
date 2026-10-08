@@ -55,9 +55,10 @@ export default async function handler(req, res) {
   }
   const current = (body && (body.version_name || body.version)) || '';
 
-  if (current && current === manifest.version) {
-    return res.status(200).json({ ...NO_UPDATE, version: manifest.version });
-  }
+  // Return the normal version payload even when current. Native updater versions
+  // classify an error without a kind as a failed download, not "up to date".
+  // Their version comparison emits noNeedUpdate without downloading the ZIP.
+  res.setHeader('Cache-Control', 'no-store');
 
   return res.status(200).json({
     version: manifest.version,

@@ -20,6 +20,16 @@ test.each(['//attacker.example/evil.zip','/ota/../evil.zip','/ota/bundle-1.0.999
   const res=response(); await ota({method:'GET',headers:{},body:{}},res);
   expect(res.json).toHaveBeenCalledWith(expect.objectContaining({error:'no_new_version_available'}));
 });
+test('OTA current version returns a normal payload, not a native download failure', async () => {
+  vi.spyOn(globalThis, 'fetch').mockResolvedValue({ ok: true, json: async () => ({ version: '1.0.123', path: '/ota/bundle-1.0.123.zip' }) });
+  const res = response();
+  await ota({ method: 'POST', body: { version_name: '1.0.123' } }, res);
+  const result = res.json.mock.calls[0][0];
+  expect(result.version).toBe('1.0.123');
+  expect(result.error).toBeUndefined();
+  expect(result.url).toMatch(/^https:\/\/fm-condition-survey-data-source.vercel.app\/ota\//);
+});
+
 test('account switching isolates active inspections, lists, direct opens and unsent work', async () => {
   store.set('fm_last_account','alice'); selectDeviceAccount('alice');
   await saveSurveyOffline({id:'private-alice',pendingSync:true,facility:{facilityName:'Private site'},items:[{id:'i'}]});
