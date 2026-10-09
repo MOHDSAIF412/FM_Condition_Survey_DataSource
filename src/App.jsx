@@ -24,6 +24,8 @@ import PhotoGallery from './components/PhotoGallery';
 const ReportDashboard = lazy(() => import('./components/ReportDashboard'));
 const AdminDashboard = lazy(() => import('./admin/AdminDashboard'));
 import PortalSidebar from './portal/PortalSidebar';
+import WorkspaceBottomNav from './components/WorkspaceBottomNav';
+import { useScreenScroll } from './utils/useScreenScroll';
 import BackButton from './components/BackButton';
 import { backTarget, installAndroidBackHandler } from './utils/backNavigation';
 import { App as NativeApp } from '@capacitor/app';
@@ -1546,11 +1548,7 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
     await refreshProjects();
   }
 
-  // A new screen starts at its top, with its breadcrumb in view -- not at the
-  // scroll position the previous screen was left at.
-  useEffect(() => {
-    window.scrollTo(0, 0);
-  }, [view]);
+  useScreenScroll(`${currentUser?.id || 'device'}:${workModule}:${view}:${view === 'projects' ? '' : activeProject?.id || ''}:${view === 'survey' ? survey?.id : ''}`, isLoaded && !(view === 'projects' && projectsLoading));
 
   const handleBackToProjects = async () => {
     if (view === 'survey' && !(await offerSubmitBeforeLeaving())) return;
@@ -1899,7 +1897,7 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
   return (
     <SubmissionValidation.Provider value={validationSurveyId === survey?.id}>
     <Suspense fallback={<div role="status" className="p-6 text-slate-600">Loading screen…</div>}>
-    <div className="min-h-screen bg-[#f4f8fd] flex font-sans">
+    <div className="workspace-app min-h-screen bg-[#f4f8fd] flex font-sans">
       {(
         <PortalSidebar
           desktop={isWebPortal}
@@ -2409,6 +2407,12 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
       </main>
       )}
 
+      {workModule && ['projects', 'qhse', 'facilities', 'reports'].includes(view) && <WorkspaceBottomNav
+        view={view}
+        onProjects={() => navigatePortal({ module: workModule })}
+        onReports={() => navigatePortal({ view: 'reports', reportModule: workModule })}
+        onMore={() => setNavOpen(true)}
+      />}
       {/* Audit Report Modal & PDF Generation Engine */}
       {showReportModal && (
         <ReportModal

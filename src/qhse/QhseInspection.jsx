@@ -74,6 +74,13 @@ export default function QhseInspection({ project, survey, canEdit, canDelete, ca
   const [newField, setNewField] = useState({ label: '', scope: 'inspection', type: 'text' });
   const [templateName, setTemplateName] = useState('');
   const [pendingDelete, setPendingDelete] = useState(false);
+  const [section, setSection] = useState('details');
+  const detailsRef = useRef(null), findingsRef = useRef(null), reviewRef = useRef(null);
+  function goToSection(key) {
+    setSection(key);
+    const target = { details: detailsRef, findings: findingsRef, review: reviewRef }[key];
+    target.current?.scrollIntoView({ behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' });
+  }
   const fileRef = useRef(null), targetRef = useRef(null);
   const latest = useRef(survey); latest.current = survey;
   const f = survey.facility, q = f.qhse || {};
@@ -118,15 +125,19 @@ export default function QhseInspection({ project, survey, canEdit, canDelete, ca
       fileRef.current.click();
     }
   }
-  return <section className="space-y-5">
+  return <section className="inspection-form space-y-5">
     {pendingDelete && <ConfirmDelete title="Delete inspection?" onCancel={() => setPendingDelete(false)} onConfirm={() => { setPendingDelete(false); action('delete', true); }}>This removes the inspection from the project list. Its photos and remarks are retained. Restore it from Deleted inspections.</ConfirmDelete>}
     <div className="space-y-4"><div className="flex justify-between gap-3 items-center"><BackButton onClick={onBack} disabled={busy}>Project inspections</BackButton><button onClick={onBackup} className="text-xs text-slate-600 border rounded-lg px-3 py-2">Backup</button></div><div className="flex flex-wrap items-center justify-between gap-3"><h1 className="text-2xl sm:text-3xl font-bold text-[#293771]">QHSE Site Inspection</h1>{canEdit && <button disabled={busy} className="inline-flex items-center gap-2 min-h-11 rounded-xl bg-[#293771] px-4 py-2 text-sm font-semibold text-white disabled:opacity-50" onClick={() => choosePhotos(latest.current.items.find(i => i.customValues?.qhseEvidenceOnly)?.id || null)}><Images size={18} />Add photos & remarks</button>}</div></div>
+    <nav aria-label="Inspection sections" className="grid grid-cols-3 gap-1 p-1 rounded-2xl bg-slate-100 border border-slate-200">
+      {[['details', '1 · Details'], ['findings', '2 · Photos & findings'], ['review', '3 · Review']].map(([key, label]) => <button type="button" key={key} aria-current={section === key ? 'location' : undefined} onClick={() => goToSection(key)} className={`min-h-12 rounded-xl px-2 py-2 text-xs sm:text-sm font-semibold ${section === key ? 'bg-white text-ocs-600 shadow-sm' : 'text-slate-500'}`}>{label}</button>)}
+    </nav>
     {error && <div role="alert" className="p-4 bg-red-50 text-red-800 rounded-lg">{error}</div>}
     {canExport && <div className="rounded-xl border bg-white p-5 space-y-3"><h2 className="font-bold text-[#293771]">Generate inspection report</h2><p className="text-sm text-slate-600">Download the OCS report with all photos and their remarks.</p><div className="flex gap-3 flex-wrap"><button disabled={busy} onClick={() => exportReport('pdf')} className="bg-[#293771] text-white px-5 py-3 rounded-lg disabled:opacity-50">Download PDF</button><button disabled={busy} onClick={() => exportReport('excel')} className="bg-[#F15F22] text-white px-5 py-3 rounded-lg disabled:opacity-50">Download Excel</button></div></div>}
     <p className="text-sm text-slate-500">Drafts and photos save automatically. Use the sync indicator above to check cloud status.</p>
     <div className="rounded-xl border bg-white p-4 flex flex-wrap gap-3 justify-between items-center"><div><span className={`inline-block text-sm font-semibold rounded-lg border px-3 py-1 ${STAGE_BY_KEY[stageOf(survey)].badge}`}>{STAGE_BY_KEY[stageOf(survey)].label}</span>{survey.submittedAt && <p className="text-xs text-slate-500 mt-2">Last submitted: {new Date(survey.submittedAt).toLocaleString()}</p>}</div>{canDelete && !isLocked(survey) && <button disabled={busy} onClick={() => action('delete')} className="min-h-11 text-sm font-semibold text-red-700">Delete inspection</button>}</div>
     <fieldset disabled={!canEdit} className="space-y-5 min-w-0">
-      <div className="bg-white border rounded-xl p-5 space-y-4">
+      <div ref={detailsRef} className="inspection-section bg-white border rounded-xl p-5 space-y-4">
+        <h2 className="text-lg font-semibold text-[#293771]">Inspection details</h2>
         <div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-xs uppercase font-semibold text-slate-500">Project</p><p className="font-bold text-[#293771]">{project?.name || q.projectName || f.facilityName}</p></div><button className="rounded-lg border border-[#293771] px-4 py-2 text-sm font-semibold text-[#293771]" onClick={() => setBuilding(v => !v)}>{building ? 'Done editing layout' : 'Build field template'}</button></div>
         {building && <div className="bg-slate-50 rounded-xl p-4 space-y-4">
           <h2 className="font-bold text-[#293771]">Report fields</h2><p className="text-xs text-slate-600">Uncheck fields to remove them from the form and exports. Saved values are retained if you restore a field.</p>
@@ -139,7 +150,7 @@ export default function QhseInspection({ project, survey, canEdit, canDelete, ca
         </div>}
         <div className="grid sm:grid-cols-2 gap-4">{activeFields(survey, 'inspection').map(field => <Field key={field.id} label={field.label + (field.required ? ' *' : '')} type={field.type === 'textarea' ? undefined : field.type || 'text'} multiline={field.type === 'textarea'} value={inspectionValue(survey, field)} onChange={value => changeInspection(field, value)} />)}</div>
       </div>
-      <div className="bg-white border rounded-xl p-5 space-y-3"><h2 className="font-bold text-[#293771]">Photos & remarks</h2><p className="text-sm text-slate-600">Add multiple photos, including five at once. Each photo has its own remark and appears separately in PDF and Excel.</p><div className="flex flex-wrap gap-3"><button disabled={busy} className="inline-flex items-center gap-2 min-h-11 rounded-lg bg-[#293771] text-white px-4 py-2 disabled:opacity-50" onClick={() => choosePhotos(latest.current.items.find(i => i.customValues?.qhseEvidenceOnly)?.id || null)}><Images size={18} />Add photos</button><button disabled={busy} className="inline-flex items-center gap-2 min-h-11 rounded-lg border border-[#293771] text-[#293771] px-4 py-2 disabled:opacity-50" onClick={() => choosePhotos(latest.current.items.find(i => i.customValues?.qhseEvidenceOnly)?.id || null, true)}><Camera size={18} />Take photo</button></div>{busy && <p role="status" className="text-sm text-slate-500">Processing photos / report…</p>}</div>
+      <div ref={findingsRef} className="inspection-section bg-white border rounded-xl p-5 space-y-3"><h2 className="font-bold text-[#293771]">Photos & remarks</h2><p className="text-sm text-slate-600">Add multiple photos, including five at once. Each photo has its own remark and appears separately in PDF and Excel.</p><div className="flex flex-wrap gap-3"><button disabled={busy} className="inline-flex items-center gap-2 min-h-11 rounded-lg bg-[#293771] text-white px-4 py-2 disabled:opacity-50" onClick={() => choosePhotos(latest.current.items.find(i => i.customValues?.qhseEvidenceOnly)?.id || null)}><Images size={18} />Add photos</button><button disabled={busy} className="inline-flex items-center gap-2 min-h-11 rounded-lg border border-[#293771] text-[#293771] px-4 py-2 disabled:opacity-50" onClick={() => choosePhotos(latest.current.items.find(i => i.customValues?.qhseEvidenceOnly)?.id || null, true)}><Camera size={18} />Take photo</button></div>{busy && <p role="status" className="text-sm text-slate-500">Processing photos / report…</p>}</div>
       <div className="flex justify-between items-center"><h2 className="text-lg font-bold">Findings ({survey.items.filter(i => !i.customValues?.qhseEvidenceOnly).length})</h2><button className="bg-[#293771] text-white px-4 py-2 rounded-lg" onClick={() => onAdd(createFinding())}>Add finding</button></div>
       {survey.items.map((item, index) => {
         const data = findingData(item);
@@ -159,14 +170,14 @@ export default function QhseInspection({ project, survey, canEdit, canDelete, ca
             <button disabled={busy} className="inline-flex items-center gap-2 border rounded-lg px-4 py-2 text-sm font-semibold text-[#293771]" onClick={() => choosePhotos(item.id)}><Images size={18} />Add photos</button>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">{data.photos.map((p, n) => <div key={p.id} className="border rounded-xl p-3 bg-slate-50 space-y-2">
-            {p.dataUrl ? <img src={p.dataUrl} alt={`Finding ${index + 1}, photo ${n + 1}`} className="w-full h-36 object-contain" /> : <p className="text-xs">Photo available in cloud</p>}
+            {p.dataUrl ? <img src={p.dataUrl} alt={`Finding ${index + 1}, photo ${n + 1}`} loading="lazy" decoding="async" className="w-full h-56 sm:h-44 object-contain rounded-lg bg-white" /> : <p className="text-xs">Photo available in cloud</p>}
             <Field label={`Photo ${n + 1} remark`} multiline value={p.caption} onChange={v => onItem({ ...item, photos: item.photos.map(photo => photo.id === p.id ? { ...photo, caption: v } : photo) })} />
             {canDelete && <button className="text-xs text-red-700 mt-2" onClick={() => { if (confirm('Remove this photo?')) onItem({ ...item, photos: item.photos.filter(photo => photo.id !== p.id), _deletedPhotoId: p.id }, { persistNow: true }); }}>Remove photo</button>}
           </div>)}</div>
         </article>;
       })}
       <datalist id="qhse-types">{TYPES.map(t => <option key={t} value={t} />)}</datalist>
-      <div className="bg-white border rounded-xl p-5 space-y-4">
+      <div ref={reviewRef} className="inspection-section bg-white border rounded-xl p-5 space-y-4">
         <h2 className="font-bold text-[#293771]">Inspector sign-off</h2>
         <Field label="Inspector name" value={survey.signatures?.surveyor?.name} onChange={v => onSignatures({ ...survey.signatures, surveyor: { ...survey.signatures.surveyor, name: v } })} />
         <Field label="Sign-off date" type="date" value={survey.signatures?.surveyor?.date} onChange={v => onSignatures({ ...survey.signatures, surveyor: { ...survey.signatures.surveyor, date: v } })} />

@@ -89,15 +89,14 @@ export default function ProjectDashboard({
     <div className="space-y-7 pb-10">
       {pendingDelete && <ConfirmDelete title="Delete project?" onCancel={() => setPendingDelete(null)} onConfirm={() => { const p = pendingDelete; setPendingDelete(null); changeProject(p, false); }}>Only projects without live inspections or Condition Survey facilities can be deleted. Deleted records and photos are retained. Restore the project from Deleted projects.</ConfirmDelete>}
       {onBack && <BackButton onClick={onBack}>Choose module</BackButton>}
-      {/* Hero -- a plain sky gradient, deliberately no photo/illustration */}
-      <div className="relative overflow-hidden bg-gradient-to-br from-sky-400 via-sky-300 to-blue-200 rounded-3xl p-7 sm:p-10 shadow-lg">
+      <div className="project-list-hero relative overflow-hidden bg-gradient-to-br from-sky-400 via-sky-300 to-blue-200 rounded-3xl p-5 sm:p-10 shadow-lg">
         <div className="relative flex items-start justify-between gap-4 flex-wrap">
           <div className="flex items-start gap-4 min-w-0">
-            <div className="p-4 bg-white/25 backdrop-blur-sm rounded-2xl shrink-0">
-              <Briefcase className="w-11 h-11 text-white" />
+            <div className="project-list-icon p-3 sm:p-4 bg-white/25 rounded-2xl shrink-0">
+              <Briefcase className="w-7 h-7 sm:w-11 sm:h-11 text-white" />
             </div>
             <div className="min-w-0">
-              <h2 className="text-3xl sm:text-4xl font-bold tracking-tight text-slate-900">{moduleName}</h2>
+              <h2 className="text-2xl sm:text-4xl font-bold tracking-tight text-slate-900">{moduleName}</h2>
               <p className="text-slate-800/70 text-base mt-1.5">
                 Choose a project to work in, or start a new one.
               </p>
@@ -115,7 +114,7 @@ export default function ProjectDashboard({
         </div>
 
         {/* Quick stats -- gives the page something to look at even with one project */}
-        <div className="relative grid grid-cols-2 gap-3 sm:gap-5 mt-7 max-w-2xl">
+        <div className="project-list-counts relative grid grid-cols-2 gap-3 sm:gap-5 mt-5 sm:mt-7 max-w-2xl">
           <div className="bg-gradient-to-br from-indigo-500 to-violet-500 rounded-2xl p-3 sm:p-5 shadow-md flex flex-wrap items-center gap-3">
             <span className="p-3 rounded-xl bg-white/20 shrink-0">
               <FolderKanban className="w-6 h-6 text-white" />
