@@ -21,7 +21,8 @@ export function createOtaController(updater, canApply, publish) {
     }, 2000);
   }
   return {
-    available(bundle) {
+    available(bundle, { retry = false } = {}) {
+      if (retry && !applying && bundle?.id) attempted.delete(bundle.id);
       if (stopped || !bundle?.id || attempted.has(bundle.id)
           || !['pending', 'success'].includes(bundle.status)) return;
       pending = bundle;

@@ -56,5 +56,9 @@ test('ignores incomplete/failed bundles and stops retry loops after apply failur
   controller.available(bundle);
   await vi.advanceTimersByTimeAsync(10000);
   expect(updater.set).toHaveBeenCalledOnce();
+  updater.set.mockResolvedValue();
+  controller.available(bundle, { retry: true });
+  await vi.advanceTimersByTimeAsync(2000);
+  expect(updater.set).toHaveBeenCalledTimes(2);
   controller.stop();
 });

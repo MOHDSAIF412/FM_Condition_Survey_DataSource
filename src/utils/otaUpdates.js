@@ -45,7 +45,7 @@ async function runCheck() {
       bundle = await updater.download({ url: latest.url, version: latest.version });
     }
     await updater.next({ id: bundle.id });
-    controller.available(bundle);
+    controller.available(bundle, { retry: true });
   } catch (error) {
     publish({ phase: 'error', message: `Could not get the update. ${error?.message || 'Please check your connection.'} Tap Get update to retry.` });
   }
