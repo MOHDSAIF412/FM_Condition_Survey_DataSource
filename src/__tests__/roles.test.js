@@ -11,7 +11,7 @@ describe('roles', () => {
 
   test('administrators hold every permission; deactivated accounts none', () => {
     for (const p of PERMISSIONS) {
-      expect(hasPermission({ role: 'admin' }, p.key)).toBe(true);
+      expect(hasPermission({ role: 'admin' }, p.key)).toBe(p.key !== 'delete_snags');
       expect(hasPermission({ role: 'super_admin', is_active: false }, p.key)).toBe(false);
     }
     expect(isAdminUser({ role: 'admin' })).toBe(true);
@@ -23,7 +23,7 @@ describe('roles', () => {
     const surveyor = { role: 'surveyor', permissions: {} };
     expect(hasPermission(surveyor, 'edit_surveys')).toBe(true);
     expect(hasPermission(surveyor, 'delete_snags')).toBe(false);
-    expect(hasPermission({ ...surveyor, permissions: { delete_snags: true } }, 'delete_snags')).toBe(true);
+    expect(hasPermission({ ...surveyor, permissions: { delete_snags: true } }, 'delete_snags')).toBe(false);
     expect(hasPermission({ role: 'client' }, 'edit_surveys')).toBe(false);
     expect(hasPermission({ role: 'client' }, 'download_reports')).toBe(true);
     expect(hasPermission({ role: 'viewer' }, 'download_reports')).toBe(false);

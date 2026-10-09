@@ -315,6 +315,7 @@ export default function App({ currentUser = null, onSignOut } = {}) {
   // Admins hold everything; an ordinary surveyor holds only what was ticked
   // for them in Manage Users.
   const mayDeleteSnags = can(currentUser, 'delete_snags');
+  const mayDeleteProjects = can(currentUser, 'delete_projects');
   const mayDownloadReports = can(currentUser, 'download_reports');
   // A build with no cloud has no sign-in and no roles: everything is allowed
   // there, as before. Signed in, the role decides (and the database enforces).
@@ -1223,6 +1224,7 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
    * no undo in the app itself.
    */
   const handleDeleteSurvey = async (surveyId, label) => {
+    if (!mayDeleteSnags) throw new Error('Only the owner can delete facilities or inspections.');
     if (!confirm(`Permanently delete "${label}"?\n\nAll its snags and photos will be removed. This cannot be undone from the app.`)) {
       return;
     }
@@ -1540,7 +1542,7 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
   }
 
   async function handleProjectTrash(project, deleted) {
-    if (!mayManageProjects) throw new Error('You do not have permission to manage projects.');
+    if (!mayDeleteProjects) throw new Error('Only the owner can delete or restore projects.');
     if (deleted) {
       const local = await listAllSurveysOffline();
       if (local.some(s => s.projectId === project.id && !isDeletedInspection(s)))
@@ -1837,6 +1839,7 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
   };
 
   const handleUpdateItem = (updatedItem, options = {}) => {
+    if (updatedItem._deletedPhotoId && !mayDeleteSnags) throw new Error('Only the owner can delete photos.');
     setSurvey((prev) => {
       // A removed photo is tombstoned so the deletion reaches other devices;
       // the marker itself is stripped before storing.
@@ -1862,6 +1865,7 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
   };
 
   const handleDeleteItem = (itemId) => {
+    if (!mayDeleteSnags) throw new Error('Only the owner can delete snags.');
     setSurvey((prev) => {
       const removed = (prev.items || []).find((i) => String(i.id) === String(itemId));
       const photoIds = removed ? (removed.photos || []).map((p) => p.id) : [];
@@ -2028,8 +2032,8 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
             onBack={handleAppBack}
             projects={workModule === 'qhse' ? projects.map(p => ({ ...p, facilityCount: surveyList.filter(s => isQhse(s) && !isDeletedInspection(s) && s.projectId === p.id).length })) : projects}
             deletedProjects={deletedProjects}
-            onDeleteProject={mayManageProjects ? p => handleProjectTrash(p, true) : null}
-            onRestoreProject={mayManageProjects ? p => handleProjectTrash(p, false) : null}
+            onDeleteProject={mayDeleteProjects ? p => handleProjectTrash(p, true) : null}
+            onRestoreProject={mayDeleteProjects ? p => handleProjectTrash(p, false) : null}
             loading={projectsLoading}
             online={online}
             onOpenProject={handleOpenProject}

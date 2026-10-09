@@ -25,7 +25,7 @@ test('account switching clears list caches without deleting pending survey backu
 
 describe('can', () => {
   test('admins hold every permission', () => {
-    expect(can({ role: 'admin', permissions: {} }, 'delete_snags')).toBe(true);
+    expect(can({ role: 'admin', permissions: {} }, 'delete_snags')).toBe(false);
     expect(can({ role: 'admin' }, 'download_reports')).toBe(true);
   });
 

@@ -94,6 +94,11 @@ export function roleLabel(user) {
 export const isAdminUser = (user) => !!user && user.is_active !== false && ADMIN_ROLES.includes(roleKey(user));
 export const isSuperAdmin = (user) => !!user && user.is_active !== false && roleKey(user) === 'super_admin';
 
+// Deletion is reserved for the owner's account, regardless of role or extra grants.
+// The database independently checks the authenticated account, not this profile.
+export const isDeletionOwner = user => !!user && user.is_active !== false
+  && String(user.email || '').trim().toLowerCase() === 'msaif412@gmail.com';
+
 /**
  * Whether a user may do something. Mirrors the database's fm_can(): refused
  * for a deactivated account; administrators hold everything; otherwise the
@@ -102,6 +107,7 @@ export const isSuperAdmin = (user) => !!user && user.is_active !== false && role
  */
 export function hasPermission(user, permission, roles = null) {
   if (!user || user.is_active === false) return false;
+  if (['delete_snags', 'delete_projects'].includes(permission)) return isDeletionOwner(user);
   if (isAdminUser(user)) return true;
   if (roleOf(user, roles)?.permissions?.[permission] === true) return true;
   return user.permissions?.[permission] === true;
