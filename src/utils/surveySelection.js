@@ -67,6 +67,7 @@ export function mergeSurveyLists(remote = [], local = [], {
         ...(l.pendingSync && l.facility?.module === 'qhse' ? {
           facility: l.facility, facilityName: l.facility.facilityName, itemCount: (l.items || []).length,
           findingCount: (l.items || []).filter(i => !i.customValues?.qhseEvidenceOnly).length,
+          actionItems: (l.items || []).map(i => ({ customValues: i.customValues || {} })),
           photoCount: (l.items || []).reduce((n,i) => n + (i.photos || []).length, 0)
         } : {}),
         cached: false
@@ -96,7 +97,8 @@ export function mergeSurveyLists(remote = [], local = [], {
       facility: l.facility || {},
       facilityName: l.facility?.facilityName || l.facility?.buildingName || '',
       itemCount: (l.items || []).length,
-      ...(l.facility?.module === 'qhse' ? { findingCount: (l.items || []).filter(i => !i.customValues?.qhseEvidenceOnly).length } : {}),
+      ...(l.facility?.module === 'qhse' ? { findingCount: (l.items || []).filter(i => !i.customValues?.qhseEvidenceOnly).length,
+        actionItems: (l.items || []).map(i => ({ customValues: i.customValues || {} })) } : {}),
       photoCount: (l.items || []).reduce((n, it) => n + (it.photos || []).length, 0),
       status: l.status || 'draft',
       submittedAt: l.submittedAt || null,

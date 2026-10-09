@@ -423,7 +423,8 @@ export async function listSurveys() {
     facilityName: r.facility_name || (r.facility && r.facility.facilityName) || '',
     itemCount: itemCounts[r.id] || 0,
     photoCount: photoCounts[r.id] || 0,
-    ...(r.facility?.module === 'qhse' ? { findingCount: findingCounts ? findingCounts[r.id] || 0 : null } : {}),
+    ...(r.facility?.module === 'qhse' ? { findingCount: findingCounts ? findingCounts[r.id] || 0 : null,
+      actionItems: findingCounts ? findingCounts._actions?.[r.id] || [] : null } : {}),
     status: r.status || 'draft',
     submittedAt: r.submitted_at,
     updatedAt: r.updated_at,
@@ -468,6 +469,11 @@ async function countRowsBySurvey(table, surveyIds, { findingsOnly = false } = {}
     }
     for (const row of data || []) {
       if (findingsOnly && row.custom_values?.qhseEvidenceOnly) continue;
+      if (findingsOnly) {
+        counts._actions ||= {};
+        counts._actions[row.survey_id] ||= [];
+        counts._actions[row.survey_id].push({ customValues: row.custom_values || {} });
+      }
       counts[row.survey_id] = (counts[row.survey_id] || 0) + 1;
     }
     if (!data || data.length < PAGE) return counts;

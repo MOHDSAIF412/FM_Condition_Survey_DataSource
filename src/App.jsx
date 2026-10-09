@@ -221,6 +221,7 @@ export default function App({ currentUser = null, onSignOut } = {}) {
     && !showReportModal && !showRecoveries && !conflictId
     && !pendingSaveRef.current && !uploadInFlight.current
     && !localSavesInFlight.current && !localSaveFailed.current
+    && !document.querySelector('[role="dialog"]')
   ), [isLoaded, view, navOpen, showPasswordModal, showReportModal, showRecoveries, conflictId]);
 
   function markAsExternalChange() {
@@ -308,6 +309,8 @@ export default function App({ currentUser = null, onSignOut } = {}) {
     setSyncState(failureState(err));
   }
   const [syncState, setSyncState] = useState(isCloudConfigured ? 'idle' : 'off');
+  const [lastSynced, setLastSynced] = useState(null);
+  useEffect(() => { if (syncState === 'synced') setLastSynced(Date.now()); }, [syncState]);
   const [creatingFacility, setCreatingFacility] = useState(false);
   // Admins hold everything; an ordinary surveyor holds only what was ticked
   // for them in Manage Users.
@@ -1463,6 +1466,8 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
     if (showReportModal) { setShowReportModal(false); return; }
     if (showPasswordModal) { setShowPasswordModal(false); return; }
     if (showRecoveries) { setShowRecoveries(false); return; }
+    const preview = document.querySelector('[role="dialog"][aria-label="QHSE report preview"]');
+    if (preview) { preview.querySelector('button')?.click(); return; }
     backBusy.current = true;
     try {
       if ((view === 'survey' || !parentScreen) && mayEditOpen) {
@@ -1518,7 +1523,7 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
     const record = await handleOpenSurvey(id);
     if (!record) throw new Error('Could not load the inspection. Check your connection.');
     const next = changeInspectionState(record, action);
-    if (action === 'delete') await saveSurveyRecovery({ ...record, recoveryUserId: currentUser?.id });
+    if (['delete', 'submit'].includes(action)) await saveSurveyRecovery({ ...record, recoveryUserId: currentUser?.id, recoveryReason: action === 'submit' ? 'Before submission' : 'Before deletion' });
     const saved = await saveSurveyOffline(next, { pendingSync: true });
     if (saved?.conflict) throw new Error('This inspection changed in another tab. Resolve the conflict first.');
     surveyRef.current = saved; setSurvey(saved);
@@ -1910,6 +1915,7 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
           onNavigate={navigatePortal}
           open={navOpen}
           onClose={() => setNavOpen(false)}
+          onRecoveries={() => setShowRecoveries(true)}
         />
       )}
       <div className="min-h-screen flex-1 flex flex-col min-w-0">
@@ -1923,6 +1929,9 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
         onImportJSON={handleImportJSON}
         onExportExcel={handleHeaderExcel}
         lastSaved={lastSavedTime}
+        lastSynced={lastSynced}
+        onSyncNow={isCloudConfigured ? handleSyncNow : undefined}
+        pendingInspections={surveyList.filter(s => s.pendingSync).length}
         syncState={syncState}
         online={online}
         pendingCount={pendingPhotoCount}

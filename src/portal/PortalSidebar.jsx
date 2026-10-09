@@ -70,7 +70,7 @@ function buildNav({ access = {}, hasOpenProject }) {
 const sameTarget = (a, b) => !!a && !!b && a.view === b.view && a.admin === b.admin && a.module === b.module && a.reportModule === b.reportModule;
 
 export default function PortalSidebar({
-  current, access, hasOpenProject, onNavigate, open, onClose, desktop = true, workModule
+  current, access, hasOpenProject, onNavigate, open, onClose, onRecoveries, desktop = true, workModule
 }) {
   const nav = buildNav({ access, hasOpenProject });
   const groupOf = (target) => nav.find((g) => g.children?.some((c) => sameTarget(c.target, target)))?.key;
@@ -110,6 +110,7 @@ export default function PortalSidebar({
       </div>
 
       <nav aria-label="Main" className="flex-1 overflow-y-auto px-3 py-4 space-y-1">
+        {onRecoveries && <button type="button" onClick={() => { onRecoveries(); onClose?.(); }} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold text-sky-100/80 hover:bg-white/10"><History size={18} />History & recovery</button>}
         {nav.map((item) => {
           const Icon = item.icon;
           if (item.children) {

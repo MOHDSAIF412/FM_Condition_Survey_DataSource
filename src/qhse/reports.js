@@ -1,4 +1,4 @@
-import { BRAND, findingData, reportDetails, riskColor, isQhse, activeFields, findingDetails } from './model';
+import { BRAND, findingData, reportDetails, riskColor, isQhse, reportFindingFields, findingDetails, photoRemark } from './model';
 import { OCS_LOGO_TRIMMED } from '../assets/logoTrimmed';
 import { saveBlob } from '../utils/fileSaver';
 import { OpenSansRegular, OpenSansBold } from './fonts/fontData';
@@ -52,7 +52,7 @@ export async function generateQhsePDF(input, options = {}) {
       table(item.customValues?.qhseEvidenceOnly ? [['Evidence', 'Report photographs']] : findingDetails(survey, item), 37);
       let y = doc.lastAutoTable.finalY + 8;
       for (const [pi, photo] of f.photos.entries()) {
-        const caption = doc.splitTextToSize(`Photo ${pi + 1} of ${f.photos.length}${photo.caption ? ': ' + photo.caption : ''}`, 176);
+        const caption = doc.splitTextToSize(`Photo ${pi + 1} of ${f.photos.length}${photoRemark(item, photo) ? ': ' + photoRemark(item, photo) : ''}`, 176);
         const captionHeight = caption.length * 4;
         if (y + 84 + captionHeight > 276) { doc.addPage(); header(); y = 32; }
         doc.setFontSize(10); doc.setTextColor(`#${riskColor(f.severity)}`);
@@ -64,7 +64,7 @@ export async function generateQhsePDF(input, options = {}) {
         doc.addImage(photo.dataUrl, image.fileType, 15 + (176 - w) / 2, y, w, h);
         y += 72;
         // autoTable allows even exceptionally long captions to continue safely.
-        table([[`${entryName}, photo ${pi + 1} of ${f.photos.length} — remark`, photo.caption || '']], y);
+        table([[`${entryName}, photo ${pi + 1} of ${f.photos.length} — remark`, photoRemark(item, photo)]], y);
         y = doc.lastAutoTable.finalY + 8;
       }
     }
@@ -116,21 +116,21 @@ export async function generateQhseExcel(input, options = {}) {
       properties: { tabColor: { argb: `FF${BRAND.orange}` } },
       pageSetup: { orientation: 'landscape', paperSize: 8, fitToPage: true, fitToWidth: 1, fitToHeight: 0, printTitlesRow: '1:1',
         margins: { left: 0.25, right: 0.25, top: 0.4, bottom: 0.4, header: 0.2, footer: 0.2 } } });
-    const fields = activeFields(survey, 'finding');
+    const fields = reportFindingFields(survey);
     const evidenceColumn = fields.length + 2;
     ws.columns = [8, ...fields.map(f => f.type === 'textarea' ? 42 : 20), 10, 38, 42].map(width => ({ width }));
     ws.addRow(['Finding', ...fields.map(f => f.label), 'Photo', 'Evidence', 'Remark']);
     for (const [index, item] of (survey.items || []).entries()) {
       const f = findingData(item);
       for (const [pi, photo] of (f.photos.length ? f.photos : [null]).entries()) {
-        const row = ws.addRow([index + 1, ...findingDetails(survey, item).map(([,value]) => value === '' ? null : value), photo ? `${pi + 1}/${f.photos.length}` : null, photo ? null : 'No photo', photo?.caption || null]);
+        const row = ws.addRow([index + 1, ...findingDetails(survey, item).map(([,value]) => value === '' ? null : value), photo ? `${pi + 1}/${f.photos.length}` : null, photo ? null : 'No photo', photo ? photoRemark(item, photo) || null : null]);
         const dimensions = photo ? await imageDimensions(photo.dataUrl) : null;
         const cellWidth = 38 * 7 + 5, padding = 6;
         const photoScale = dimensions ? Math.min((cellWidth - padding * 2) / dimensions.width, (409 * 4 / 3 - padding * 2) / dimensions.height) : 0;
         const photoWidth = dimensions ? dimensions.width * photoScale : 0;
         const photoHeight = dimensions ? dimensions.height * photoScale : 0;
         row.height = Math.min(409, Math.max(30, (photoHeight + padding * 2) * 3 / 4,
-          ...findingDetails(survey, item).map(([,value], i) => textHeight(value, fields[i].type === 'textarea' ? 38 : 18)), textHeight(photo?.caption || '', 38)));
+          ...findingDetails(survey, item).map(([,value], i) => textHeight(value, fields[i].type === 'textarea' ? 38 : 18)), textHeight(photo ? photoRemark(item, photo) : '', 38)));
         for (const key of ['severity', 'status']) {
           const column = fields.findIndex(field => field.id === key);
           if (column >= 0) row.getCell(column + 2).font = { color: { argb: `FF${key === 'severity' ? riskColor(f.severity) : f.status === 'Closed' ? BRAND.green : BRAND.red}` }, bold: true };

@@ -36,6 +36,9 @@ export default function Header({
   onImportJSON,
   onExportExcel,
   lastSaved,
+  lastSynced,
+  onSyncNow,
+  pendingInspections = 0,
   syncState = 'off',
   online = true,
   pendingCount = 0,
@@ -167,6 +170,7 @@ export default function Header({
                 <div className="fixed inset-0 z-40" onClick={() => setShowBell(false)} />
                 <div className="absolute right-0 mt-2 w-64 bg-white border border-slate-200 rounded-xl shadow-xl py-3 px-4 z-50">
                   <p className="text-xs font-bold text-slate-700 mb-1">Sync status</p>
+                  <p className="text-xs text-slate-500 mb-2">{pendingInspections} inspection(s) waiting to sync · {pendingCount} pending photos in the open inspection</p>
                   <OfflineStatus />
                   <p className="text-xs text-slate-600 flex items-center gap-1.5">
                     <span className={`w-1.5 h-1.5 rounded-full ${sync.dot}`} />
@@ -182,6 +186,9 @@ export default function Header({
                     <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
                     Saved on device {lastSaved ? `(${lastSaved})` : ''}
                   </p>
+                  <p className="text-xs text-slate-500 mt-2">Last successful cloud sync this session: {lastSynced ? new Date(lastSynced).toLocaleString() : 'Not yet recorded'}</p>
+                  {onSyncNow && <button disabled={!online || syncState === 'syncing'} onClick={onSyncNow} className="mt-3 w-full rounded-lg bg-ocs-600 text-white text-sm px-3 py-2 disabled:opacity-50">{syncState === 'syncing' ? 'Syncing…' : 'Sync now'}</button>}
+                  {onOpenRecoveries && <button onClick={() => { setShowBell(false); onOpenRecoveries(); }} className="mt-2 w-full rounded-lg border text-ocs-600 text-sm px-3 py-2">History & recovery backups</button>}
                 </div>
               </>
             )}
