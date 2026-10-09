@@ -1,8 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import {
   Home, LayoutList, FileText, Users, FolderKanban, History, ScrollText, Settings,
-  ChevronDown, X
+  ChevronDown, X, Download
 } from 'lucide-react';
+import { Capacitor } from '@capacitor/core';
+import AutomaticUpdates from '../components/AutomaticUpdates';
 import { useEscapeKey } from '../utils/useEscapeKey';
 
 export const APP_VERSION = '1.5';
@@ -160,6 +162,15 @@ export default function PortalSidebar({
             </button>
           );
         })}
+        {Capacitor.isNativePlatform() && <div>
+          <button type="button" onClick={() => toggle('updates')} aria-expanded={expanded.has('updates')}
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-[14px] font-semibold text-sky-100/80 hover:bg-white/10 hover:text-white">
+            <Download className="w-[18px] h-[18px] shrink-0" />
+            <span className="flex-1 text-left">App updates</span>
+            <ChevronDown className={`w-4 h-4 transition-transform ${expanded.has('updates') ? 'rotate-180' : ''}`} />
+          </button>
+          {expanded.has('updates') && <div className="mt-2"><AutomaticUpdates compact /></div>}
+        </div>}
       </nav>
 
       <div className="p-3">

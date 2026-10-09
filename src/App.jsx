@@ -14,7 +14,6 @@ const ReportModal = lazy(() => import('./components/ReportModal'));
 import SavedFacilities from './components/SavedFacilities';
 import ProjectDashboard from './components/ProjectDashboard';
 import ModulePicker from './components/ModulePicker';
-import AutomaticUpdates from './components/AutomaticUpdates';
 import { allowOtaAtSafeScreen } from './utils/otaUpdates';
 const UserManagement = lazy(() => import('./components/UserManagement'));
 import ChangePasswordModal from './components/ChangePasswordModal';
@@ -1998,7 +1997,7 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
       )}
 
       {/* Project picker: nothing project-specific is reachable until one is chosen. */}
-      {view === 'modules' && <main className="flex-1 px-4 sm:px-8 py-8 safe-area-content-pb"><AutomaticUpdates /><ModulePicker onSelect={module => navigatePortal({ module })} /></main>}
+      {view === 'modules' && <main className="flex-1 px-4 sm:px-8 py-8 safe-area-content-pb"><ModulePicker onSelect={module => navigatePortal({ module })} /></main>}
       {view === 'qhse' && <main className="flex-1 max-w-6xl w-full mx-auto px-3 sm:px-8 py-6 safe-area-content-pb">
         <QhseHub surveys={surveyList.filter(s => isQhse(s) && s.projectId === activeProject?.id)} project={activeProject} canEdit={mayEditSurveys} canDelete={!isCloudConfigured || mayDeleteSnags} canExport={!isCloudConfigured || mayDownloadReports} onAction={handleQhseAction}
           onReports={() => navigatePortal({ view: 'reports', reportModule: 'qhse' })}

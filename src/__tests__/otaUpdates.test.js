@@ -1,6 +1,7 @@
 import { beforeEach, afterEach, expect, test, vi } from 'vitest';
 const updater = vi.hoisted(() => ({ addListener: vi.fn(), current: vi.fn(), getLatest: vi.fn(), getNextBundle: vi.fn(), download: vi.fn(), next: vi.fn(), set: vi.fn(), notifyAppReady: vi.fn() }));
-vi.mock('@capacitor/core', () => ({ Capacitor: { isNativePlatform: () => true } }));
+const http = vi.hoisted(() => ({ get: vi.fn() }));
+vi.mock('@capacitor/core', () => ({ Capacitor: { isNativePlatform: () => true }, CapacitorHttp: http }));
 vi.mock('@capgo/capacitor-updater', () => ({ CapacitorUpdater: updater }));
 beforeEach(() => {
   vi.resetModules(); vi.clearAllMocks(); vi.useFakeTimers();
@@ -11,6 +12,44 @@ beforeEach(() => {
   updater.getLatest.mockResolvedValue({ version: '1.0.123' });
   updater.getNextBundle.mockResolvedValue(null);
   updater.addListener.mockResolvedValue({ remove: vi.fn() });
+  http.get.mockRejectedValue(new Error('Connection timed out'));
+});
+
+test('native check failure falls back to the verified release and reports already current', async () => {
+  updater.getLatest.mockRejectedValue(new Error('native check failed'));
+  http.get.mockResolvedValue({ status: 200, data: { version: '1.0.123', path: '/ota/bundle-1.0.123.zip', sha256: 'a'.repeat(64) } });
+  const ota = await import('../utils/otaUpdates');
+  await ota.initOtaUpdates(); await ota.checkOtaUpdate();
+  expect(ota.otaStatus().phase).toBe('current');
+  expect(http.get).toHaveBeenCalledWith(expect.objectContaining({ url: expect.stringMatching(/^https:\/\/fm-condition-survey-data-source.vercel.app\/ota\/manifest.json\?check=/) }));
+  updater.addListener.mock.calls.find(([event]) => event === 'downloadFailed')[1]({ version: '1.0.123' });
+  updater.addListener.mock.calls.find(([event]) => event === 'download')[1]({ percent: 80, bundle: { version: '1.0.123' } });
+  expect(ota.otaStatus().phase).toBe('current');
+  expect(updater.download).not.toHaveBeenCalled();
+});
+
+test('fallback stages a new release with its checksum', async () => {
+  const ota = await import('../utils/otaUpdates');
+  await ota.initOtaUpdates(); await ota.checkOtaUpdate();
+  updater.getLatest.mockRejectedValue(new Error('native check failed'));
+  http.get.mockResolvedValue({ status: 200, data: { version: '1.0.124', path: '/ota/bundle-1.0.124.zip', sha256: 'a'.repeat(64) } });
+  updater.download.mockResolvedValue({ id: 'new', version: '1.0.124', status: 'pending' });
+  await ota.checkOtaUpdate();
+  expect(updater.download).toHaveBeenCalledWith({ url: 'https://fm-condition-survey-data-source.vercel.app/ota/bundle-1.0.124.zip', version: '1.0.124', checksum: 'a'.repeat(64) });
+  expect(ota.otaStatus().phase).toBe('ready');
+});
+
+test.each([
+  { version: '1.0.124', path: '//attacker.example/evil.zip', sha256: 'a'.repeat(64) },
+  { version: '1.0.124', path: '/ota/bundle-1.0.124.zip', sha256: '' },
+  { version: '1.0.124', path: '/ota/bundle-1.0.123.zip', sha256: 'a'.repeat(64) }
+])('fallback rejects invalid release metadata', async data => {
+  updater.getLatest.mockRejectedValue(new Error('native check failed'));
+  http.get.mockResolvedValue({ status: 200, data });
+  const ota = await import('../utils/otaUpdates');
+  await ota.initOtaUpdates(); await ota.checkOtaUpdate();
+  expect(ota.otaStatus().phase).toBe('error');
+  expect(updater.download).not.toHaveBeenCalled();
 });
 afterEach(() => { vi.clearAllTimers(); vi.useRealTimers(); vi.unstubAllGlobals(); });
 

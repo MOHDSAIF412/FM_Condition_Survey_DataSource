@@ -1,4 +1,4 @@
-import { Capacitor } from '@capacitor/core';
+import { Capacitor, CapacitorHttp } from '@capacitor/core';
 import { createOtaController } from './otaController';
 
 let started = false, updater, controller, checking = null;
@@ -8,6 +8,26 @@ const listeners = new Set();
 export const otaStatus = () => state;
 export function subscribeOta(fn) { listeners.add(fn); return () => listeners.delete(fn); }
 function publish(changes) { state = { ...state, ...changes }; listeners.forEach(fn => fn()); }
+const UPDATE_ORIGIN = 'https://fm-condition-survey-data-source.vercel.app';
+async function latestUpdate() {
+  try { return await updater.getLatest(); }
+  catch (nativeError) {
+    // A failed native POST must not prevent checking the self-hosted release.
+    // CapacitorHttp is built into the installed shell and avoids WebView CORS.
+    const response = await CapacitorHttp.get({
+      url: `${UPDATE_ORIGIN}/ota/manifest.json?check=${Date.now()}`,
+      headers: { 'Cache-Control': 'no-cache' }, responseType: 'json',
+      connectTimeout: 15000, readTimeout: 15000
+    });
+    const manifest = response.data;
+    if (response.status !== 200 || !/^\d+\.\d+\.\d+$/.test(manifest?.version || '')
+        || manifest.path !== `/ota/bundle-${manifest.version}.zip`
+        || !/^[a-f0-9]{64}$/i.test(manifest.sha256 || '')) {
+      throw new Error(`The published update could not be verified (${response.status}).`);
+    }
+    return { version: manifest.version, url: `${UPDATE_ORIGIN}${manifest.path}`, checksum: manifest.sha256 };
+  }
+}
 export function allowOtaAtSafeScreen(guard) {
   applyGuard = guard;
   return () => { if (applyGuard === guard) applyGuard = () => false; };
@@ -28,7 +48,7 @@ async function runCheck() {
   try {
     const current = await updater.current();
     publish({ version: current.bundle.version });
-    const latest = await updater.getLatest();
+    const latest = await latestUpdate();
     if (!latest.version) throw new Error('The update server did not return a version.');
     publish({ checkedAt: Date.now() });
     if (latest.version === current.bundle.version) {
@@ -42,7 +62,7 @@ async function runCheck() {
     publish({ phase: 'downloading', message: 'Downloading update…', percent: 0 });
     let bundle = await updater.getNextBundle().catch(() => null);
     if (bundle?.version !== latest.version || !['pending', 'success'].includes(bundle.status)) {
-      bundle = await updater.download({ url: latest.url, version: latest.version });
+      bundle = await updater.download({ url: latest.url, version: latest.version, ...(latest.checksum ? { checksum: latest.checksum } : {}) });
     }
     await updater.next({ id: bundle.id });
     controller.available(bundle, { retry: true });
@@ -62,13 +82,17 @@ export async function initOtaUpdates() {
         message, phase: message === 'Your app is up to date.' ? 'current' : message.startsWith('Installing') ? 'installing' : message.startsWith('Update could') ? 'error' : 'ready', percent: null
       }));
     await updater.addListener('updateAvailable', info => controller.available(info?.bundle));
-    await updater.addListener('download', info => publish({ phase: 'downloading', message: 'Downloading update…', percent: Math.round(info.percent || 0) }));
+    await updater.addListener('download', info => {
+      if (info?.bundle?.version === state.version) return;
+      publish({ phase: 'downloading', message: 'Downloading update…', percent: Math.round(info.percent || 0) });
+    });
     await updater.addListener('noNeedUpdate', () => {
       // Native also emits this after failures; only a successful explicit check
       // can clear an error, otherwise a failed download would look successful.
       if (!checking && !['error', 'ready', 'installing', 'downloading'].includes(state.phase)) publish({ phase: 'current', message: 'Your app is up to date.', checkedAt: Date.now(), percent: null });
     });
-    await updater.addListener('downloadFailed', () => {
+    await updater.addListener('downloadFailed', info => {
+      if (info?.version === state.version) return;
       if (!checking && !['ready', 'installing'].includes(state.phase)) publish({ phase: 'error', message: 'The update check or download failed. Tap Get update to retry.', percent: null });
     });
     await updater.addListener('updateFailed', () => publish({ phase: 'error', message: 'The previous working version was restored. Tap Get update to retry.' }));
