@@ -9,20 +9,22 @@ import { Building2, CheckCircle2, Clock, ClipboardList, Camera, MapPin, Briefcas
  * no "Overdue" tile because nothing in this app carries a due date, and a
  * permanently-zero tile would only look like a feature that was broken.
  */
-export default function ProjectHero({ project, facilities = [], onOpenReports, onAddFacility, onFocusList }) {
+export default function ProjectHero({ project, facilities = [], onOpenReports, onAddFacility, onFocusList, module = 'condition' }) {
+  const qhse = module === 'qhse';
   const total = facilities.length;
   const submitted = facilities.filter((f) => f.status === 'submitted').length;
   const inProgress = total - submitted;
-  const snags = facilities.reduce((n, f) => n + (f.itemCount || 0), 0);
+  const findingCounts = facilities.map(f => f.findingCount ?? (Array.isArray(f.items) ? f.items.filter(i => !i.customValues?.qhseEvidenceOnly).length : f.itemCount === 0 ? 0 : null));
+  const snags = qhse ? (findingCounts.includes(null) ? '—' : findingCounts.reduce((n, count) => n + count, 0)) : facilities.reduce((n, f) => n + (f.itemCount || 0), 0);
   const photos = facilities.reduce((n, f) => n + (f.photoCount || 0), 0);
 
   // Each tile narrows the list underneath it to whatever the number counts, so
   // "9 in progress" answers "which nine?" in one tap.
   const tiles = [
-    { key: 'all', label: 'Total Facilities', value: total, icon: Building2, tile: 'bg-indigo-500', wrap: 'from-indigo-50 to-indigo-100/40 border-indigo-100', hint: 'Show every facility' },
-    { key: 'submitted', label: 'Submitted', value: submitted, icon: CheckCircle2, tile: 'bg-emerald-500', wrap: 'from-emerald-50 to-emerald-100/40 border-emerald-100', hint: 'Show only submitted facilities' },
-    { key: 'draft', label: 'In Progress', value: inProgress, icon: Clock, tile: 'bg-amber-500', wrap: 'from-amber-50 to-amber-100/40 border-amber-100', hint: 'Show only facilities still in progress' },
-    { key: 'snags', label: 'Total Snags', value: snags, icon: ClipboardList, tile: 'bg-sky-500', wrap: 'from-sky-50 to-sky-100/40 border-sky-100', hint: 'Sort by most snags' },
+    { key: 'all', label: qhse ? 'Total Inspections' : 'Total Facilities', value: total, icon: Building2, tile: 'bg-indigo-500', wrap: 'from-indigo-50 to-indigo-100/40 border-indigo-100', hint: qhse ? 'Show every inspection' : 'Show every facility' },
+    { key: 'submitted', label: 'Submitted', value: submitted, icon: CheckCircle2, tile: 'bg-emerald-500', wrap: 'from-emerald-50 to-emerald-100/40 border-emerald-100', hint: qhse ? 'Show only submitted inspections' : 'Show only submitted facilities' },
+    { key: 'draft', label: 'In Progress', value: inProgress, icon: Clock, tile: 'bg-amber-500', wrap: 'from-amber-50 to-amber-100/40 border-amber-100', hint: qhse ? 'Show only inspections still in progress' : 'Show only facilities still in progress' },
+    { key: 'snags', label: qhse ? 'Total Findings' : 'Total Snags', value: snags, icon: ClipboardList, tile: 'bg-sky-500', wrap: 'from-sky-50 to-sky-100/40 border-sky-100', hint: qhse ? 'Sort by most findings' : 'Sort by most snags' },
     { key: 'photos', label: 'Photos Attached', value: photos, icon: Camera, tile: 'bg-violet-500', wrap: 'from-violet-50 to-violet-100/40 border-violet-100', hint: 'Sort by most photos' }
   ];
 
@@ -91,26 +93,26 @@ export default function ProjectHero({ project, facilities = [], onOpenReports, o
                   )}
                   <span className="inline-flex items-center gap-1 font-semibold text-slate-600">
                     <Building2 className="w-3.5 h-3.5" />
-                    {total} {total === 1 ? 'facility' : 'facilities'} in this project
+                    {total} {qhse ? (total === 1 ? 'inspection' : 'inspections') : (total === 1 ? 'facility' : 'facilities')} in this project
                   </span>
                 </div>
               </div>
             </div>
 
             <div className="flex items-center gap-2 shrink-0 flex-wrap">
-              <button
+              {onOpenReports && <button
                 type="button"
                 onClick={onOpenReports}
                 className="px-4 py-2.5 rounded-xl bg-white hover:bg-slate-50 text-slate-700 font-bold text-sm inline-flex items-center gap-2 border border-slate-300 shadow-sm"
               >
                 <FileText className="w-4 h-4" /> Reports
-              </button>
+              </button>}
               {onAddFacility && <button
                 type="button"
                 onClick={onAddFacility}
                 className="px-4 py-2.5 rounded-xl bg-flame-500 hover:bg-flame-600 active:scale-[0.98] text-white font-bold text-sm shadow-card inline-flex items-center gap-2 transition-[background-color,transform] duration-150"
               >
-                + Add Facility
+                {qhse ? '+ Add Inspection' : '+ Add Facility'}
               </button>}
             </div>
           </div>

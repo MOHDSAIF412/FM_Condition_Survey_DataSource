@@ -409,9 +409,10 @@ export async function listSurveys() {
 
   // Snag counts tell two unnamed facilities apart in the list; photo counts
   // say how much evidence each one carries. Both are fetched together.
-  const [itemCounts, photoCounts] = await Promise.all([
+  const [itemCounts, photoCounts, findingCounts] = await Promise.all([
     countRowsBySurvey('survey_items', ids),
-    countRowsBySurvey('survey_photos', ids)
+    countRowsBySurvey('survey_photos', ids),
+    countRowsBySurvey('survey_items', surveys.filter(r => r.facility?.module === 'qhse').map(r => r.id), { findingsOnly: true })
   ]);
 
   const list = surveys.map((r) => ({
@@ -422,6 +423,7 @@ export async function listSurveys() {
     facilityName: r.facility_name || (r.facility && r.facility.facilityName) || '',
     itemCount: itemCounts[r.id] || 0,
     photoCount: photoCounts[r.id] || 0,
+    ...(r.facility?.module === 'qhse' ? { findingCount: findingCounts ? findingCounts[r.id] || 0 : null } : {}),
     status: r.status || 'draft',
     submittedAt: r.submitted_at,
     updatedAt: r.updated_at,
@@ -448,7 +450,7 @@ export async function listSurveys() {
  * after the cut-off would read low, with nothing to indicate the total was
  * wrong.
  */
-async function countRowsBySurvey(table, surveyIds) {
+async function countRowsBySurvey(table, surveyIds, { findingsOnly = false } = {}) {
   const counts = {};
   if (!surveyIds.length) return counts;
 
@@ -456,15 +458,16 @@ async function countRowsBySurvey(table, surveyIds) {
   for (let from = 0; ; from += PAGE) {
     const { data, error } = await supabase
       .from(table)
-      .select('survey_id')
+      .select(findingsOnly ? 'survey_id,custom_values' : 'survey_id')
       .in('survey_id', surveyIds)
       .range(from, from + PAGE - 1);
 
     if (error) {
       console.warn(`Could not count ${table}:`, error.message);
-      return counts;
+      return findingsOnly ? null : counts;
     }
     for (const row of data || []) {
+      if (findingsOnly && row.custom_values?.qhseEvidenceOnly) continue;
       counts[row.survey_id] = (counts[row.survey_id] || 0) + 1;
     }
     if (!data || data.length < PAGE) return counts;

@@ -12,6 +12,7 @@ import { createPhotoEvidence } from './model';
 import { stageOf, STAGE_BY_KEY, isLocked } from '../utils/workflow';
 import { isDeletedInspection } from './lifecycle';
 import QhseReportDownloads from './QhseReportDownloads';
+import ProjectHero from '../components/ProjectHero';
 
 const control = 'w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900';
 function Field({ label, value, onChange, multiline, ...props }) {
@@ -19,13 +20,22 @@ function Field({ label, value, onChange, multiline, ...props }) {
   return <label className="block text-sm font-semibold text-slate-700">{label}<Tag {...props} className={`${control} mt-1 font-normal`} value={value || ''} onChange={e => onChange(e.target.value)} rows={multiline ? 3 : undefined} /></label>;
 }
 
-export function QhseHub({ surveys, legacySurveys = [], project, canEdit, canDelete, canExport, onBack, onCreate, onOpen, onMove, onAction }) {
+export function QhseHub({ surveys, legacySurveys = [], project, canEdit, canDelete, canExport, onBack, onCreate, onOpen, onMove, onAction, onReports }) {
   const [templateId, setTemplateId] = useState('');
   const [busy, setBusy] = useState(false), [error, setError] = useState('');
   const [showDeleted, setShowDeleted] = useState(false);
   const [pendingDelete, setPendingDelete] = useState(null);
+  const [filter, setFilter] = useState('all');
+  const listRef = useRef(null);
   const live = surveys.filter(s => !isDeletedInspection(s)), deleted = surveys.filter(isDeletedInspection);
   const templates = live.filter(s => s.facility?.qhse?.templateName);
+  const shown = (showDeleted ? deleted : live).filter(s => showDeleted || !['submitted', 'draft'].includes(filter) || (filter === 'submitted' ? s.status === 'submitted' : s.status !== 'submitted'))
+    .sort((a,b) => filter === 'photos' ? (b.photoCount || 0) - (a.photoCount || 0) : filter === 'snags' ? (b.findingCount ?? b.itemCount ?? 0) - (a.findingCount ?? a.itemCount ?? 0) : 0);
+  async function newInspection() {
+    if (busy) return;
+    setBusy(true); setError('');
+    try { await onCreate(project.id, templates.find(s => s.id === templateId)?.facility?.qhse?.layout || null); } catch (e) { setError(e.message); } finally { setBusy(false); }
+  }
   const act = async (s, action, confirmed = false) => {
     if (action === 'delete' && !confirmed) { setPendingDelete(s); return; }
     setBusy(true); setError('');
@@ -34,7 +44,7 @@ export function QhseHub({ surveys, legacySurveys = [], project, canEdit, canDele
   return <section className="space-y-6">
     {pendingDelete && <ConfirmDelete title="Delete inspection?" onCancel={() => setPendingDelete(null)} onConfirm={() => { const s = pendingDelete; setPendingDelete(null); act(s, 'delete', true); }}>This removes the inspection from the project list. Its photos and remarks are retained. Restore it from Deleted inspections.</ConfirmDelete>}
     <BackButton onClick={onBack}>QHSE projects</BackButton>
-    <div className="rounded-2xl bg-[#293771] text-white p-6 sm:p-8 space-y-3"><p className="text-sm text-blue-100">QHSE INSPECTION · {project?.projectNumber}</p><h1 className="text-3xl font-bold">{project?.name || 'Select a project'}</h1><p className="text-blue-100">{project?.location}</p><p className="text-sm text-blue-100">{live.length} inspections saved in this project</p></div>
+    {project && <ProjectHero module="qhse" project={project} facilities={live} onOpenReports={canExport ? onReports : undefined} onAddFacility={canEdit && !busy ? newInspection : undefined} onFocusList={key => { setShowDeleted(false); setFilter(key); listRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }} />}
     {canEdit && project && <div className="bg-white p-5 rounded-xl border grid sm:grid-cols-[1fr_auto] gap-4 items-end">
       <label className="text-sm font-semibold text-slate-700">Inspection template<select className={`${control} mt-2`} value={templateId} onChange={e => setTemplateId(e.target.value)}><option value="">OCS standard fields</option>{templates.map(s => <option key={s.id} value={s.id}>{s.facility.qhse.templateName}</option>)}</select></label>
       <button disabled={busy} className="bg-[#F15F22] text-white rounded-lg px-5 py-3 font-semibold disabled:opacity-50" onClick={async () => {
@@ -45,15 +55,15 @@ export function QhseHub({ surveys, legacySurveys = [], project, canEdit, canDele
     </div>}
     {error && <p role="alert" className="text-red-700">{error}</p>}
     {legacySurveys.length > 0 && <div className="rounded-xl border border-amber-200 bg-amber-50 p-5 space-y-3"><h2 className="font-bold text-[#293771]">Older QHSE reports found</h2><p className="text-sm text-slate-600">These reports are still in Condition Survey. Move them here with their existing photos and remarks.</p>{legacySurveys.map(s => <div key={s.id} className="flex flex-wrap justify-between gap-3 items-center"><span className="text-sm font-semibold">{s.title || s.facilityName}</span>{canEdit && <button disabled={busy} className="rounded-lg bg-[#293771] text-white px-4 py-2 text-sm disabled:opacity-50" onClick={async () => { setBusy(true); setError(''); try { await onMove(s.id); } catch (e) { setError(e.message); } finally { setBusy(false); } }}>Move to QHSE</button>}</div>)}</div>}
-    <div className="flex flex-wrap justify-between items-center gap-3"><h2 className="text-lg font-bold text-[#293771]">{showDeleted ? 'Deleted inspections' : 'Project inspections'}</h2>{canDelete && <button className="min-h-11 text-sm font-semibold text-[#293771]" onClick={() => setShowDeleted(v => !v)}>{showDeleted ? 'Show inspections' : `Deleted inspections (${deleted.length})`}</button>}</div>
-    <div className="grid sm:grid-cols-2 gap-4">{(showDeleted ? deleted : live).map(s => <article key={s.id} className="p-5 bg-white rounded-xl border text-left shadow-sm">
+    <div ref={listRef} className="scroll-mt-24 flex flex-wrap justify-between items-center gap-3"><h2 className="text-lg font-bold text-[#293771]">{showDeleted ? 'Deleted inspections' : 'Project inspections'}</h2><div className="flex flex-wrap items-center gap-3">{!showDeleted && filter !== 'all' && <button className="text-sm font-semibold text-[#293771]" onClick={() => setFilter('all')}>Show all inspections</button>}{canDelete && <button className="min-h-11 text-sm font-semibold text-[#293771]" onClick={() => setShowDeleted(v => !v)}>{showDeleted ? 'Show inspections' : `Deleted inspections (${deleted.length})`}</button>}</div></div>
+    <div className="grid sm:grid-cols-2 gap-4">{shown.map(s => <article key={s.id} className="p-5 bg-white rounded-xl border text-left shadow-sm">
       <div className="flex flex-wrap justify-between gap-2"><span className="text-xs font-semibold text-[#F15F22]">{s.facility?.qhse?.reportNumber || 'Report number pending'}</span><span className={`text-xs font-semibold border rounded-md px-2 py-1 ${STAGE_BY_KEY[stageOf(s)].badge}`}>{showDeleted ? 'Deleted' : STAGE_BY_KEY[stageOf(s)].label}</span></div><button disabled={showDeleted || busy} onClick={() => onOpen(s.id)} className="min-h-11 font-bold text-[#293771] mt-2 text-left">{s.facility?.qhse?.auditTitle || 'Site inspection report'}</button>
       <p className="text-sm text-slate-600 mt-2">{s.facility?.address || project?.location || 'Location pending'}</p><p className="text-xs text-slate-500 mt-3">{s.itemCount ?? s.items?.length ?? 0} entries · {s.photoCount ?? s.items?.reduce((n, i) => n + (i.photos || []).length, 0) ?? 0} photos · {s.facility?.qhse?.conductedOn?.replace('T', ' ') || 'Date pending'}</p>
       {s.submittedAt && <p className="text-xs text-slate-500 mt-2">Last submitted: {new Date(s.submittedAt).toLocaleString()}</p>}
       {!showDeleted && <div className="mt-4"><QhseReportDownloads records={[s]} projectId={project?.id} canExport={canExport} /></div>}
       <div className="flex flex-wrap gap-3 mt-3">{canEdit && !showDeleted && ['draft','changes_requested'].includes(stageOf(s)) && <button disabled={busy} className="min-h-11 text-sm font-semibold text-[#293771]" onClick={() => act(s, 'submit')}>Submit report</button>}{canDelete && !isLocked(s) && <button disabled={busy} className="min-h-11 text-sm font-semibold text-red-700" onClick={() => act(s, showDeleted ? 'restore' : 'delete')}>{showDeleted ? 'Restore inspection' : 'Delete inspection'}</button>}</div>
     </article>)}</div>
-    {!(showDeleted ? deleted : live).length && <div className="rounded-xl border border-dashed p-8 text-center text-slate-500">{showDeleted ? 'No deleted inspections.' : 'Start your first inspection for this project.'}</div>}
+    {!shown.length && <div className="rounded-xl border border-dashed p-8 text-center text-slate-500">{showDeleted ? 'No deleted inspections.' : live.length ? 'No inspections match this filter.' : 'Start your first inspection for this project.'}</div>}
   </section>;
 }
 

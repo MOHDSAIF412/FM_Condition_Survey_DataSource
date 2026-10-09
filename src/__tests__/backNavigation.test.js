@@ -12,6 +12,7 @@ test('FM tabs and project tools have usable parent screens', () => {
   expect(backTarget({ view: 'survey', activeTab: 'items', hasProject: true }).tab).toBe('facility');
   expect(backTarget({ view: 'survey', hasProject: true }).view).toBe('facilities');
   expect(backTarget({ view: 'reports', hasProject: true }).view).toBe('facilities');
+  expect(backTarget({ view: 'reports', hasProject: true, qhse: true }).view).toBe('qhse');
   expect(backTarget({ view: 'admin' }).view).toBe('modules');
 });
 test('Android back listener reaches app navigation and is removed once even when unmounted during registration', async () => {

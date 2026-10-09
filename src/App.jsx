@@ -1455,7 +1455,7 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
 
   const backBusy = useRef(false);
   const backAction = useRef(null);
-  const parentScreen = backTarget({ view, qhse: isQhse(survey), hasProject: !!activeProject, activeTab });
+  const parentScreen = backTarget({ view, qhse: view === 'reports' ? workModule === 'qhse' : isQhse(survey), hasProject: !!activeProject, activeTab });
   async function handleAppBack(native = false) {
     if (backBusy.current) return;
     if (navOpen) { setNavOpen(false); return; }
@@ -2001,6 +2001,7 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
       {view === 'modules' && <main className="flex-1 px-4 sm:px-8 py-8 safe-area-content-pb"><AutomaticUpdates /><ModulePicker onSelect={module => navigatePortal({ module })} /></main>}
       {view === 'qhse' && <main className="flex-1 max-w-6xl w-full mx-auto px-3 sm:px-8 py-6 safe-area-content-pb">
         <QhseHub surveys={surveyList.filter(s => isQhse(s) && s.projectId === activeProject?.id)} project={activeProject} canEdit={mayEditSurveys} canDelete={!isCloudConfigured || mayDeleteSnags} canExport={!isCloudConfigured || mayDownloadReports} onAction={handleQhseAction}
+          onReports={() => navigatePortal({ view: 'reports', reportModule: 'qhse' })}
           onBack={handleAppBack} legacySurveys={surveyList.filter(s => s.projectId === activeProject?.id && isLegacyQhse(s) && !isLocked(s))} onMove={handleMoveLegacyQhse} onCreate={startQhse} onOpen={openSurveyFromPortal} />
       </main>}
       {view === 'survey' && isQhse(survey) && <main className="flex-1 max-w-6xl w-full mx-auto px-3 sm:px-6 py-6 safe-area-content-pb">

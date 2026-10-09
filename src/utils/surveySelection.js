@@ -64,7 +64,11 @@ export function mergeSurveyLists(remote = [], local = [], {
         ...existing,
         projectId: existing.projectId || l.projectId || null,
         pendingSync: !!l.pendingSync,
-        ...(l.pendingSync && l.facility?.module === 'qhse' ? { facility: l.facility, facilityName: l.facility.facilityName, itemCount: (l.items || []).length } : {}),
+        ...(l.pendingSync && l.facility?.module === 'qhse' ? {
+          facility: l.facility, facilityName: l.facility.facilityName, itemCount: (l.items || []).length,
+          findingCount: (l.items || []).filter(i => !i.customValues?.qhseEvidenceOnly).length,
+          photoCount: (l.items || []).reduce((n,i) => n + (i.photos || []).length, 0)
+        } : {}),
         cached: false
       });
       continue;
@@ -92,6 +96,7 @@ export function mergeSurveyLists(remote = [], local = [], {
       facility: l.facility || {},
       facilityName: l.facility?.facilityName || l.facility?.buildingName || '',
       itemCount: (l.items || []).length,
+      ...(l.facility?.module === 'qhse' ? { findingCount: (l.items || []).filter(i => !i.customValues?.qhseEvidenceOnly).length } : {}),
       photoCount: (l.items || []).reduce((n, it) => n + (it.photos || []).length, 0),
       status: l.status || 'draft',
       submittedAt: l.submittedAt || null,

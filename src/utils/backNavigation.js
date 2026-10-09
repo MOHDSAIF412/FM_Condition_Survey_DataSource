@@ -6,6 +6,7 @@ export function backTarget({ view, qhse = false, hasProject = false, activeTab =
     if (!qhse && activeTab !== 'facility') return { view: 'survey', tab: 'facility', label: 'Facility details' };
     return { view: hasProject ? (qhse ? 'qhse' : 'facilities') : 'projects', label: qhse && hasProject ? 'Project inspections' : hasProject ? 'Project facilities' : 'Projects' };
   }
+  if (view === 'reports' && hasProject && qhse) return { view: 'qhse', label: 'Project inspections' };
   if (['photos', 'reports'].includes(view) && hasProject) return { view: 'facilities', label: 'Project facilities' };
   return { view: 'modules', label: 'Choose module' };
 }
