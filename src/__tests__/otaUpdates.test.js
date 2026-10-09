@@ -49,3 +49,19 @@ test('a failed check gives a retryable error and the next check can recover', as
   expect(ota.otaStatus().phase).toBe('error');
   await ota.checkOtaUpdate(); expect(ota.otaStatus().phase).toBe('current');
 });
+
+test('startup ignores an already installed next bundle and delayed native events do not reload', async () => {
+  const installed = { id: 'installed', version: '1.0.123', status: 'success' };
+  updater.current.mockResolvedValue({ bundle: installed });
+  updater.getNextBundle.mockResolvedValue(installed);
+  const ota = await import('../utils/otaUpdates');
+  ota.allowOtaAtSafeScreen(() => true);
+  await ota.initOtaUpdates(); await ota.checkOtaUpdate();
+  expect(ota.otaStatus().phase).toBe('current');
+  const available = updater.addListener.mock.calls.find(([event]) => event === 'updateAvailable')[1];
+  available({ bundle: installed });
+  await vi.advanceTimersByTimeAsync(10000);
+  expect(updater.set).not.toHaveBeenCalled();
+  expect(updater.download).not.toHaveBeenCalled();
+  expect(ota.otaStatus()).toMatchObject({ phase: 'current', message: 'Your app is up to date.' });
+});

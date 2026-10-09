@@ -12,8 +12,19 @@ export function createOtaController(updater, canApply, publish) {
       pending = null;
       applying = true;
       attempted.add(bundle.id);
-      publish('Installing update… The app will reopen automatically.');
-      try { await updater.set({ id: bundle.id }); }
+      try {
+        // Native set()/notifyAppReady() can leave the installed bundle in
+        // getNextBundle(). Check again at the reload boundary, across boots.
+        const current = (await updater.current()).bundle;
+        if (current?.id === bundle.id || current?.version === bundle.version) {
+          applying = false;
+          publish('Your app is up to date.');
+          return;
+        }
+        if (!canApply()) { applying = false; attempted.delete(bundle.id); pending = bundle; schedule(); return; }
+        publish('Installing update… The app will reopen automatically.');
+        await updater.set({ id: bundle.id });
+      }
       catch {
         applying = false;
         publish('Update could not be applied. Your current app is still available.');

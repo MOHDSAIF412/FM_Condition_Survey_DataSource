@@ -59,7 +59,7 @@ export async function initOtaUpdates() {
     updater = (await import('@capgo/capacitor-updater')).CapacitorUpdater;
     controller = createOtaController(updater,
       () => document.visibilityState === 'visible' && applyGuard(), message => publish({
-        message, phase: message.startsWith('Installing') ? 'installing' : message.startsWith('Update could') ? 'error' : 'ready', percent: null
+        message, phase: message === 'Your app is up to date.' ? 'current' : message.startsWith('Installing') ? 'installing' : message.startsWith('Update could') ? 'error' : 'ready', percent: null
       }));
     await updater.addListener('updateAvailable', info => controller.available(info?.bundle));
     await updater.addListener('download', info => publish({ phase: 'downloading', message: 'Downloading update…', percent: Math.round(info.percent || 0) }));
@@ -73,8 +73,12 @@ export async function initOtaUpdates() {
     });
     await updater.addListener('updateFailed', () => publish({ phase: 'error', message: 'The previous working version was restored. Tap Get update to retry.' }));
     await updater.notifyAppReady();
-    publish({ version: (await updater.current()).bundle.version });
-    try { controller.available(await updater.getNextBundle()); } catch { /* older native shell */ }
+    const current = (await updater.current()).bundle;
+    publish({ version: current.version });
+    try {
+      const next = await updater.getNextBundle();
+      if (next?.id !== current.id && next?.version !== current.version) controller.available(next);
+    } catch { /* older native shell */ }
     const check = () => {
       if (document.visibilityState === 'visible' && !['ready', 'installing', 'downloading'].includes(state.phase)) checkOtaUpdate();
     };
