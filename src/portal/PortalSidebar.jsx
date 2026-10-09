@@ -33,7 +33,8 @@ function buildNav({ access = {}, hasOpenProject }) {
     {
       key: 'reports', label: 'Survey Reports', icon: FileText,
       children: [
-        { label: 'Generate Reports', target: { view: 'reports' } },
+        { label: 'Generate Reports', target: { view: 'reports', reportModule: 'condition' } },
+        { label: 'QHSE Reports', target: { view: 'reports', reportModule: 'qhse' } },
         ...(access.config ? [{ label: 'Report Builder', target: { admin: 'reports' } }] : [])
       ]
     },
@@ -64,7 +65,7 @@ function buildNav({ access = {}, hasOpenProject }) {
   ].filter(Boolean);
 }
 
-const sameTarget = (a, b) => !!a && !!b && a.view === b.view && a.admin === b.admin && a.module === b.module;
+const sameTarget = (a, b) => !!a && !!b && a.view === b.view && a.admin === b.admin && a.module === b.module && a.reportModule === b.reportModule;
 
 export default function PortalSidebar({
   current, access, hasOpenProject, onNavigate, open, onClose, desktop = true, workModule

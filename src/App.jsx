@@ -1394,10 +1394,11 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
     if (!target) return;
     if (target.admin) { openAdmin(target.admin); return; }
     if (target.module) { setWorkModule(target.module); setView('projects'); refreshProjects(); refreshSurveyList(); return; }
+    if (target.view === 'reports' && target.reportModule) setWorkModule(target.reportModule);
     if (!['modules', 'admin', 'reports'].includes(target.view)) setWorkModule('condition');
     if (target.view === 'allFacilities') { openFacilityList('all'); return; }
     if (target.view === 'facilities' && !activeProjectRef.current) { setView('projects'); return; }
-    if (target.view === 'home' || target.view === 'qhse') refreshSurveyList();
+    if (['home', 'qhse', 'reports'].includes(target.view)) refreshSurveyList();
     setView(target.view);
   };
 
@@ -1904,7 +1905,7 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
         <PortalSidebar
           desktop={isWebPortal}
           workModule={workModule}
-          current={view === 'admin' ? { admin: adminModule } : { view }}
+          current={view === 'admin' ? { admin: adminModule } : { view, ...(view === 'reports' ? { reportModule: workModule } : {}) }}
           access={{ config: mayManageConfig, users: mayManageUsers, templates: mayManageTemplates, review: mayReview, admin: isAdminUser(currentUser) }}
           /* Only once a project is open: on the project list a "Facilities"
              entry would point at a project nobody has chosen. */
@@ -2220,6 +2221,7 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
             <ReportDashboard
               qhseSurveys={surveyList.filter(isQhse)}
               initialModule={workModule}
+              onModuleChange={setWorkModule}
               projects={projects}
               surveys={listRows}
               initialProjectId={activeProject?.id || null}

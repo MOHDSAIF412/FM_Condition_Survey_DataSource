@@ -35,9 +35,10 @@ const SORTS = {
 
 const fmtDate = (d) => (d ? new Date(d).toLocaleDateString([], { day: 'numeric', month: 'short', year: '2-digit' }) : '');
 
-export default function ReportDashboard({ qhseSurveys = [], initialModule = 'condition', ...props }) {
+export default function ReportDashboard({ qhseSurveys = [], initialModule = 'condition', onModuleChange, ...props }) {
   const [module, setModule] = useState(initialModule);
-  return <div className="space-y-5"><div className="max-w-5xl mx-auto flex flex-wrap gap-3" aria-label="Report module">{[['condition', 'Condition Survey reports'], ['qhse', 'QHSE Inspection reports']].map(([id,label]) => <button key={id} type="button" aria-pressed={module === id} onClick={() => setModule(id)} className={`min-h-11 rounded-xl border px-5 py-3 text-sm font-semibold ${module === id ? 'bg-[#293771] text-white' : 'bg-white text-[#293771]'}`}>{label}</button>)}</div>{module === 'qhse' ? <QhseReportDashboard {...props} surveys={qhseSurveys} /> : <ConditionReportDashboard {...props} />}</div>;
+  useEffect(() => setModule(initialModule), [initialModule]);
+  return <div className="space-y-5"><div className="sticky top-[calc(5rem+env(safe-area-inset-top))] z-20 max-w-5xl mx-auto flex flex-wrap gap-3 rounded-xl bg-[#F5F7FB] py-3" aria-label="Report module">{[['condition', 'Condition Survey reports'], ['qhse', 'QHSE Inspection reports']].map(([id,label]) => <button key={id} type="button" aria-pressed={module === id} onClick={() => { setModule(id); onModuleChange?.(id); }} className={`min-h-11 rounded-xl border px-5 py-3 text-sm font-semibold ${module === id ? 'bg-[#293771] text-white' : 'bg-white text-[#293771]'}`}>{label}</button>)}</div>{module === 'qhse' ? <QhseReportDashboard {...props} surveys={qhseSurveys} /> : <ConditionReportDashboard {...props} />}</div>;
 }
 
 function ConditionReportDashboard({ projects = [], surveys = [], initialProjectId = null, canDownloadReports = true }) {
