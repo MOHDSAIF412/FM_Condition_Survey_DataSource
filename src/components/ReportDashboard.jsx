@@ -11,6 +11,7 @@ import { facilityCode } from '../types/survey';
 import { stageOf, STAGE_BY_KEY, STAGES } from '../utils/workflow';
 import { useFormsConfig } from '../config/FormsConfigContext';
 import { activeLayouts, resolveLayout } from '../config/reportLayouts';
+import QhseReportDashboard from '../qhse/QhseReportDashboard';
 
 /**
  * Pick a project, find the facilities, get one report.
@@ -34,7 +35,12 @@ const SORTS = {
 
 const fmtDate = (d) => (d ? new Date(d).toLocaleDateString([], { day: 'numeric', month: 'short', year: '2-digit' }) : '');
 
-export default function ReportDashboard({ projects = [], surveys = [], initialProjectId = null, canDownloadReports = true }) {
+export default function ReportDashboard({ qhseSurveys = [], initialModule = 'condition', ...props }) {
+  const [module, setModule] = useState(initialModule);
+  return <div className="space-y-5"><div className="max-w-5xl mx-auto flex flex-wrap gap-3" aria-label="Report module">{[['condition', 'Condition Survey reports'], ['qhse', 'QHSE Inspection reports']].map(([id,label]) => <button key={id} type="button" aria-pressed={module === id} onClick={() => setModule(id)} className={`min-h-11 rounded-xl border px-5 py-3 text-sm font-semibold ${module === id ? 'bg-[#293771] text-white' : 'bg-white text-[#293771]'}`}>{label}</button>)}</div>{module === 'qhse' ? <QhseReportDashboard {...props} surveys={qhseSurveys} /> : <ConditionReportDashboard {...props} />}</div>;
+}
+
+function ConditionReportDashboard({ projects = [], surveys = [], initialProjectId = null, canDownloadReports = true }) {
   const [projectId, setProjectId] = useState(initialProjectId || projects[0]?.id || '');
   const [selected, setSelected] = useState(() => new Set());
   const [busy, setBusy] = useState('');

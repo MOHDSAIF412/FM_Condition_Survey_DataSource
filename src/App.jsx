@@ -1394,7 +1394,7 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
     if (!target) return;
     if (target.admin) { openAdmin(target.admin); return; }
     if (target.module) { setWorkModule(target.module); setView('projects'); refreshProjects(); refreshSurveyList(); return; }
-    if (target.view !== 'modules' && target.view !== 'admin') setWorkModule('condition');
+    if (!['modules', 'admin', 'reports'].includes(target.view)) setWorkModule('condition');
     if (target.view === 'allFacilities') { openFacilityList('all'); return; }
     if (target.view === 'facilities' && !activeProjectRef.current) { setView('projects'); return; }
     if (target.view === 'home' || target.view === 'qhse') refreshSurveyList();
@@ -1999,7 +1999,7 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
       {/* Project picker: nothing project-specific is reachable until one is chosen. */}
       {view === 'modules' && <main className="flex-1 px-4 sm:px-8 py-8 safe-area-content-pb"><AutomaticUpdates /><ModulePicker onSelect={module => navigatePortal({ module })} /></main>}
       {view === 'qhse' && <main className="flex-1 max-w-6xl w-full mx-auto px-3 sm:px-8 py-6 safe-area-content-pb">
-        <QhseHub surveys={surveyList.filter(s => isQhse(s) && s.projectId === activeProject?.id)} project={activeProject} canEdit={mayEditSurveys} canDelete={!isCloudConfigured || mayDeleteSnags} onAction={handleQhseAction}
+        <QhseHub surveys={surveyList.filter(s => isQhse(s) && s.projectId === activeProject?.id)} project={activeProject} canEdit={mayEditSurveys} canDelete={!isCloudConfigured || mayDeleteSnags} canExport={!isCloudConfigured || mayDownloadReports} onAction={handleQhseAction}
           onBack={handleAppBack} legacySurveys={surveyList.filter(s => s.projectId === activeProject?.id && isLegacyQhse(s) && !isLocked(s))} onMove={handleMoveLegacyQhse} onCreate={startQhse} onOpen={openSurveyFromPortal} />
       </main>}
       {view === 'survey' && isQhse(survey) && <main className="flex-1 max-w-6xl w-full mx-auto px-3 sm:px-6 py-6 safe-area-content-pb">
@@ -2218,10 +2218,12 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
           </div>
           <main className="flex-1 w-full px-3 sm:px-8 pt-4 sm:pt-6 safe-area-content-pb md:pb-8">
             <ReportDashboard
+              qhseSurveys={surveyList.filter(isQhse)}
+              initialModule={workModule}
               projects={projects}
               surveys={listRows}
               initialProjectId={activeProject?.id || null}
-              canDownloadReports={mayDownloadReports}
+              canDownloadReports={!isCloudConfigured || mayDownloadReports}
             />
           </main>
         </>

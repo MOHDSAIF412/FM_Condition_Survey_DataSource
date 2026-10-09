@@ -11,6 +11,7 @@ import ConfirmDelete from '../components/ConfirmDelete';
 import { createPhotoEvidence } from './model';
 import { stageOf, STAGE_BY_KEY, isLocked } from '../utils/workflow';
 import { isDeletedInspection } from './lifecycle';
+import QhseReportDownloads from './QhseReportDownloads';
 
 const control = 'w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900';
 function Field({ label, value, onChange, multiline, ...props }) {
@@ -18,7 +19,7 @@ function Field({ label, value, onChange, multiline, ...props }) {
   return <label className="block text-sm font-semibold text-slate-700">{label}<Tag {...props} className={`${control} mt-1 font-normal`} value={value || ''} onChange={e => onChange(e.target.value)} rows={multiline ? 3 : undefined} /></label>;
 }
 
-export function QhseHub({ surveys, legacySurveys = [], project, canEdit, canDelete, onBack, onCreate, onOpen, onMove, onAction }) {
+export function QhseHub({ surveys, legacySurveys = [], project, canEdit, canDelete, canExport, onBack, onCreate, onOpen, onMove, onAction }) {
   const [templateId, setTemplateId] = useState('');
   const [busy, setBusy] = useState(false), [error, setError] = useState('');
   const [showDeleted, setShowDeleted] = useState(false);
@@ -49,6 +50,7 @@ export function QhseHub({ surveys, legacySurveys = [], project, canEdit, canDele
       <div className="flex flex-wrap justify-between gap-2"><span className="text-xs font-semibold text-[#F15F22]">{s.facility?.qhse?.reportNumber || 'Report number pending'}</span><span className={`text-xs font-semibold border rounded-md px-2 py-1 ${STAGE_BY_KEY[stageOf(s)].badge}`}>{showDeleted ? 'Deleted' : STAGE_BY_KEY[stageOf(s)].label}</span></div><button disabled={showDeleted || busy} onClick={() => onOpen(s.id)} className="min-h-11 font-bold text-[#293771] mt-2 text-left">{s.facility?.qhse?.auditTitle || 'Site inspection report'}</button>
       <p className="text-sm text-slate-600 mt-2">{s.facility?.address || project?.location || 'Location pending'}</p><p className="text-xs text-slate-500 mt-3">{s.itemCount ?? s.items?.length ?? 0} entries · {s.photoCount ?? s.items?.reduce((n, i) => n + (i.photos || []).length, 0) ?? 0} photos · {s.facility?.qhse?.conductedOn?.replace('T', ' ') || 'Date pending'}</p>
       {s.submittedAt && <p className="text-xs text-slate-500 mt-2">Last submitted: {new Date(s.submittedAt).toLocaleString()}</p>}
+      {!showDeleted && <div className="mt-4"><QhseReportDownloads records={[s]} projectId={project?.id} canExport={canExport} /></div>}
       <div className="flex flex-wrap gap-3 mt-3">{canEdit && !showDeleted && ['draft','changes_requested'].includes(stageOf(s)) && <button disabled={busy} className="min-h-11 text-sm font-semibold text-[#293771]" onClick={() => act(s, 'submit')}>Submit report</button>}{canDelete && !isLocked(s) && <button disabled={busy} className="min-h-11 text-sm font-semibold text-red-700" onClick={() => act(s, showDeleted ? 'restore' : 'delete')}>{showDeleted ? 'Restore inspection' : 'Delete inspection'}</button>}</div>
     </article>)}</div>
     {!(showDeleted ? deleted : live).length && <div className="rounded-xl border border-dashed p-8 text-center text-slate-500">{showDeleted ? 'No deleted inspections.' : 'Start your first inspection for this project.'}</div>}
@@ -110,6 +112,7 @@ export default function QhseInspection({ project, survey, canEdit, canDelete, ca
     {pendingDelete && <ConfirmDelete title="Delete inspection?" onCancel={() => setPendingDelete(false)} onConfirm={() => { setPendingDelete(false); action('delete', true); }}>This removes the inspection from the project list. Its photos and remarks are retained. Restore it from Deleted inspections.</ConfirmDelete>}
     <div className="space-y-4"><div className="flex justify-between gap-3 items-center"><BackButton onClick={onBack} disabled={busy}>Project inspections</BackButton><button onClick={onBackup} className="text-xs text-slate-600 border rounded-lg px-3 py-2">Backup</button></div><div className="flex flex-wrap items-center justify-between gap-3"><h1 className="text-2xl sm:text-3xl font-bold text-[#293771]">QHSE Site Inspection</h1>{canEdit && <button disabled={busy} className="inline-flex items-center gap-2 min-h-11 rounded-xl bg-[#293771] px-4 py-2 text-sm font-semibold text-white disabled:opacity-50" onClick={() => choosePhotos(latest.current.items.find(i => i.customValues?.qhseEvidenceOnly)?.id || null)}><Images size={18} />Add photos & remarks</button>}</div></div>
     {error && <div role="alert" className="p-4 bg-red-50 text-red-800 rounded-lg">{error}</div>}
+    {canExport && <div className="rounded-xl border bg-white p-5 space-y-3"><h2 className="font-bold text-[#293771]">Generate inspection report</h2><p className="text-sm text-slate-600">Download the OCS report with all photos and their remarks.</p><div className="flex gap-3 flex-wrap"><button disabled={busy} onClick={() => exportReport('pdf')} className="bg-[#293771] text-white px-5 py-3 rounded-lg disabled:opacity-50">Download PDF</button><button disabled={busy} onClick={() => exportReport('excel')} className="bg-[#F15F22] text-white px-5 py-3 rounded-lg disabled:opacity-50">Download Excel</button></div></div>}
     <p className="text-sm text-slate-500">Drafts and photos save automatically. Use the sync indicator above to check cloud status.</p>
     <div className="rounded-xl border bg-white p-4 flex flex-wrap gap-3 justify-between items-center"><div><span className={`inline-block text-sm font-semibold rounded-lg border px-3 py-1 ${STAGE_BY_KEY[stageOf(survey)].badge}`}>{STAGE_BY_KEY[stageOf(survey)].label}</span>{survey.submittedAt && <p className="text-xs text-slate-500 mt-2">Last submitted: {new Date(survey.submittedAt).toLocaleString()}</p>}</div>{canDelete && !isLocked(survey) && <button disabled={busy} onClick={() => action('delete')} className="min-h-11 text-sm font-semibold text-red-700">Delete inspection</button>}</div>
     <fieldset disabled={!canEdit} className="space-y-5 min-w-0">
