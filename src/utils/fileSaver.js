@@ -53,7 +53,7 @@ async function saveViaFilesystem(blob, filename, shareTitle) {
   const written = await Filesystem.writeFile({
     path: filename,
     data,
-    directory: Directory.External,
+    directory: Capacitor.getPlatform() === 'ios' ? Directory.Documents : Directory.External,
     recursive: true
   });
 
