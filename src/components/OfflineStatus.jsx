@@ -6,7 +6,7 @@ export default function OfflineStatus() {
   useEffect(() => subscribeOfflineShell(setState), []);
   const label = {
     ready: 'App available offline', preparing: 'Preparing app for offline use…',
-    update: 'Update ready — close all app tabs and reopen to apply',
+    update: 'Update ready — refresh this page to use the latest version',
     unavailable: 'Offline restart not ready — keep this tab open without signal'
   }[state];
   return <p role="status" className="text-[11px] text-slate-500 mt-2">{label}</p>;
