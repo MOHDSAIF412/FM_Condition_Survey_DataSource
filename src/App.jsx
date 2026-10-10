@@ -1926,7 +1926,6 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
       {/* Top Header */}
       <Header
         survey={survey || {}}
-        onOpenRecoveries={() => setShowRecoveries((v) => !v)}
         onReset={handleReset}
         onOpenReport={() => setShowReportModal(true)}
         onExportJSON={handleExportJSON}

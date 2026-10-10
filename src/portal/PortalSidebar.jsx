@@ -110,7 +110,6 @@ export default function PortalSidebar({
       </div>
 
       <nav aria-label="Main" className="flex-1 overflow-y-auto px-3 py-4 space-y-1">
-        {onRecoveries && <button type="button" onClick={() => { onRecoveries(); onClose?.(); }} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold text-sky-100/80 hover:bg-white/10"><History size={18} />History & recovery</button>}
         {nav.map((item) => {
           const Icon = item.icon;
           if (item.children) {
@@ -172,6 +171,7 @@ export default function PortalSidebar({
           </button>
           {expanded.has('updates') && <div className="mt-2"><AutomaticUpdates compact /></div>}
         </div>}
+        {onRecoveries && <button type="button" onClick={() => { onRecoveries(); onClose?.(); }} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold text-sky-100/80 hover:bg-white/10"><History size={18} />History & recovery</button>}
       </nav>
 
       <div className="p-3">

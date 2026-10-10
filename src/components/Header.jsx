@@ -30,7 +30,6 @@ const MENU_HEADING = 'px-4 pt-2 pb-1 text-[10px] font-bold uppercase tracking-wi
 export default function Header({
   survey,
   onReset,
-  onOpenRecoveries,
   onOpenReport,
   onExportJSON,
   onImportJSON,
@@ -188,7 +187,6 @@ export default function Header({
                   </p>
                   <p className="text-xs text-slate-500 mt-2">Last successful cloud sync this session: {lastSynced ? new Date(lastSynced).toLocaleString() : 'Not yet recorded'}</p>
                   {onSyncNow && <button disabled={!online || syncState === 'syncing'} onClick={onSyncNow} className="mt-3 w-full rounded-lg bg-ocs-600 text-white text-sm px-3 py-2 disabled:opacity-50">{syncState === 'syncing' ? 'Syncing…' : 'Sync now'}</button>}
-                  {onOpenRecoveries && <button onClick={() => { setShowBell(false); onOpenRecoveries(); }} className="mt-2 w-full rounded-lg border text-ocs-600 text-sm px-3 py-2">History & recovery backups</button>}
                 </div>
               </>
             )}
@@ -237,7 +235,6 @@ export default function Header({
                   )}
 
                   <p className={MENU_HEADING}>This facility</p>
-                  <button className={MENU_ITEM} onClick={() => { setShowMenu(false); onOpenRecoveries?.(); }}>Recovery backups</button>
 
                   {canDownloadReports && (
                     <button
