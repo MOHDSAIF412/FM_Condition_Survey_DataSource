@@ -5,7 +5,7 @@ export default function WorkspaceBottomNav({ view, onProjects, onReports, onMore
   return <nav aria-label="Workspace shortcuts" className="mobile-bottom-nav fixed bottom-0 inset-x-0 z-30 md:hidden safe-area-pb">
     <div className="grid grid-cols-3 max-w-lg mx-auto px-3 pt-2">
       {[
-        ['Projects', FolderKanban, ['projects', 'qhse', 'facilities'].includes(view), onProjects],
+        ['Projects', FolderKanban, ['projects', 'qhse', 'meter', 'facilities'].includes(view), onProjects],
         ['Reports', FileText, view === 'reports', onReports],
         ['More', Menu, false, onMore]
       ].map(([label, Icon, active, action]) => <button type="button" key={label} onClick={action}

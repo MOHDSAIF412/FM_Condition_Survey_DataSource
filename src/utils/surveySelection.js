@@ -1,3 +1,4 @@
+import { isConditionSurvey } from './modules';
 /**
  * Pure decisions about which copy of a survey to trust and how to list them.
  * Kept free of React, IndexedDB and network calls so each rule has a test.
@@ -55,7 +56,7 @@ export function mergeSurveyLists(remote = [], local = [], {
   for (const l of local) {
     if (!l || !l.id) continue;
     // A blank scratch survey that was never submitted is noise in this list.
-    if (!l.submittedAt && !(l.items || []).length && l.facility?.module !== 'qhse') continue;
+    if (!l.submittedAt && !(l.items || []).length && isConditionSurvey(l)) continue;
     onDevice.add(l.id);
 
     const existing = merged.get(l.id);
@@ -64,7 +65,7 @@ export function mergeSurveyLists(remote = [], local = [], {
         ...existing,
         projectId: existing.projectId || l.projectId || null,
         pendingSync: !!l.pendingSync,
-        ...(l.pendingSync && l.facility?.module === 'qhse' ? {
+        ...(l.pendingSync && !isConditionSurvey(l) ? {
           facility: l.facility, facilityName: l.facility.facilityName, itemCount: (l.items || []).length,
           findingCount: (l.items || []).filter(i => !i.customValues?.qhseEvidenceOnly).length,
           actionItems: (l.items || []).map(i => ({ customValues: i.customValues || {} })),

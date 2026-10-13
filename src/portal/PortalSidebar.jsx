@@ -37,6 +37,7 @@ function buildNav({ access = {}, hasOpenProject }) {
       children: [
         { label: 'Generate Reports', target: { view: 'reports', reportModule: 'condition' } },
         { label: 'QHSE Reports', target: { view: 'reports', reportModule: 'qhse' } },
+        { label: 'Meter Mapping Reports', target: { view: 'reports', reportModule: 'meter' } },
         ...(access.config ? [{ label: 'Report Builder', target: { admin: 'reports' } }] : [])
       ]
     },
@@ -148,7 +149,7 @@ export default function PortalSidebar({
               </div>
             );
           }
-          const active = !item.disabled && (item.target?.module ? current?.view !== 'modules' && workModule === item.target.module && ['projects', 'qhse', 'survey', 'facilities'].includes(current?.view) : sameTarget(item.target, current));
+          const active = !item.disabled && (item.target?.module ? current?.view !== 'modules' && workModule === item.target.module && ['projects', 'qhse', 'meter', 'survey', 'facilities'].includes(current?.view) : sameTarget(item.target, current));
           return (
             <button key={item.key} type="button" disabled={item.disabled} onClick={() => go(item.target)}
               aria-current={active ? 'page' : undefined}
