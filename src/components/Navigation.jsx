@@ -3,11 +3,11 @@ import { Building, ClipboardList, BarChart3, PenTool, FileText, AlertTriangle } 
 
 export default function Navigation({ activeTab, setActiveTab, itemsCount = 0, urgentCount = 0 }) {
   const navItems = [
-    { id: 'facility', label: 'Facility Info', icon: Building },
-    { id: 'items', label: 'Survey Items', icon: ClipboardList, badge: itemsCount },
-    { id: 'analytics', label: 'Score & CapEx', icon: BarChart3, alertBadge: urgentCount > 0 ? urgentCount : null },
-    { id: 'signatures', label: 'Sign-Off', icon: PenTool },
-    { id: 'report', label: 'Report', icon: FileText, highlight: true },
+    { id: 'facility', label: 'Facility Info', short: 'Facility', icon: Building },
+    { id: 'items', label: 'Survey Items', short: 'Snags', icon: ClipboardList, badge: itemsCount },
+    { id: 'analytics', label: 'Score & CapEx', short: 'Score', icon: BarChart3, alertBadge: urgentCount > 0 ? urgentCount : null },
+    { id: 'signatures', label: 'Sign-Off', short: 'Sign-off', icon: PenTool },
+    { id: 'report', label: 'Report', short: 'Report', icon: FileText, highlight: true },
   ];
 
   return (
@@ -24,11 +24,11 @@ export default function Navigation({ activeTab, setActiveTab, itemsCount = 0, ur
                 onClick={() => setActiveTab(tab.id)}
                 className={`flex items-center space-x-2 py-3.5 px-4 font-semibold text-sm border-b-2 transition-colors relative ${
                   isActive
-                    ? 'border-sky-600 text-sky-600'
+                    ? 'border-flame-500 text-ocs-600'
                     : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300'
                 }`}
               >
-                <Icon className={`w-4 h-4 ${isActive ? 'text-sky-600' : 'text-slate-400'}`} />
+                <Icon className={`w-4 h-4 ${isActive ? 'text-ocs-600' : 'text-slate-400'}`} />
                 <span>{tab.label}</span>
 
                 {tab.badge !== undefined && tab.badge > 0 && (
@@ -53,7 +53,7 @@ export default function Navigation({ activeTab, setActiveTab, itemsCount = 0, ur
       {/* pt-1, not py-1: a `pb` utility sits in Tailwind's utilities layer and
           overrides .safe-area-pb from the components layer, which silently
           cancelled the safe-area padding and left the tabs under the system bar. */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-slate-200 shadow-lg px-2 pt-1 safe-area-pb">
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-slate-200/80 shadow-[0_-4px_16px_rgb(20_31_58/0.06)] px-2 pt-1.5 safe-area-pb">
         <div className="grid grid-cols-5 gap-1">
           {navItems.map((tab) => {
             const Icon = tab.icon;
@@ -62,9 +62,10 @@ export default function Navigation({ activeTab, setActiveTab, itemsCount = 0, ur
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`flex flex-col items-center justify-center py-1.5 px-1 rounded-xl transition-all relative ${
+                aria-current={isActive ? 'page' : undefined}
+                className={`flex flex-col items-center justify-center min-h-[52px] py-1.5 px-1 rounded-2xl transition-colors relative ${
                   isActive
-                    ? 'text-sky-600 font-bold'
+                    ? 'bg-ocs-50 text-ocs-600 font-semibold'
                     : 'text-slate-500 hover:text-slate-900 font-medium'
                 }`}
               >
@@ -72,7 +73,7 @@ export default function Navigation({ activeTab, setActiveTab, itemsCount = 0, ur
                   <Icon className={`w-5 h-5 ${isActive ? 'stroke-[2.4]' : 'stroke-[1.8]'}`} />
                   
                   {tab.badge !== undefined && tab.badge > 0 && (
-                    <span className="absolute -top-1.5 -right-2 min-w-[16px] h-4 px-1 rounded-full text-[10px] font-bold bg-slate-700 text-white flex items-center justify-center">
+                    <span className="absolute -top-1.5 -right-2 min-w-[16px] h-4 px-1 rounded-full text-[10px] font-bold bg-ocs-600 text-white flex items-center justify-center">
                       {tab.badge}
                     </span>
                   )}
@@ -83,12 +84,9 @@ export default function Navigation({ activeTab, setActiveTab, itemsCount = 0, ur
                     </span>
                   )}
                 </div>
-                <span className="text-[11px] mt-1 tracking-tight truncate max-w-full">
-                  {tab.label}
+                <span className="text-[11px] mt-1 truncate max-w-full">
+                  {tab.short}
                 </span>
-                {isActive && (
-                  <span className="w-5 h-0.5 bg-sky-600 rounded-full mt-0.5"></span>
-                )}
               </button>
             );
           })}

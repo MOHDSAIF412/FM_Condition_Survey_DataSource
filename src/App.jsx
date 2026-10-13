@@ -18,6 +18,7 @@ import { allowOtaAtSafeScreen } from './utils/otaUpdates';
 const UserManagement = lazy(() => import('./components/UserManagement'));
 import ChangePasswordModal from './components/ChangePasswordModal';
 import Breadcrumb from './components/Breadcrumb';
+import { Building2, ChevronDown, CheckCircle2 } from 'lucide-react';
 import ProjectHero from './components/ProjectHero';
 import ProjectTeam from './components/ProjectTeam';
 import PhotoGallery from './components/PhotoGallery';
@@ -1992,7 +1993,7 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
         onSignOut={onSignOut ? handleSignOut : undefined}
       />
 
-      {parentScreen && !['projects', 'qhse', 'meter'].includes(view) && !(view === 'survey' && !isConditionSurvey(survey)) && <div className="px-3 sm:px-8 py-3"><BackButton onClick={() => handleAppBack()}>Back to {parentScreen.label}</BackButton></div>}
+      {parentScreen && !['projects', 'qhse', 'meter'].includes(view) && !(view === 'survey' && !isConditionSurvey(survey)) && <div className="px-3 sm:px-8 pt-2"><BackButton onClick={() => handleAppBack()}>{parentScreen.label}</BackButton></div>}
 
       {showPasswordModal && (
         <ChangePasswordModal onClose={() => setShowPasswordModal(false)} />
@@ -2285,56 +2286,65 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
       {/* Facility bar: which facility is open, switch to another, and submit
           this one when it is finished. */}
       {view === 'survey' && isConditionSurvey(survey) && (
-      <div className="bg-white border-b border-slate-200">
-        <div className="max-w-6xl mx-auto px-3 sm:px-6 py-2 flex items-center gap-3 flex-wrap">
-          <div className="flex items-center gap-2 min-w-0 w-full sm:w-auto sm:flex-1">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 shrink-0">
-              Facility
-            </span>
-            <span className="text-sm font-bold text-slate-900 truncate">
-              {survey?.facility?.facilityName || survey?.facility?.buildingName || 'New facility'}
-            </span>
-            {survey?.status === 'submitted' && (
-              <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 shrink-0">
-                Submitted
-              </span>
+      <div className="bg-white border-b border-slate-200/80">
+        <div className="max-w-6xl mx-auto px-3 sm:px-6 py-2.5 flex items-center gap-3">
+          <span className="hidden sm:inline-flex w-10 h-10 items-center justify-center rounded-xl bg-ocs-50 text-ocs-600 shrink-0">
+            <Building2 className="w-5 h-5" />
+          </span>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2">
+              <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 shrink-0">Facility</span>
+              {survey?.status === 'submitted' && (
+                <span className="px-2 py-px rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700 shrink-0">
+                  Submitted
+                </span>
+              )}
+            </div>
+            {listRows.length > 0 ? (
+              <div className="relative max-w-md">
+                {/* The facility name doubles as the switcher: tap it to open another one. */}
+                <select
+                  value={survey?.id || ''}
+                  onChange={(e) => handleOpenSurvey(e.target.value)}
+                  className="facility-switcher w-full appearance-none bg-transparent border-0 p-0 pr-6 text-[15px] font-bold text-slate-900 truncate cursor-pointer focus:outline-none"
+                  title="Open another facility to view or report on it"
+                  aria-label="Open facility"
+                >
+                  {!listRows.some((s2) => s2.id === survey?.id) && (
+                    <option value={survey?.id || ''}>
+                      {survey?.facility?.facilityName || survey?.facility?.buildingName || 'New facility'}
+                    </option>
+                  )}
+                  {listRows.map((s2) => (
+                    <option key={s2.id} value={s2.id}>
+                      {[s2.facility?.facilityCode, s2.facilityName].filter(Boolean).join(' · ')
+                        || `Unnamed facility (${s2.itemCount || 0} snag${s2.itemCount === 1 ? '' : 's'})`}
+                      {s2.status === 'submitted' ? '  ✓' : '  (draft)'}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown aria-hidden="true" className="pointer-events-none absolute right-0 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+              </div>
+            ) : (
+              <p className="text-[15px] font-bold text-slate-900 truncate">
+                {survey?.facility?.facilityName || survey?.facility?.buildingName || 'New facility'}
+              </p>
             )}
           </div>
-
-          {listRows.length > 0 && (
-            <select
-              value={survey?.id || ''}
-              onChange={(e) => handleOpenSurvey(e.target.value)}
-              className="px-3 py-1.5 rounded-lg border border-slate-300 text-xs font-semibold text-slate-800 bg-white max-w-[240px] min-w-0 flex-1 sm:flex-none"
-              title="Open another facility to view or report on it"
-            >
-              {!listRows.some((s2) => s2.id === survey?.id) && (
-                <option value={survey?.id || ''}>
-                  {survey?.facility?.facilityName || 'Current (unsaved)'}
-                </option>
-              )}
-              {listRows.map((s2) => (
-                <option key={s2.id} value={s2.id}>
-                  {[s2.facility?.facilityCode, s2.facilityName].filter(Boolean).join(' · ')
-                    || `Unnamed facility (${s2.itemCount || 0} snag${s2.itemCount === 1 ? '' : 's'})`}
-                  {s2.status === 'submitted' ? '  ✓' : '  (draft)'}
-                </option>
-              ))}
-            </select>
-          )}
 
           {mayEditOpen ? (
           <button
             type="button"
             onClick={handleSubmitFacility}
-            className="px-4 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 active:scale-[0.98] text-white font-bold text-xs shadow-card transition-[background-color,transform] duration-150 shrink-0"
+            className="inline-flex items-center gap-1.5 min-h-10 px-3.5 rounded-xl bg-ocs-600 hover:bg-ocs-700 active:scale-[0.98] text-white font-semibold text-xs sm:text-sm shadow-card transition-[background-color,transform] duration-150 shrink-0"
             title="Save this facility and start a new one"
           >
+            <CheckCircle2 className="w-4 h-4" />
             <span className="sm:hidden">Submit &amp; New</span>
             <span className="hidden sm:inline">Submit &amp; Start New Facility</span>
           </button>
           ) : (
-            <span className="px-3 py-1 rounded-lg bg-slate-100 border border-slate-200 text-slate-600 text-xs font-bold shrink-0"
+            <span className="px-3 py-1.5 rounded-xl bg-slate-100 text-slate-600 text-xs font-semibold shrink-0"
               title={openIsLocked ? 'Approved facilities are locked' : 'Your role can view this facility but not change it'}>
               {openIsLocked ? 'Locked' : 'Read-only'}
             </span>
@@ -2355,8 +2365,9 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
           </div>
         )}
 
+        {/* On a phone the facility bar and back button already say where you are. */}
         {activeProject && (
-          <div className="max-w-6xl mx-auto px-3 sm:px-6 pb-2">
+          <div className="hidden sm:block max-w-6xl mx-auto px-3 sm:px-6 pb-2">
             <Breadcrumb
               project={activeProject}
               facility={survey?.facility}

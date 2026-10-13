@@ -124,7 +124,7 @@ export function CanvasSignaturePad({ value, onSave, label }) {
     <div className="space-y-2">
       <div className="flex items-center justify-between">
         <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
-          <PenTool className="w-3.5 h-3.5 text-sky-600" />
+          <PenTool className="w-3.5 h-3.5 text-ocs-600" />
           {label}
         </label>
         <button
@@ -180,10 +180,10 @@ export default function SignatureSection({ signatures, onChange, facility, onOpe
   return (
     <div className="max-w-4xl mx-auto space-y-6 pb-8">
       {/* Header */}
-      <div className="bg-gradient-to-r from-slate-900 to-sky-950 rounded-2xl p-5 sm:p-6 text-white shadow-md">
+      <div className="bg-gradient-to-br from-ocs-600 via-ocs-700 to-ocs-900 rounded-3xl p-5 sm:p-6 text-white shadow-raised">
         <div className="flex items-start space-x-3">
-          <div className="p-3 bg-white/10 rounded-xl">
-            <ShieldCheck className="w-7 h-7 text-sky-400" />
+          <div className="p-3 bg-white/10 ring-1 ring-white/15 rounded-xl">
+            <ShieldCheck className="w-7 h-7 text-white" />
           </div>
           <div>
             <h2 className="text-xl font-bold">Audit Sign-Off & Verification</h2>
@@ -195,8 +195,8 @@ export default function SignatureSection({ signatures, onChange, facility, onOpe
         {/* Surveyor Sign-off */}
         <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm space-y-4">
           <div className="border-b border-slate-100 pb-3">
-            <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider flex items-center gap-2">
-              <User className="w-4 h-4 text-sky-600" />
+            <h3 className="text-base font-bold text-ocs-600 flex items-center gap-2">
+              <User className="w-4 h-4 text-ocs-600" />
               Lead Surveyor Sign-Off
             </h3>
           </div>
@@ -238,8 +238,8 @@ export default function SignatureSection({ signatures, onChange, facility, onOpe
         {/* Client Sign-off */}
         <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm space-y-4">
           <div className="border-b border-slate-100 pb-3">
-            <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider flex items-center gap-2">
-              <User className="w-4 h-4 text-sky-600" />
+            <h3 className="text-base font-bold text-ocs-600 flex items-center gap-2">
+              <User className="w-4 h-4 text-ocs-600" />
               Client / Facility Manager Receipt
             </h3>
           </div>
@@ -283,7 +283,7 @@ export default function SignatureSection({ signatures, onChange, facility, onOpe
       <div className="pt-2 flex justify-center sm:justify-end">
         <button
           onClick={onOpenReport}
-          className="w-full sm:w-auto px-8 py-3.5 rounded-xl bg-sky-600 hover:bg-sky-500 active:scale-[0.98] text-white font-bold text-sm shadow-xl shadow-sky-600/30 transition-all flex items-center justify-center space-x-2"
+          className="w-full sm:w-auto px-8 py-3.5 rounded-xl bg-ocs-600 hover:bg-ocs-700 active:scale-[0.98] text-white font-bold text-sm shadow-card transition-all flex items-center justify-center space-x-2"
         >
           <span>View Audit Report & Download PDF</span>
           <span>→</span>

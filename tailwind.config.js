@@ -32,6 +32,23 @@ export default {
           800: '#8C2F0F',
           900: '#6E280F',
         },
+        /* Tailwind's stock sky (a cyan-leaning blue) was the app's secondary
+           accent in ~170 places and clashed with the brand navy. Remapped once
+           here to a royal blue that sits with #28417C, so every screen picks it
+           up without touching the components. */
+        sky: {
+          50:  '#EFF4FF',
+          100: '#DCE7FD',
+          200: '#BFD3FB',
+          300: '#93B4F6',
+          400: '#5F8DEF',
+          500: '#3A6AE0',
+          600: '#2A55C4',
+          700: '#23459E',
+          800: '#213B7E',
+          900: '#1F3566',
+          950: '#141F3A',
+        },
         /* Priority is semantic and must stay distinct from brand orange,
            which is reserved for brand/primary-action use only. */
         priority: {
@@ -42,7 +59,7 @@ export default {
         },
       },
       fontFamily: {
-        sans: ['system-ui', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'sans-serif'],
+        sans: ['Inter Variable', 'system-ui', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'sans-serif'],
       },
       boxShadow: {
         card: '0 1px 2px 0 rgb(20 31 58 / 0.04), 0 1px 3px 0 rgb(20 31 58 / 0.06)',

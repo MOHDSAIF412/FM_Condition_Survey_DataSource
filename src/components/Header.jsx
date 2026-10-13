@@ -88,7 +88,7 @@ export default function Header({
     || 'New Facility Assessment';
 
   return (
-    <header className="sticky top-0 z-30 bg-white border-b border-slate-200 safe-area-pt">
+    <header className="sticky top-0 z-30 bg-white border-b border-slate-200/80 safe-area-pt">
       <div className="px-4 sm:px-6 py-3 flex items-center justify-between gap-3">
 
         {/* Web portal: menu button (narrow screens) and search. The sidebar
@@ -102,17 +102,19 @@ export default function Header({
         {searchSlot && <div className="hidden md:flex flex-1 min-w-0 max-w-xl">{searchSlot}</div>}
 
         {/* Left: title + current context */}
-        <div className={`flex items-center gap-3 min-w-0 ${searchSlot ? 'md:hidden' : ''}`}>
+        <div className={`flex flex-1 items-center gap-3 min-w-0 ${searchSlot ? 'md:hidden' : ''}`}>
           {/* Only on narrow screens -- the sidebar carries the mark on desktop. */}
           <img
             src="/ocs-logo.png"
             alt="OCS"
-            className="h-7 w-auto shrink-0 pr-3 border-r border-slate-200 lg:hidden"
+            className="hidden min-[360px]:block h-7 w-auto shrink-0 pr-3 border-r border-slate-200 lg:hidden"
             onError={(e) => { e.target.style.display = 'none'; }}
           />
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1">
+            {/* On a phone the logo already says OCS, so the line that matters
+                -- where you are -- gets the room instead of "OCS Works...". */}
             <div className="flex items-center gap-2.5 min-w-0">
-              <h1 className="text-base sm:text-lg font-bold tracking-tight text-slate-900 truncate">
+              <h1 className="hidden sm:block text-lg font-bold tracking-tight text-slate-900 truncate">
                 OCS Workspace
               </h1>
               <span className={`hidden sm:inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-semibold border ${sync.cls}`}>
@@ -120,7 +122,11 @@ export default function Header({
                 {sync.label}
               </span>
             </div>
-            <p className="text-xs text-slate-500 truncate max-w-[180px] sm:max-w-sm">
+            <p className="sm:hidden text-[11px] font-semibold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+              <span aria-hidden="true" className={`w-1.5 h-1.5 rounded-full ${sync.dot}`} />
+              <span className="truncate">{sync.label}</span>
+            </p>
+            <p className="text-[15px] sm:text-xs font-semibold sm:font-normal text-slate-900 sm:text-slate-500 truncate sm:max-w-sm leading-tight">
               {subtitle}
             </p>
           </div>
@@ -135,12 +141,13 @@ export default function Header({
             </span>
           )}
           {showReports && (
+            // Phones reach the report from the bottom tab bar, so the header keeps its room for the title.
             <button
               onClick={onOpenReport}
-              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-flame-500 hover:bg-flame-600 active:scale-[0.97] text-white font-semibold text-xs sm:text-sm shadow-card transition-[background-color,transform] duration-150"
+              className="hidden md:flex items-center gap-1.5 px-2.5 sm:px-3.5 py-2 rounded-xl bg-flame-500 hover:bg-flame-600 active:scale-[0.97] text-white font-semibold text-xs sm:text-sm shadow-card transition-[background-color,transform] duration-150"
             >
               <FileText className="w-4 h-4 shrink-0" aria-hidden="true" />
-              <span className="sm:hidden">Report</span>
+              <span className="sr-only sm:hidden">Report</span>
               {/* Only promise downloads to someone who can make them. */}
               <span className="hidden sm:inline">
                 {canDownloadReports ? 'Reports (PDF/Excel)' : 'View Report'}
@@ -209,7 +216,7 @@ export default function Header({
                 </span>
                 <span className="block text-[11px] text-slate-500">{roleLabel}</span>
               </span>
-              <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${showMenu ? 'rotate-180' : ''}`} />
+              <ChevronDown className={`hidden sm:block w-4 h-4 text-slate-400 transition-transform ${showMenu ? 'rotate-180' : ''}`} />
             </button>
 
             {showMenu && (

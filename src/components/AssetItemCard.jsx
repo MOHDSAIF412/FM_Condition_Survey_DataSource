@@ -583,7 +583,7 @@ function AssetItemCard({
                 type="button"
                 disabled={isProcessingPhoto}
                 onClick={() => (Capacitor.isNativePlatform() ? handleNativeCamera() : cameraInputRef.current?.click())}
-                className="py-2.5 px-3 rounded-xl bg-sky-600 hover:bg-sky-500 active:scale-[0.98] text-white font-bold text-xs flex items-center justify-center space-x-1.5 shadow-md transition-all"
+                className="py-2.5 px-3 rounded-xl bg-ocs-600 hover:bg-ocs-700 active:scale-[0.98] text-white font-bold text-xs flex items-center justify-center space-x-1.5 shadow-md transition-all"
               >
                 <Camera className="w-4 h-4" />
                 <span>

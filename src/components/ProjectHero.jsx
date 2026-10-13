@@ -24,15 +24,15 @@ export default function ProjectHero({ project, facilities = [], onOpenReports, o
   // Each tile narrows the list underneath it to whatever the number counts, so
   // "9 in progress" answers "which nine?" in one tap.
   const tiles = [
-    { key: 'all', label: `Total ${cap(L.records)}`, value: total, icon: Building2, tile: 'bg-indigo-500', wrap: 'from-indigo-50 to-indigo-100/40 border-indigo-100', hint: `Show every ${L.record}` },
-    { key: 'submitted', label: 'Submitted', value: submitted, icon: CheckCircle2, tile: 'bg-emerald-500', wrap: 'from-emerald-50 to-emerald-100/40 border-emerald-100', hint: `Show only submitted ${L.records}` },
-    { key: 'draft', label: 'In Progress', value: inProgress, icon: Clock, tile: 'bg-amber-500', wrap: 'from-amber-50 to-amber-100/40 border-amber-100', hint: `Show only ${L.records} still in progress` },
-    { key: 'snags', label: `Total ${L.items}`, value: snags, icon: ClipboardList, tile: 'bg-sky-500', wrap: 'from-sky-50 to-sky-100/40 border-sky-100', hint: `Sort by most ${L.items.toLowerCase()}` },
-    { key: 'photos', label: 'Photos Attached', value: photos, icon: Camera, tile: 'bg-violet-500', wrap: 'from-violet-50 to-violet-100/40 border-violet-100', hint: 'Sort by most photos' }
+    { key: 'all', label: `Total ${cap(L.records)}`, value: total, icon: Building2, tile: 'bg-indigo-50 text-indigo-600', hint: `Show every ${L.record}` },
+    { key: 'submitted', label: 'Submitted', value: submitted, icon: CheckCircle2, tile: 'bg-emerald-50 text-emerald-600', hint: `Show only submitted ${L.records}` },
+    { key: 'draft', label: 'In Progress', value: inProgress, icon: Clock, tile: 'bg-amber-50 text-amber-600', hint: `Show only ${L.records} still in progress` },
+    { key: 'snags', label: `Total ${L.items}`, value: snags, icon: ClipboardList, tile: 'bg-sky-50 text-sky-600', hint: `Sort by most ${L.items.toLowerCase()}` },
+    { key: 'photos', label: 'Photos Attached', value: photos, icon: Camera, tile: 'bg-violet-50 text-violet-600', hint: 'Sort by most photos' }
   ];
 
   return (
-    <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+    <div className="bg-white rounded-2xl border border-slate-200/80 shadow-card overflow-hidden">
       <div className="relative">
         {/* Skyline drawn rather than shipped as a bitmap, matching the sidebar:
             stays sharp at any width and adds no asset to the bundle. */}
@@ -73,14 +73,14 @@ export default function ProjectHero({ project, facilities = [], onOpenReports, o
         <div className="relative z-20 p-5 sm:p-6">
           <div className="flex items-start justify-between gap-4 flex-wrap">
             <div className="flex items-start gap-4 min-w-0">
-              <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-ocs-500 to-ocs-700 text-white flex items-center justify-center shrink-0 shadow-sm">
+              <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-gradient-to-br from-ocs-500 to-ocs-700 text-white flex items-center justify-center shrink-0 shadow-raised">
                 <Building2 className="w-7 h-7" />
               </div>
               <div className="min-w-0">
-                <span className="inline-block px-2 py-0.5 rounded-md bg-sky-50 text-ocs-600 text-[11px] font-bold border border-sky-200">
+                <span className="inline-block px-2 py-0.5 rounded-md bg-ocs-50 text-ocs-600 text-[11px] font-bold tracking-wide">
                   {project.projectNumber}
                 </span>
-                <h2 className="text-xl sm:text-2xl font-bold text-slate-900 mt-1.5 truncate">
+                <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900 mt-1.5 truncate">
                   {project.name}
                 </h2>
                 <div className="flex items-center gap-3 mt-1.5 flex-wrap text-xs text-slate-500">
@@ -102,29 +102,29 @@ export default function ProjectHero({ project, facilities = [], onOpenReports, o
               </div>
             </div>
 
-            <div className="flex items-center gap-2 shrink-0 flex-wrap">
+            <div className="grid grid-cols-2 sm:flex items-center gap-2 w-full sm:w-auto shrink-0">
               {onOpenReports && <button
                 type="button"
                 onClick={onOpenReports}
-                className="px-4 py-2.5 rounded-xl bg-white hover:bg-slate-50 text-slate-700 font-bold text-sm inline-flex items-center gap-2 border border-slate-300 shadow-sm"
+                className="px-4 py-2.5 rounded-xl bg-white hover:bg-slate-50 text-slate-700 font-semibold text-sm inline-flex items-center justify-center gap-2 border border-slate-200 shadow-card transition-colors"
               >
                 <FileText className="w-4 h-4" /> Reports
               </button>}
               {onAddFacility && <button
                 type="button"
                 onClick={onAddFacility}
-                className="px-4 py-2.5 rounded-xl bg-flame-500 hover:bg-flame-600 active:scale-[0.98] text-white font-bold text-sm shadow-card inline-flex items-center gap-2 transition-[background-color,transform] duration-150"
+                className="col-span-1 px-4 py-2.5 rounded-xl bg-flame-500 hover:bg-flame-600 active:scale-[0.98] text-white font-semibold text-sm shadow-card inline-flex items-center justify-center gap-2 transition-[background-color,transform] duration-150 [&:only-child]:col-span-2"
               >
                 {`+ Add ${cap(L.record)}`}
               </button>}
             </div>
           </div>
 
-          {/* Widened in steps rather than all five across early: at lg the
-              sidebar leaves each tile about 180px, which cut every label to
-              "TOTAL F...". */}
-          <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3 sm:gap-4 mt-5">
-            {tiles.map((t) => {
+          {/* Calm stat strip: white surfaces, colour only in the icon. Two
+              compact columns on a phone (the fifth spans both), all five
+              across once there is room. */}
+          <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-2.5 sm:gap-3 mt-5">
+            {tiles.map((t, i) => {
               const Icon = t.icon;
               return (
                 <button
@@ -132,18 +132,14 @@ export default function ProjectHero({ project, facilities = [], onOpenReports, o
                   type="button"
                   onClick={() => onFocusList && onFocusList(t.key)}
                   title={t.hint}
-                  className={`text-left rounded-2xl border bg-gradient-to-br ${t.wrap} px-4 py-3.5 flex items-center gap-3 transition-[transform,box-shadow] duration-150 hover:shadow-md hover:-translate-y-0.5 active:translate-y-0 focus:outline-none focus:ring-2 focus:ring-ocs-500`}
+                  className={`${i === tiles.length - 1 ? 'col-span-2 md:col-span-1' : ''} group text-left rounded-xl border border-slate-200 bg-white px-3 py-2.5 sm:px-4 sm:py-3 flex items-center gap-3 transition-[border-color,box-shadow,transform] duration-150 hover:border-ocs-200 hover:shadow-raised active:scale-[0.99] focus:outline-none focus-visible:ring-2 focus-visible:ring-ocs-500`}
                 >
-                  <div className={`w-11 h-11 rounded-xl ${t.tile} text-white flex items-center justify-center shrink-0 shadow-sm`}>
-                    <Icon className="w-5 h-5" />
+                  <div className={`w-9 h-9 sm:w-10 sm:h-10 rounded-lg ${t.tile} flex items-center justify-center shrink-0`}>
+                    <Icon className="w-[18px] h-[18px]" />
                   </div>
                   <div className="min-w-0">
-                    {/* Wraps rather than truncates: two narrow columns on a
-                        phone cut every label down to "TOTAL F...". */}
-                    <p className="text-[11px] font-bold text-slate-500 uppercase leading-tight">
-                      {t.label}
-                    </p>
-                    <p className="text-2xl font-bold text-slate-900 leading-tight">{t.value}</p>
+                    <p className="stat-value text-xl sm:text-2xl font-bold text-slate-900 leading-none">{t.value}</p>
+                    <p className="text-[11px] sm:text-xs font-medium text-slate-500 leading-tight mt-1">{t.label}</p>
                   </div>
                 </button>
               );
