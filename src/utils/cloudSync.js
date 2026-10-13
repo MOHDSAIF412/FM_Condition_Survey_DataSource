@@ -9,6 +9,7 @@
  * Uploads commit atomically against the revision the device actually read.
  */
 import { supabase, isCloudConfigured, PHOTO_BUCKET } from './supabaseClient';
+import { recordPushAttempt, readPushAttempt, isOwnUpload } from './syncHeal';
 
 /* ------------------------------------------------------------------ photos */
 
@@ -203,6 +204,9 @@ export async function pushSurvey(survey) {
         : {})
     }));
 
+  // Written before the request leaves, so a reload mid-commit can still tell
+  // its own upload from someone else's edit (see syncHeal.js).
+  recordPushAttempt(survey);
   const { data: committed, error: commitError } = await supabase.rpc('fm_commit_survey', {
     p_survey: surveyRow,
     p_expected_revision: seenRevision,
@@ -252,6 +256,66 @@ export async function pushSurvey(survey) {
  * unreachable, without capping the full download -- which, for a facility with
  * many photos on a slow link, can legitimately take a while.
  */
+/**
+ * The server copy's user content without downloading any photo bytes --
+ * enough to compare against this device, far cheaper than pullSurvey.
+ */
+export async function fetchServerContent(surveyId) {
+  if (!isCloudConfigured) return null;
+  const [surveyRes, itemRes, photoRes] = await Promise.all([
+    supabase.from('condition_surveys').select('*').eq('id', surveyId).limit(1),
+    supabase.from('survey_items').select('*').eq('survey_id', surveyId).order('position'),
+    supabase.from('survey_photos').select('id, item_id, caption, name, storage_path').eq('survey_id', surveyId)
+  ]);
+  for (const r of [surveyRes, itemRes, photoRes]) if (r.error) throw r.error;
+  const row = surveyRes.data?.[0];
+  if (!row) return null;
+  const photosByItem = {};
+  for (const p of photoRes.data || []) {
+    (photosByItem[p.item_id] ||= []).push({ id: p.id, caption: p.caption || '', name: p.name || '', storagePath: p.storage_path });
+  }
+  return {
+    id: row.id,
+    title: row.title,
+    facility: row.facility || {},
+    signatures: row.signatures || {},
+    generalNotes: row.general_notes || '',
+    status: row.status || 'draft',
+    submittedAt: row.submitted_at || null,
+    cloudRevision: row.revision || 0,
+    items: (itemRes.data || []).map((it) => ({
+      id: it.id,
+      assetName: it.asset_name,
+      department: it.department,
+      location: it.location,
+      priority: it.priority,
+      defectDescription: it.defect_description,
+      estimatedCost: it.estimated_cost,
+      quantity: it.quantity,
+      unit: it.unit,
+      customValues: it.custom_values,
+      photos: photosByItem[it.id] || []
+    }))
+  };
+}
+
+/**
+ * pushSurvey, plus recovery from a lost upload receipt. A stale refusal is
+ * retried once on the newer revision only when the server copy is provably
+ * this device's own earlier upload (syncHeal.isOwnUpload); any real change
+ * from another device is still returned as a conflict, untouched.
+ */
+export async function pushSurveySafely(survey, { fetchServer = fetchServerContent } = {}) {
+  const first = await pushSurvey(survey);
+  if (!first?.conflict || first.reason !== 'stale') return first;
+  let server = null;
+  try { server = await fetchServer(survey.id); } catch { return first; }
+  if (!isOwnUpload(survey, server, readPushAttempt(survey.id))) return first;
+  console.info('[sync] server already holds this device\'s upload; continuing from revision', server.cloudRevision);
+  const retry = await pushSurvey({ ...survey, cloudRevision: server.cloudRevision });
+  return retry?.pushed ? { ...retry, healedFromRevision: survey.cloudRevision ?? null } : retry;
+}
+
 export async function surveyExistsOnServer(surveyId) {
   if (!isCloudConfigured) return false;
   const { data, error } = await supabase
