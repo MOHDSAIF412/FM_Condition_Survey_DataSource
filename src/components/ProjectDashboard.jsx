@@ -3,7 +3,6 @@ import ConfirmDelete from './ConfirmDelete';
 import React, { useState, useMemo, useEffect } from 'react';
 import {
   FolderPlus,
-  Building2,
   ChevronRight,
   Loader2,
   Briefcase,
@@ -15,15 +14,6 @@ import {
   RefreshCw
 } from 'lucide-react';
 
-// A small fixed palette cycled by index, so cards read as distinct projects
-// at a glance instead of one long list of identical navy tiles.
-const ACCENTS = [
-  { bar: 'bg-sky-500', chip: 'bg-sky-50 text-sky-700 border-sky-200', icon: 'text-sky-600 bg-sky-50' },
-  { bar: 'bg-emerald-500', chip: 'bg-emerald-50 text-emerald-700 border-emerald-200', icon: 'text-emerald-600 bg-emerald-50' },
-  { bar: 'bg-amber-500', chip: 'bg-amber-50 text-amber-700 border-amber-200', icon: 'text-amber-600 bg-amber-50' },
-  { bar: 'bg-violet-500', chip: 'bg-violet-50 text-violet-700 border-violet-200', icon: 'text-violet-600 bg-violet-50' },
-  { bar: 'bg-rose-500', chip: 'bg-rose-50 text-rose-700 border-rose-200', icon: 'text-rose-600 bg-rose-50' }
-];
 
 /**
  * The first screen: choose a project, or start one.
@@ -89,15 +79,19 @@ export default function ProjectDashboard({
     <div className="space-y-7 pb-10">
       {pendingDelete && <ConfirmDelete title="Delete project?" onCancel={() => setPendingDelete(null)} onConfirm={() => { const p = pendingDelete; setPendingDelete(null); changeProject(p, false); }}>Only projects without live inspections or Condition Survey facilities can be deleted. Deleted records and photos are retained. Restore the project from Deleted projects.</ConfirmDelete>}
       {onBack && <BackButton onClick={onBack}>Choose module</BackButton>}
-      <div className="project-list-hero relative overflow-hidden bg-gradient-to-br from-sky-400 via-sky-300 to-blue-200 rounded-3xl p-5 sm:p-10 shadow-lg">
+      {/* Brand navy header: the module you are in, what to do here, and the
+          two numbers that matter. */}
+      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-ocs-600 via-ocs-700 to-ocs-900 p-5 sm:p-8 text-white shadow-raised">
+        <div aria-hidden="true" className="pointer-events-none absolute -right-16 -top-20 h-64 w-64 rounded-full bg-flame-500/20 blur-3xl" />
+        <div aria-hidden="true" className="pointer-events-none absolute -left-10 -bottom-24 h-56 w-56 rounded-full bg-sky-400/10 blur-3xl" />
         <div className="relative flex items-start justify-between gap-4 flex-wrap">
           <div className="flex items-start gap-4 min-w-0">
-            <div className="project-list-icon p-3 sm:p-4 bg-white/25 rounded-2xl shrink-0">
-              <Briefcase className="w-7 h-7 sm:w-11 sm:h-11 text-white" />
+            <div className="p-3 sm:p-3.5 bg-white/10 ring-1 ring-white/15 rounded-2xl shrink-0">
+              <Briefcase className="w-6 h-6 sm:w-8 sm:h-8 text-white" />
             </div>
             <div className="min-w-0">
-              <h2 className="text-2xl sm:text-4xl font-bold tracking-tight text-slate-900">{moduleName}</h2>
-              <p className="text-slate-800/70 text-base mt-1.5">
+              <h2 className="text-2xl sm:text-3xl font-bold tracking-tight">{moduleName}</h2>
+              <p className="text-white/70 text-sm sm:text-base mt-1">
                 Choose a project to work in, or start a new one.
               </p>
             </div>
@@ -106,40 +100,29 @@ export default function ProjectDashboard({
           {onCreateProject && <button
             type="button"
             onClick={() => { setShowForm((v) => !v); setError(''); }}
-            className="px-6 py-3.5 rounded-xl bg-flame-500 hover:bg-flame-600 active:scale-[0.98] text-white font-bold text-[15px] shadow-card inline-flex items-center gap-2 shrink-0 transition-[background-color,transform] duration-150"
+            className="w-full sm:w-auto justify-center px-5 py-3 rounded-xl bg-flame-500 hover:bg-flame-400 active:scale-[0.98] text-white font-semibold text-[15px] shadow-raised inline-flex items-center gap-2 shrink-0 transition-[background-color,transform] duration-150"
           >
             <FolderPlus className="w-4 h-4" />
             {showForm ? 'Cancel' : 'Create Project'}
           </button>}
         </div>
 
-        {/* Quick stats -- gives the page something to look at even with one project */}
-        <div className="project-list-counts relative grid grid-cols-2 gap-3 sm:gap-5 mt-5 sm:mt-7 max-w-2xl">
-          <div className="bg-gradient-to-br from-indigo-500 to-violet-500 rounded-2xl p-3 sm:p-5 shadow-md flex flex-wrap items-center gap-3">
-            <span className="p-3 rounded-xl bg-white/20 shrink-0">
-              <FolderKanban className="w-6 h-6 text-white" />
-            </span>
-            <span className="min-w-0">
-              <span className="block text-[11px] font-bold uppercase tracking-wider text-white/80">Projects</span>
-              <span className="block text-3xl font-bold text-white leading-tight">{totals.projects}</span>
-            </span>
-          </div>
-          <div className="bg-gradient-to-br from-teal-500 to-emerald-500 rounded-2xl p-3 sm:p-5 shadow-md flex flex-wrap items-center gap-3">
-            <span className="p-3 rounded-xl bg-white/20 shrink-0">
-              <Layers className="w-6 h-6 text-white" />
-            </span>
-            <span className="min-w-0">
-              <span className="block text-[11px] font-bold uppercase tracking-wider text-white/80">{countLabel}</span>
-              <span className="block text-3xl font-bold text-white leading-tight">{totals.facilities}</span>
-            </span>
-          </div>
+        <div className="relative grid grid-cols-2 gap-3 mt-5 sm:mt-6 max-w-md">
+          {[[FolderKanban, 'Projects', totals.projects], [Layers, countLabel, totals.facilities]].map(([Icon, label, value]) =>
+            <div key={label} className="rounded-2xl bg-white/[0.08] ring-1 ring-white/10 px-4 py-3 flex items-center gap-3">
+              <Icon className="w-5 h-5 text-white/60 shrink-0" />
+              <span className="min-w-0">
+                <span className="stat-value block text-2xl font-bold leading-none">{value}</span>
+                <span className="block text-xs font-medium text-white/60 mt-1 capitalize">{label}</span>
+              </span>
+            </div>)}
         </div>
       </div>
 
       {showForm && (
         <form
           onSubmit={submit}
-          className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm space-y-5"
+          className="bg-white rounded-2xl p-5 sm:p-6 border border-slate-200/80 shadow-card space-y-5"
         >
           <h3 className="text-base font-bold text-slate-800">New Project</h3>
 
@@ -162,7 +145,7 @@ export default function ProjectDashboard({
                 type="text"
                 value={form.name}
                 onChange={(e) => setForm({ ...form, name: e.target.value })}
-                className="w-full px-4 py-3 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-sky-500 text-base font-semibold"
+                className="w-full px-4 py-3 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-ocs-500 text-base font-semibold"
                 autoFocus
               />
             </div>
@@ -173,7 +156,7 @@ export default function ProjectDashboard({
                 type="text"
                 value={form.client}
                 onChange={(e) => setForm({ ...form, client: e.target.value })}
-                className="w-full px-4 py-3 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-sky-500 text-sm"
+                className="w-full px-4 py-3 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-ocs-500 text-sm"
               />
             </div>
 
@@ -183,7 +166,7 @@ export default function ProjectDashboard({
                 type="text"
                 value={form.location}
                 onChange={(e) => setForm({ ...form, location: e.target.value })}
-                className="w-full px-4 py-3 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-sky-500 text-sm"
+                className="w-full px-4 py-3 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-ocs-500 text-sm"
               />
             </div>
 
@@ -193,7 +176,7 @@ export default function ProjectDashboard({
                 rows={2}
                 value={form.notes}
                 onChange={(e) => setForm({ ...form, notes: e.target.value })}
-                className="w-full px-4 py-3 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-sky-500 text-sm"
+                className="w-full px-4 py-3 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-ocs-500 text-sm"
               />
             </div>
           </div>
@@ -211,7 +194,7 @@ export default function ProjectDashboard({
           <button
             type="submit"
             disabled={saving}
-            className="px-6 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-60 text-white font-bold text-sm inline-flex items-center gap-2"
+            className="px-6 py-3 rounded-xl bg-ocs-600 hover:bg-ocs-700 disabled:opacity-60 text-white font-semibold text-sm inline-flex items-center gap-2 shadow-card"
           >
             {saving && <Loader2 className="w-4 h-4 animate-spin" />}
             {saving ? 'Creating…' : 'Create Project'}
@@ -220,7 +203,7 @@ export default function ProjectDashboard({
       )}
 
       <div className="flex items-center justify-between border-b border-slate-200">
-        <h3 className="text-lg font-bold text-slate-800 inline-flex items-center gap-2.5 pb-3 border-b-2 border-ocs-600 -mb-px">
+        <h3 className="text-lg font-bold text-slate-900 inline-flex items-center gap-2.5 pb-3 border-b-2 border-ocs-600 -mb-px">
           <ClipboardList className="w-5 h-5 text-ocs-600" />
           {showDeleted ? `Deleted projects (${deletedProjects.length})` : `All Projects (${projects.length})`}
         </h3>
@@ -252,50 +235,47 @@ export default function ProjectDashboard({
         </div>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-2 2xl:grid-cols-3 gap-5">
-          {projects.map((p, idx) => {
-            const accent = ACCENTS[idx % ACCENTS.length];
+          {projects.map((p) => {
             return (
-              <article key={p.id} className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden"><button
+              <article key={p.id} className="bg-white rounded-2xl border border-slate-200/80 shadow-card overflow-hidden transition-[box-shadow,border-color] duration-200 hover:shadow-raised hover:border-ocs-200"><button
                 key={p.id}
                 type="button"
                 onClick={() => onOpenProject(p)}
-                className="group w-full text-left hover:bg-slate-50 transition-all duration-150"
+                className="group w-full text-left active:bg-slate-50 transition-colors duration-150"
               >
-                <div className={`h-1.5 ${accent.bar}`} />
-                <div className="p-6">
+                <div className="p-5 sm:p-6">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
-                      <span className={`inline-block px-2.5 py-1 rounded-md text-[11px] font-bold border ${accent.chip}`}>
+                      <span className="inline-block px-2 py-0.5 rounded-md text-[11px] font-bold tracking-wide bg-ocs-50 text-ocs-600">
                         {p.projectNumber}
                       </span>
-                      <h4 className="font-bold text-slate-900 text-xl mt-2.5 leading-snug truncate">
+                      <h4 className="font-bold text-slate-900 text-lg sm:text-xl tracking-tight mt-2 leading-snug truncate">
                         {p.name}
                       </h4>
                     </div>
-                    <span className="w-10 h-10 rounded-full bg-sky-50 text-ocs-600 flex items-center justify-center shrink-0 group-hover:bg-sky-100 transition-colors">
+                    <span className="w-9 h-9 rounded-full bg-slate-50 text-ocs-600 flex items-center justify-center shrink-0 group-hover:bg-ocs-600 group-hover:text-white transition-colors">
                       <ChevronRight className="w-5 h-5 group-hover:translate-x-0.5 transition-transform" />
                     </span>
                   </div>
 
-                  <div className="flex items-center gap-3 mt-3.5 text-[14px] text-slate-500 flex-wrap">
+                  <div className="flex items-center gap-3 mt-3 text-sm text-slate-500 flex-wrap">
                     {p.client && (
                       <span className="inline-flex items-center gap-1.5">
-                        <MapPin className="w-3.5 h-3.5 text-ocs-600" /> {p.client}
+                        <Briefcase className="w-3.5 h-3.5 text-slate-400" /> {p.client}
                       </span>
                     )}
-                    {p.client && p.location && <span className="text-slate-300">|</span>}
                     {p.location && (
                       <span className="inline-flex items-center gap-1.5">
-                        <Building2 className="w-3.5 h-3.5 text-ocs-600" /> {p.location}
+                        <MapPin className="w-3.5 h-3.5 text-slate-400" /> {p.location}
                       </span>
                     )}
                   </div>
 
                   <div className="mt-4 pt-3 border-t border-slate-100 flex items-center gap-2 text-slate-700">
-                    <Layers className="w-4 h-4 text-ocs-600" />
-                    <span className="text-[14px] font-bold">
+                    <Layers className="w-4 h-4 text-ocs-500" />
+                    <span className="text-sm font-semibold">
                       {p.facilityCount === undefined
-                        ? countLabel
+                        ? <span className="capitalize">{countLabel}</span>
                         : `${p.facilityCount} ${countLabel}`}
                     </span>
                   </div>

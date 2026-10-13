@@ -1992,7 +1992,7 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
         onSignOut={onSignOut ? handleSignOut : undefined}
       />
 
-      {parentScreen && !['projects', 'qhse', 'meter'].includes(view) && !(view === 'survey' && !isConditionSurvey(survey)) && <div className="px-3 sm:px-8 py-3"><BackButton onClick={() => handleAppBack()}>Back to {parentScreen.label}</BackButton></div>}
+      {parentScreen && !['projects', 'qhse', 'meter'].includes(view) && !(view === 'survey' && !isConditionSurvey(survey)) && <div className="px-3 sm:px-8 pt-2"><BackButton onClick={() => handleAppBack()}>{parentScreen.label}</BackButton></div>}
 
       {showPasswordModal && (
         <ChangePasswordModal onClose={() => setShowPasswordModal(false)} />

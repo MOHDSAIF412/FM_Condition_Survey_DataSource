@@ -56,6 +56,16 @@ export const METER_FIELDS = [
   { id: 'otherRemarks', label: 'Other remarks', type: 'textarea' }
 ];
 
+// How the form groups a meter's fields on screen. Reports keep METER_FIELDS order.
+export const METER_GROUPS = [
+  ['Tenant & location', ['mappingNo', 'tenant', 'shopLocation', 'subLocation', 'feedFrom', 'loadVerification']],
+  ['Meter', ['meterNumber', 'meterType', 'meterStatus', 'kwhReading']],
+  ['Load & cost', ['powerLoad', 'shopSize', 'operatingHours', 'diversityFactor', 'tariff', 'invoicePrice', 'monthlyCost', 'annualCost']],
+  ['Supply', ['dbOfSupply', 'breakerSize', 'cableSize', 'sldAvailable']],
+  ['Air conditioning', ['acSystem', 'acJustification']],
+  ['Remarks', ['remarks', 'otherRemarks']]
+];
+
 export function createMeterMapping(projectId = null, number = 1, project = {}) {
   const survey = createNewSurvey(number);
   return { ...survey, title: 'Meter Mapping Report', projectId, items: [],

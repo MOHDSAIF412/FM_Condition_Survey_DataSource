@@ -213,10 +213,10 @@ export default function SurveyList({
         {/* Next Snag Button */}
         <button
           onClick={() => handleAddNewAsset()}
-          className="px-4 py-2.5 rounded-xl bg-sky-600 hover:bg-sky-500 active:scale-95 text-white font-bold text-xs sm:text-sm shadow-md flex items-center space-x-1.5 transition-all cursor-pointer"
+          className="px-4 py-2.5 rounded-xl bg-ocs-600 hover:bg-ocs-700 active:scale-95 text-white font-semibold text-xs sm:text-sm shadow-card flex items-center space-x-1.5 transition-all cursor-pointer"
         >
           <Plus className="w-4 h-4" />
-          <span>+ Add Next Snag</span>
+          <span>Add Next Snag</span>
           {items.length > 0 && items[items.length - 1]?.location && (
             <span className="text-[12px] opacity-85 hidden sm:inline">
               (in "{items[items.length - 1].location}")
