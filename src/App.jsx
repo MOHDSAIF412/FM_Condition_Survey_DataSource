@@ -66,7 +66,7 @@ import {
 import { generateSurveyExcel } from './utils/reportExports';
 import { saveText } from './utils/fileSaver';
 import {
-  pushSurvey,
+  pushSurveySafely,
   pullSurvey,
   fetchLatestSurveyId,
   collectKnownPhotos,
@@ -220,11 +220,15 @@ export default function App({ currentUser = null, onSignOut } = {}) {
   // server is by definition behind us.
   const hasUnpushedEditsRef = useRef(false);
   const localSavesInFlight = useRef(0);
+  // Uploads of facilities other than the open one (flushPendingSurveys). An
+  // update reloading the app mid-commit loses the upload receipt, so the
+  // update waits for these as it already waits for the open facility's.
+  const flushInFlight = useRef(0);
   const localSaveFailed = useRef(false);
   useEffect(() => allowOtaAtSafeScreen(() =>
     isLoaded && view === 'modules' && !navOpen && !showPasswordModal
     && !showReportModal && !showRecoveries && !conflictId
-    && !pendingSaveRef.current && !uploadInFlight.current
+    && !pendingSaveRef.current && !uploadInFlight.current && !flushInFlight.current
     && !localSavesInFlight.current && !localSaveFailed.current
     && !document.querySelector('[role="dialog"]')
   ), [isLoaded, view, navOpen, showPasswordModal, showReportModal, showRecoveries, conflictId]);
@@ -453,7 +457,7 @@ export default function App({ currentUser = null, onSignOut } = {}) {
         await saveSurveyRecovery({ ...uploaded, recoveryUserId: currentUser?.id });
         throw new Error('Another tab changed this facility. Your copy is in Recovery backups. Reload before syncing.');
       }
-      const pushResult = await pushSurvey(uploaded);
+      const pushResult = await pushSurveySafely(uploaded);
       if (pushResult?.conflict) {
         setConflictId(uploaded.id);
         setSyncState('conflict');
@@ -479,6 +483,43 @@ export default function App({ currentUser = null, onSignOut } = {}) {
     })();
     uploadInFlight.current = task;
     try { return await task; } finally { uploadInFlight.current = null; }
+  }
+
+  /**
+   * The other way out of a real conflict: keep what this device holds.
+   *
+   * Before this there was only "use server", so a surveyor whose phone held
+   * the right copy could never upload it and the facility sat on "waiting to
+   * sync" indefinitely. The server copy is saved to Recovery backups first.
+   * The push builds on the server revision the surveyor just compared, and
+   * the commit only upserts this device's snags and photos and deletes only
+   * what was deleted here, so snags and photos added on the other device stay
+   * on the server and come back down with the refresh below.
+   */
+  async function keepDeviceAfterRecovery(device, remote) {
+    const unchanged = () => surveyRef.current?.id === device.id && contentKey(surveyRef.current) === contentKey(device);
+    if (!unchanged()) throw new Error('The device copy changed. Compare again before choosing.');
+    await saveSurveyRecovery({ ...remote, recoveryUserId: currentUser?.id });
+    if (!unchanged()) throw new Error('New edits were made during backup. They remain on this screen.');
+    surveyRef.current = { ...surveyRef.current, cloudRevision: remote.cloudRevision };
+    const res = await pushAndSettle();
+    if (res?.conflict) {
+      throw new Error(res.reason === 'stale' || res.serverRevision != null
+        ? 'The server copy changed again. Compare again; your edits are still here.'
+        : 'The server refused this copy. Your edits are still here and the server copy is in Recovery backups.');
+    }
+    if (!res?.pushed) throw new Error('The upload did not finish. Your edits are still here; try again when online.');
+    const sent = surveyRef.current;
+    const merged = await pullSurvey(device.id, collectKnownPhotos(sent));
+    if (merged && surveyRef.current?.id === sent.id && contentKey(surveyRef.current) === contentKey(sent)) {
+      const stored = await saveSurveyOffline(merged, { pendingSync: false });
+      if (!stored?.conflict) {
+        markAsExternalChange();
+        surveyRef.current = merged;
+        setSurvey(merged);
+      }
+    }
+    setConflictId(null);
   }
 
   async function useServerAfterRecovery(device, remote) {
@@ -521,7 +562,7 @@ export default function App({ currentUser = null, onSignOut } = {}) {
    * connection retries it.
    */
   async function uploadSurveyRecord(record) {
-    const result = await uploadRecord(record, { push: pushSurvey, markSynced: markSurveySynced });
+    const result = await uploadRecord(record, { push: pushSurveySafely, markSynced: markSurveySynced });
     if (result?.conflict) setConflictId(record.id);
     if (result?.pushed && surveyRef.current?.id === record.id) {
       const next = settleUpload(surveyRef.current, record, result);
@@ -554,6 +595,8 @@ export default function App({ currentUser = null, onSignOut } = {}) {
     let failed = 0;
     let authError = null;
     const problems = [];
+    flushInFlight.current += 1;
+    try {
     for (const local of stored) {
       if (!local || !local.id || !local.pendingSync) continue;
       if (local.id === surveyRef.current?.id) continue;   // pushAndSettle owns this one
@@ -583,6 +626,9 @@ export default function App({ currentUser = null, onSignOut } = {}) {
         problems.push(`${label}: ${err.message}`);
         console.info('[sync] still pending, will retry on the next connection:', local.id, err.message);
       }
+    }
+    } finally {
+      flushInFlight.current -= 1;
     }
 
     if (flushed) {
@@ -2387,7 +2433,7 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
       )}
 
       {showRecoveries && <RecoveryBackups userId={currentUser?.id} onClose={() => setShowRecoveries(false)} />}
-      {conflictId === survey?.id && <SyncConflict key={survey.id} survey={survey} onUseServer={useServerAfterRecovery} />}
+      {conflictId === survey?.id && <SyncConflict key={survey.id} survey={survey} onUseServer={useServerAfterRecovery} onKeepDevice={keepDeviceAfterRecovery} />}
       {validationIssues.length > 0 && <section role="alert" className="mx-4 my-2 p-4 rounded-xl border border-rose-200 bg-rose-50">
         <h2 className="font-semibold text-rose-900">Complete these fields before submitting. Your draft is kept.</h2>
         <ul className="list-disc pl-5 mt-2 text-sm text-rose-800">{validationIssues.map((issue, index) => <li key={index}>

@@ -1,3 +1,4 @@
+import { clearPushAttempt } from './syncHeal';
 /**
  * Offline-first IndexedDB Storage Engine
  * Handles large surveys and compressed photos with no 5MB localStorage limit.
@@ -129,7 +130,11 @@ export async function markSurveySynced(surveyId, uploaded, result) {
         store.put(next);
         settled = !next.pendingSync;
       };
-      tx.oncomplete = () => resolve(settled);
+      tx.oncomplete = () => {
+        // The receipt is down, so the pre-commit note is no longer needed.
+        if (result?.pushed) clearPushAttempt(surveyId);
+        resolve(settled);
+      };
       tx.onerror = () => reject(tx.error);
       tx.onabort = () => reject(tx.error || new Error('Sync receipt could not be saved'));
     });
