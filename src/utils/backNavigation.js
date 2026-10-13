@@ -1,12 +1,16 @@
-export function backTarget({ view, qhse = false, hasProject = false, activeTab = 'facility' }) {
+// `hub` names the module's own project screen ('qhse' or 'meter'); Condition
+// Survey uses the facilities screen and tabs instead. `qhse: true` is the
+// older spelling of hub 'qhse'.
+const HUB_LABELS = { qhse: 'Project inspections', meter: 'Project meter mappings' };
+export function backTarget({ view, qhse = false, hub = qhse ? 'qhse' : null, hasProject = false, activeTab = 'facility' }) {
   if (view === 'modules') return null;
   if (view === 'projects') return { view: 'modules', label: 'Choose module' };
-  if (view === 'qhse' || view === 'facilities') return { view: 'projects', label: 'Projects' };
+  if (view in HUB_LABELS || view === 'facilities') return { view: 'projects', label: 'Projects' };
   if (view === 'survey') {
-    if (!qhse && activeTab !== 'facility') return { view: 'survey', tab: 'facility', label: 'Facility details' };
-    return { view: hasProject ? (qhse ? 'qhse' : 'facilities') : 'projects', label: qhse && hasProject ? 'Project inspections' : hasProject ? 'Project facilities' : 'Projects' };
+    if (!hub && activeTab !== 'facility') return { view: 'survey', tab: 'facility', label: 'Facility details' };
+    return { view: hasProject ? (hub || 'facilities') : 'projects', label: hub && hasProject ? HUB_LABELS[hub] : hasProject ? 'Project facilities' : 'Projects' };
   }
-  if (view === 'reports' && hasProject && qhse) return { view: 'qhse', label: 'Project inspections' };
+  if (view === 'reports' && hasProject && hub) return { view: hub, label: HUB_LABELS[hub] };
   if (['photos', 'reports'].includes(view) && hasProject) return { view: 'facilities', label: 'Project facilities' };
   return { view: 'modules', label: 'Choose module' };
 }

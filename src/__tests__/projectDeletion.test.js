@@ -13,15 +13,15 @@ vi.mock('../utils/supabaseClient', () => ({ isCloudConfigured: true, supabase: {
 const { setProjectDeleted } = await import('../utils/projects');
 const { readProjectTrash } = await import('../utils/projectTrash');
 beforeEach(() => { state.records = []; state.patch = null; state.refused = false; state.checks = []; state.original = { notes: 'Keep original notes', updated_at: 'old-revision' }; });
-test('shared projects cannot be removed while either FM facilities or live QHSE inspections remain', async () => {
-  for (const facility of [{ facilityName: 'FM' }, { module: 'qhse', qhse: {} }]) {
+test('shared projects cannot be removed while FM facilities, live QHSE inspections or live meter mappings remain', async () => {
+  for (const facility of [{ facilityName: 'FM' }, { module: 'qhse', qhse: {} }, { module: 'meter', meter: {} }]) {
     state.records = [{ id: 'report', facility }];
-    await expect(setProjectDeleted({ id: 'p' }, true)).rejects.toThrow('existing inspections and Condition Survey');
+    await expect(setProjectDeleted({ id: 'p' }, true)).rejects.toThrow('existing inspections, meter mappings and Condition Survey');
     expect(state.patch).toBeNull();
   }
 });
 test('project deletion retains deleted inspection records and notes and refuses a concurrent project edit', async () => {
-  state.records = [{ id: 'deleted', facility: { module: 'qhse', qhse: { deletedAt: 'date' } } }];
+  state.records = [{ id: 'deleted', facility: { module: 'qhse', qhse: { deletedAt: 'date' } } }, { id: 'deleted-meter', facility: { module: 'meter', meter: { deletedAt: 'date' } } }];
   await setProjectDeleted({ id: 'p' }, true);
   expect(readProjectTrash(state.patch.notes).notes).toBe('Keep original notes');
   expect(state.checks).toContainEqual(['updated_at','old-revision']);

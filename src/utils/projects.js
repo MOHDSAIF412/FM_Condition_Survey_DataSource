@@ -14,7 +14,7 @@
  */
 import { supabase, isCloudConfigured } from './supabaseClient';
 import { readProjectTrash, projectTrashNotes } from './projectTrash';
-import { isDeletedInspection } from '../qhse/lifecycle';
+import { isConditionSurvey, isDeletedRecord } from './modules';
 
 const PROJECTS_CACHE_KEY = 'fm_projects_cache';
 const ACTIVE_PROJECT_KEY = 'fm_active_project_id';
@@ -100,7 +100,7 @@ export async function listProjects({ includeDeleted = false } = {}) {
   if (!countErr) {
     const counts = {};
     for (const row of facilityRows || []) {
-      if (row.project_id && row.facility?.module !== 'qhse') counts[row.project_id] = (counts[row.project_id] || 0) + 1;
+      if (row.project_id && isConditionSurvey(row)) counts[row.project_id] = (counts[row.project_id] || 0) + 1;
     }
     for (const p of projects) p.facilityCount = counts[p.id] || 0;
   }
@@ -120,7 +120,7 @@ export async function setProjectDeleted(project, deleted) {
     for (let from = 0; ; from += 1000) {
       const { data, error } = await supabase.from('condition_surveys').select('id,facility').eq('project_id', project.id).range(from, from + 999);
       if (error) throw new Error('Could not check the project reports. Try again when connected.');
-      if ((data || []).some(s => !isDeletedInspection(s))) throw new Error('Delete or move the existing inspections and Condition Survey facilities before deleting this shared project.');
+      if ((data || []).some(s => !isDeletedRecord(s))) throw new Error('Delete or move the existing inspections, meter mappings and Condition Survey facilities before deleting this shared project.');
       if (!data || data.length < 1000) break;
     }
   }

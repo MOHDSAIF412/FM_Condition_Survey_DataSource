@@ -31,9 +31,13 @@ import { backTarget, installAndroidBackHandler } from './utils/backNavigation';
 import { App as NativeApp } from '@capacitor/app';
 import { isLegacyQhse, moveLegacyQhse } from './qhse/legacy';
 import { createQhse, isQhse } from './qhse/model';
-import { changeInspectionState, isDeletedInspection } from './qhse/lifecycle';
+import { createMeterMapping, isMeter, changeMeterState } from './meter/model';
+import { isConditionSurvey, isDeletedRecord, moduleLabels } from './utils/modules';
+import { changeInspectionState } from './qhse/lifecycle';
 const QhseHub = lazy(() => import('./qhse/QhseInspection').then(m => ({ default: m.QhseHub })));
 const QhseInspection = lazy(() => import('./qhse/QhseInspection'));
+const MeterHub = lazy(() => import('./meter/MeterMapping').then(m => ({ default: m.MeterHub })));
+const MeterMapping = lazy(() => import('./meter/MeterMapping'));
 import PortalHome from './portal/PortalHome';
 import AllFacilities from './portal/AllFacilities';
 import ReviewApproval from './portal/ReviewApproval';
@@ -682,7 +686,7 @@ export default function App({ currentUser = null, onSignOut } = {}) {
         const saved = await loadCurrentSurveyOffline();
 
         const localHasUnpushedWork =
-          saved && saved.pendingSync && Array.isArray(saved.items) && (saved.items.length > 0 || isQhse(saved));
+          saved && saved.pendingSync && Array.isArray(saved.items) && (saved.items.length > 0 || !isConditionSurvey(saved));
 
         // Work done with no signal has not reached the server yet. Pulling here
         // would overwrite it with the older server copy and lose the survey.
@@ -1320,7 +1324,7 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
     activeProjectRef.current = project;
     setActiveProject(project);
     setActiveProjectId(project.id);
-    setView(workModule === 'qhse' ? 'qhse' : 'facilities');
+    setView(['qhse', 'meter'].includes(workModule) ? workModule : 'facilities');
     refreshSurveyList();
   };
 
@@ -1404,7 +1408,7 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
     if (!['modules', 'admin', 'reports'].includes(target.view)) setWorkModule('condition');
     if (target.view === 'allFacilities') { openFacilityList('all'); return; }
     if (target.view === 'facilities' && !activeProjectRef.current) { setView('projects'); return; }
-    if (['home', 'qhse', 'reports'].includes(target.view)) refreshSurveyList();
+    if (['home', 'qhse', 'meter', 'reports'].includes(target.view)) refreshSurveyList();
     setView(target.view);
   };
 
@@ -1427,6 +1431,25 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
     setView('survey'); await refreshSurveyList();
   }
 
+  async function startMeter(projectId) {
+    if (!mayEditSurveys) return;
+    if (surveyRef.current) {
+      const kept = await saveSurveyOffline(surveyRef.current);
+      if (kept?.conflict) throw new Error('Resolve the current record conflict before starting another.');
+    }
+    const project = projects.find(p => p.id === projectId) || activeProjectRef.current;
+    if (!project || project.id !== projectId) throw new Error('Select a project first.');
+    const fresh = createMeterMapping(projectId, await nextFacilityNumber(), project);
+    fresh.facility.surveyorName = currentUser?.full_name || currentUser?.name || '';
+    setWorkModule('meter');
+    const saved = await saveSurveyOffline(fresh, { pendingSync: true });
+    if (saved?.conflict) throw new Error('Could not create the meter mapping.');
+    skipCloudPushRef.current = false;
+    surveyRef.current = fresh; setSurvey(fresh);
+    setActiveProject(projects.find(p => p.id === projectId) || null);
+    setView('survey'); await refreshSurveyList();
+  }
+
   /** Opens a facility from the dashboard or search, with its project as context. */
   const openSurveyFromPortal = async (surveyId) => {
     const row = surveyList.find((s) => s.id === surveyId);
@@ -1436,7 +1459,7 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
       setActiveProject(project);
       setActiveProjectId(project.id);
     }
-    setWorkModule(isQhse(row) ? 'qhse' : 'condition');
+    setWorkModule(isQhse(row) ? 'qhse' : isMeter(row) ? 'meter' : 'condition');
     await handleOpenSurvey(surveyId);
   };
 
@@ -1461,7 +1484,8 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
 
   const backBusy = useRef(false);
   const backAction = useRef(null);
-  const parentScreen = backTarget({ view, qhse: view === 'reports' ? workModule === 'qhse' : isQhse(survey), hasProject: !!activeProject, activeTab });
+  const openHub = view === 'reports' ? (['qhse', 'meter'].includes(workModule) ? workModule : null) : isQhse(survey) ? 'qhse' : isMeter(survey) ? 'meter' : null;
+  const parentScreen = backTarget({ view, hub: openHub, hasProject: !!activeProject, activeTab });
   async function handleAppBack(native = false) {
     if (backBusy.current) return;
     if (navOpen) { setNavOpen(false); return; }
@@ -1524,14 +1548,15 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
     }
     const record = await handleOpenSurvey(id);
     if (!record) throw new Error('Could not load the inspection. Check your connection.');
-    const next = changeInspectionState(record, action);
+    const meter = isMeter(record);
+    const next = meter ? changeMeterState(record, action) : changeInspectionState(record, action);
     if (['delete', 'submit'].includes(action)) await saveSurveyRecovery({ ...record, recoveryUserId: currentUser?.id, recoveryReason: action === 'submit' ? 'Before submission' : 'Before deletion' });
     const saved = await saveSurveyOffline(next, { pendingSync: true });
     if (saved?.conflict) throw new Error('This inspection changed in another tab. Resolve the conflict first.');
     surveyRef.current = saved; setSurvey(saved);
     skipCloudPushRef.current = false; hasUnpushedEditsRef.current = true;
-    setWorkModule('qhse');
-    if (deleting) setView('qhse');
+    setWorkModule(meter ? 'meter' : 'qhse');
+    if (deleting) setView(meter ? 'meter' : 'qhse');
     if (isCloudConfigured && isOnline()) {
       try {
         setSyncState('syncing'); const result = await uploadSurveyRecord(saved);
@@ -1545,8 +1570,8 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
     if (!mayDeleteProjects) throw new Error('Only the owner can delete or restore projects.');
     if (deleted) {
       const local = await listAllSurveysOffline();
-      if (local.some(s => s.projectId === project.id && !isDeletedInspection(s)))
-        throw new Error('Delete or move the existing inspections and Condition Survey facilities before deleting this shared project.');
+      if (local.some(s => s.projectId === project.id && !isDeletedRecord(s)))
+        throw new Error('Delete or move the existing inspections, meter mappings and Condition Survey facilities before deleting this shared project.');
     }
     await setProjectDeleted(project, deleted);
     if (deleted && activeProjectRef.current?.id === project.id) {
@@ -1600,7 +1625,7 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
 
   // Every list and count works from these: the facilities with each one's
   // due date resolved (its own, else its project's), for Overdue.
-  const listRows = useMemo(() => withDueDates(surveyList.filter(s => !isQhse(s)), projects), [surveyList, projects]);
+  const listRows = useMemo(() => withDueDates(surveyList.filter(isConditionSurvey), projects), [surveyList, projects]);
 
   /** Facilities belonging to the open project, and nothing else. */
   const facilitiesInProject = activeProject
@@ -1944,13 +1969,13 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
         // On the hub screens the subtitle is the project you are in, not a
         // facility -- "New Facility Assessment" there would be misleading.
         contextLabel={
-          view === 'survey' && isQhse(survey) ? 'QHSE Inspection' : view === 'survey'
+          view === 'survey' && !isConditionSurvey(survey) ? moduleLabels(survey.facility.module).name : view === 'survey'
             ? ''
-            : (view === 'modules' ? 'Choose a module' : `${workModule === 'qhse' ? 'QHSE Inspection' : 'Condition Survey'}${activeProject && view !== 'projects' ? ' · ' + activeProject.name : ''}`)
+            : (view === 'modules' ? 'Choose a module' : `${moduleLabels(workModule).name}${activeProject && view !== 'projects' ? ' · ' + activeProject.name : ''}`)
         }
         // Reports need a facility behind them, so the shortcut only belongs on
         // the survey screens; the hub screens have their own Reports entry.
-        showReports={view === 'survey' && !isQhse(survey)}
+        showReports={view === 'survey' && isConditionSurvey(survey)}
         onOpenUsers={() => (isWebPortal ? openAdmin('users') : setView('users'))}
         onOpenNav={() => setNavOpen(true)}
         searchSlot={isWebPortal ? (
@@ -1967,7 +1992,7 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
         onSignOut={onSignOut ? handleSignOut : undefined}
       />
 
-      {parentScreen && !['projects', 'qhse'].includes(view) && !(view === 'survey' && isQhse(survey)) && <div className="px-3 sm:px-8 py-3"><BackButton onClick={() => handleAppBack()}>Back to {parentScreen.label}</BackButton></div>}
+      {parentScreen && !['projects', 'qhse', 'meter'].includes(view) && !(view === 'survey' && !isConditionSurvey(survey)) && <div className="px-3 sm:px-8 py-3"><BackButton onClick={() => handleAppBack()}>Back to {parentScreen.label}</BackButton></div>}
 
       {showPasswordModal && (
         <ChangePasswordModal onClose={() => setShowPasswordModal(false)} />
@@ -1976,7 +2001,7 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
       {/* Navigation belongs to a chosen facility: the five tabs all act on one
           survey, so showing them before a facility is picked would offer
           modules with nothing behind them. */}
-      {view === 'survey' && !isQhse(survey) && (
+      {view === 'survey' && isConditionSurvey(survey) && (
         <Navigation
           activeTab={activeTab}
           setActiveTab={handleTabChange}
@@ -2022,14 +2047,28 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
           onAction={handleQhseAction}
           onBackup={handleExportJSON} />
       </main>}
+      {view === 'meter' && <main className="flex-1 max-w-6xl w-full mx-auto px-3 sm:px-8 py-6 safe-area-content-pb">
+        <MeterHub surveys={surveyList.filter(s => isMeter(s) && s.projectId === activeProject?.id)} project={activeProject} canEdit={mayEditSurveys} canDelete={!isCloudConfigured || mayDeleteSnags} canExport={!isCloudConfigured || mayDownloadReports} onAction={handleQhseAction}
+          onReports={() => navigatePortal({ view: 'reports', reportModule: 'meter' })}
+          onBack={handleAppBack} onCreate={startMeter} onOpen={openSurveyFromPortal} />
+      </main>}
+      {view === 'survey' && isMeter(survey) && <main className="flex-1 max-w-6xl w-full mx-auto px-3 sm:px-6 py-6 safe-area-content-pb">
+        <MeterMapping project={activeProject} survey={survey} canEdit={mayEditOpen} canDelete={!isCloudConfigured || mayDeleteSnags} canExport={!isCloudConfigured || mayDownloadReports}
+          onFacility={handleUpdateFacility} onItem={(item, options) => { if (surveyRef.current?.id !== survey.id) throw new Error('Reopen the original mapping to attach these photos.'); handleUpdateItem(item, options); }} onDelete={handleDeleteItem}
+          onAdd={async item => { if (!mayEditOpen) return; if (surveyRef.current?.id !== survey.id) throw new Error('Reopen the original mapping to add meters.'); const next = { ...surveyRef.current, items: [...surveyRef.current.items, item] }; surveyRef.current = next; setSurvey(next); await saveSurveyOffline(next); }}
+          onSignatures={signatures => { if (mayEditOpen) setSurvey(prev => ({ ...prev, signatures })); }}
+          onBack={handleAppBack}
+          onAction={handleQhseAction}
+          onBackup={handleExportJSON} />
+      </main>}
       {view === 'projects' && (
         <main className="flex-1 w-full px-3 sm:px-8 pt-4 sm:pt-6 safe-area-content-pb md:pb-8">
           <ProjectDashboard
             key={workModule}
-            moduleName={workModule === 'qhse' ? 'QHSE Inspection' : 'Condition Survey'}
-            countLabel={workModule === 'qhse' ? 'inspections' : 'facilities'}
+            moduleName={moduleLabels(workModule).name}
+            countLabel={moduleLabels(workModule).records}
             onBack={handleAppBack}
-            projects={workModule === 'qhse' ? projects.map(p => ({ ...p, facilityCount: surveyList.filter(s => isQhse(s) && !isDeletedInspection(s) && s.projectId === p.id).length })) : projects}
+            projects={workModule !== 'condition' ? projects.map(p => ({ ...p, facilityCount: surveyList.filter(s => s.facility?.module === workModule && !isDeletedRecord(s) && s.projectId === p.id).length })) : projects}
             deletedProjects={deletedProjects}
             onDeleteProject={mayDeleteProjects ? p => handleProjectTrash(p, true) : null}
             onRestoreProject={mayDeleteProjects ? p => handleProjectTrash(p, false) : null}
@@ -2230,6 +2269,7 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
           <main className="flex-1 w-full px-3 sm:px-8 pt-4 sm:pt-6 safe-area-content-pb md:pb-8">
             <ReportDashboard
               qhseSurveys={surveyList.filter(isQhse)}
+              meterSurveys={surveyList.filter(isMeter)}
               initialModule={workModule}
               onModuleChange={setWorkModule}
               projects={projects}
@@ -2244,7 +2284,7 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
       {/* Main Content Area */}
       {/* Facility bar: which facility is open, switch to another, and submit
           this one when it is finished. */}
-      {view === 'survey' && !isQhse(survey) && (
+      {view === 'survey' && isConditionSurvey(survey) && (
       <div className="bg-white border-b border-slate-200">
         <div className="max-w-6xl mx-auto px-3 sm:px-6 py-2 flex items-center gap-3 flex-wrap">
           <div className="flex items-center gap-2 min-w-0 w-full sm:w-auto sm:flex-1">
@@ -2349,7 +2389,7 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
           at 50 assets, which is what made switching feel slow. Keeping them
           mounted makes a switch a style change instead of a rebuild, and it
           also preserves each tab's scroll position and in-progress input. */}
-      {view === 'survey' && !isQhse(survey) && (
+      {view === 'survey' && isConditionSurvey(survey) && (
       <main className="flex-1 max-w-6xl w-full mx-auto px-3 sm:px-6 pt-4 sm:pt-6 safe-area-content-pb md:pb-8">
         {/* A role without Edit surveys sees the facility with every control
             disabled. The database refuses its changes anyway; this keeps the
@@ -2419,7 +2459,7 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
       </main>
       )}
 
-      {workModule && ['projects', 'qhse', 'facilities', 'reports'].includes(view) && <WorkspaceBottomNav
+      {workModule && ['projects', 'qhse', 'meter', 'facilities', 'reports'].includes(view) && <WorkspaceBottomNav
         view={view}
         onProjects={() => navigatePortal({ module: workModule })}
         onReports={() => navigatePortal({ view: 'reports', reportModule: workModule })}
