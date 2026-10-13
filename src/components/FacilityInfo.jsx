@@ -99,22 +99,22 @@ export default function FacilityInfo({ facility = {}, onChange, onCreate, creati
   return (
     <div className="max-w-4xl mx-auto space-y-6 pb-8">
       {/* Introduction Card */}
-      <div className="bg-gradient-to-r from-sky-900 to-slate-900 rounded-2xl p-5 sm:p-6 text-white shadow-md">
+      <div className="bg-gradient-to-br from-ocs-600 via-ocs-700 to-ocs-900 rounded-3xl p-5 sm:p-6 text-white shadow-raised">
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div className="flex items-start space-x-4 min-w-0">
-            <div className="p-3 bg-white/10 rounded-xl shrink-0">
-              <Building className="w-8 h-8 text-sky-400" />
+            <div className="p-3 bg-white/10 ring-1 ring-white/15 rounded-xl shrink-0">
+              <Building className="w-8 h-8 text-white" />
             </div>
             <div className="min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
                 <h2 className="text-xl font-bold">Facility & Site Information</h2>
                 {facility.facilityCode && (
-                  <span className="px-2 py-0.5 rounded-md bg-sky-400/20 text-sky-200 text-[11px] font-bold tracking-wide border border-sky-400/30">
+                  <span className="px-2 py-0.5 rounded-md bg-white/10 text-white text-[11px] font-bold tracking-wide border border-white/20">
                     {facility.facilityCode}
                   </span>
                 )}
               </div>
-              <p className="text-sky-200/80 text-xs mt-0.5 truncate">
+              <p className="text-white/70 text-xs mt-0.5 truncate">
                 {facility.facilityName || facility.buildingName
                   ? `Working on: ${facility.facilityName || facility.buildingName}`
                   : 'Enter this facility’s name below, then press Create Facility.'}
@@ -139,8 +139,8 @@ export default function FacilityInfo({ facility = {}, onChange, onCreate, creati
       {/* Facility & Primary Identification */}
       <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm space-y-4">
         <div className="flex items-center justify-between flex-wrap gap-2">
-          <h3 className="text-sm font-bold uppercase tracking-wider text-slate-500 flex items-center gap-2">
-            <Building className="w-4 h-4 text-sky-600" />
+          <h3 className="text-base font-bold text-ocs-600 flex items-center gap-2">
+            <Building className="w-4 h-4 text-ocs-600" />
             {sys.sectionLabel('facility_identification', 'Facility & Complex Identification')}
           </h3>
         </div>
@@ -210,7 +210,7 @@ export default function FacilityInfo({ facility = {}, onChange, onCreate, creati
       {/* Google Location & GPS Details */}
       <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm space-y-4">
         <div className="flex items-center justify-between flex-wrap gap-2">
-          <h3 className="text-sm font-bold uppercase tracking-wider text-slate-500 flex items-center gap-2">
+          <h3 className="text-base font-bold text-ocs-600 flex items-center gap-2">
             <Compass className="w-4 h-4 text-emerald-600" />
             {sys.sectionLabel('facility_location', 'Google Location & GPS Coordinates')}
           </h3>
@@ -352,8 +352,8 @@ export default function FacilityInfo({ facility = {}, onChange, onCreate, creati
       {/* Scope Details */}
       {(f('scopeNotes').visible || sys.hasVisibleCustom('facility_scope')) && (
       <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm space-y-4">
-        <h3 className="text-sm font-bold uppercase tracking-wider text-slate-500 flex items-center gap-2">
-          <FileText className="w-4 h-4 text-sky-600" />
+        <h3 className="text-base font-bold text-ocs-600 flex items-center gap-2">
+          <FileText className="w-4 h-4 text-ocs-600" />
           {sys.sectionLabel('facility_scope', 'Survey Scope & Methodology')}
         </h3>
 
@@ -402,7 +402,7 @@ export default function FacilityInfo({ facility = {}, onChange, onCreate, creati
         <button
           onClick={() => onCreate(canStartFromTemplate ? templates.find((t) => t.id === templateId) || null : null)}
           disabled={creating || !facility.facilityName?.trim()}
-          className="w-full sm:w-auto px-6 py-3 rounded-xl bg-sky-600 hover:bg-sky-500 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold text-sm shadow-md transition-all flex items-center justify-center space-x-2"
+          className="w-full sm:w-auto px-6 py-3 rounded-xl bg-ocs-600 hover:bg-ocs-700 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold text-sm shadow-md transition-all flex items-center justify-center space-x-2"
         >
           {creating
             ? <Loader2 className="w-4 h-4 animate-spin" />

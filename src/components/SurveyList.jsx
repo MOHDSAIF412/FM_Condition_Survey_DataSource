@@ -239,7 +239,7 @@ export default function SurveyList({
           </p>
           <button
             onClick={() => handleAddNewAsset()}
-            className="px-4 py-2 rounded-xl bg-sky-600 text-white font-semibold text-xs inline-flex items-center space-x-1.5"
+            className="px-4 py-2 rounded-xl bg-ocs-600 hover:bg-ocs-700 text-white font-semibold text-xs inline-flex items-center space-x-1.5"
           >
             <Plus className="w-3.5 h-3.5" />
             <span>Add Snag</span>

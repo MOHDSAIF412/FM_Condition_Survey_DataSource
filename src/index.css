@@ -87,6 +87,10 @@
 .workspace-app h3 { letter-spacing: -0.01em; }
 
 .inspection-section { scroll-margin-top: 140px; }
+/* The facility name in the facility bar is also its switcher: a plain line of
+   text, not a boxed field. */
+.workspace-app select.facility-switcher { min-height: 0; border-radius: 6px; line-height: 1.35; }
+
 /* Inspection and mapping cards share one surface: soft corners, a hairline
    border and a barely-there shadow. */
 .inspection-form > fieldset > div.bg-white,

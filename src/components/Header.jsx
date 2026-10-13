@@ -141,9 +141,10 @@ export default function Header({
             </span>
           )}
           {showReports && (
+            // Phones reach the report from the bottom tab bar, so the header keeps its room for the title.
             <button
               onClick={onOpenReport}
-              className="flex items-center gap-1.5 px-2.5 sm:px-3.5 py-2 rounded-xl bg-flame-500 hover:bg-flame-600 active:scale-[0.97] text-white font-semibold text-xs sm:text-sm shadow-card transition-[background-color,transform] duration-150"
+              className="hidden md:flex items-center gap-1.5 px-2.5 sm:px-3.5 py-2 rounded-xl bg-flame-500 hover:bg-flame-600 active:scale-[0.97] text-white font-semibold text-xs sm:text-sm shadow-card transition-[background-color,transform] duration-150"
             >
               <FileText className="w-4 h-4 shrink-0" aria-hidden="true" />
               <span className="sr-only sm:hidden">Report</span>

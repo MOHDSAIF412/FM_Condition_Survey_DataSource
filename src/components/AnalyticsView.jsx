@@ -45,10 +45,10 @@ export default function AnalyticsView({ items = [], onOpenReport }) {
   return (
     <div className="max-w-4xl mx-auto space-y-6 pb-8">
       {/* Top Header Card */}
-      <div className="bg-gradient-to-r from-slate-900 to-sky-950 rounded-2xl p-5 sm:p-6 text-white shadow-md">
+      <div className="bg-gradient-to-br from-ocs-600 via-ocs-700 to-ocs-900 rounded-3xl p-5 sm:p-6 text-white shadow-raised">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <span className="text-xs font-bold uppercase tracking-wider text-sky-400">
+            <span className="text-xs font-bold uppercase tracking-wider text-flame-300">
               Departmental Remediation & Snagging Analytics
             </span>
             <h2 className="text-xl sm:text-2xl font-bold mt-0.5">
@@ -58,7 +58,7 @@ export default function AnalyticsView({ items = [], onOpenReport }) {
 
           <button
             onClick={onOpenReport}
-            className="px-4 py-2.5 rounded-xl bg-sky-500 hover:bg-sky-400 text-white font-semibold text-xs sm:text-sm shadow-lg flex items-center justify-center space-x-2 shrink-0 active:scale-95 transition-all"
+            className="px-4 py-2.5 rounded-xl bg-white hover:bg-ocs-50 text-ocs-700 font-semibold text-xs sm:text-sm shadow-lg flex items-center justify-center space-x-2 shrink-0 active:scale-95 transition-all"
           >
             <FileText className="w-4 h-4" />
             <span>Generate Reports</span>
@@ -152,8 +152,8 @@ export default function AnalyticsView({ items = [], onOpenReport }) {
       {/* Departmental CapEx Breakdown (HVAC, Electrical, Carpentry, Painting, Civil, etc.) */}
       <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm space-y-4">
         <div className="flex items-center justify-between">
-          <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider flex items-center gap-2">
-            <Wrench className="w-4 h-4 text-sky-600" />
+          <h3 className="text-base font-bold text-ocs-600 flex items-center gap-2">
+            <Wrench className="w-4 h-4 text-ocs-600" />
             Remedial CapEx by Maintenance Department / Trade
           </h3>
           <span className="text-xs text-slate-500 font-medium">
@@ -188,8 +188,8 @@ export default function AnalyticsView({ items = [], onOpenReport }) {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {/* Priority Schedule */}
         <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm space-y-3">
-          <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider flex items-center gap-2">
-            <TrendingDown className="w-4 h-4 text-sky-600" />
+          <h3 className="text-base font-bold text-ocs-600 flex items-center gap-2">
+            <TrendingDown className="w-4 h-4 text-ocs-600" />
             Remediation Priority Schedule
           </h3>
 
@@ -223,8 +223,8 @@ export default function AnalyticsView({ items = [], onOpenReport }) {
 
         {/* Breakdown by Location */}
         <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm space-y-3">
-          <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider flex items-center gap-2">
-            <MapPin className="w-4 h-4 text-sky-600" />
+          <h3 className="text-base font-bold text-ocs-600 flex items-center gap-2">
+            <MapPin className="w-4 h-4 text-ocs-600" />
             Defects by Location / Room
           </h3>
 
