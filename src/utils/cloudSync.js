@@ -1,3 +1,6 @@
+import { readDownloadedPhoto, storeDownloadedPhoto } from './downloadedPhotos';
+import { photoCache } from './photoCache';
+import { deviceStorageScope } from './deviceAccount';
 /**
  * Cloud sync for condition surveys.
  *
@@ -83,7 +86,20 @@ async function uploadPhoto(surveyId, itemId, photo) {
 }
 
 /** Downloads a photo back into a data URL so the PDF/Excel code is unchanged. */
-export async function downloadPhoto(storagePath) {
+export function downloadPhoto(storagePath) {
+  const scope = deviceStorageScope();
+  return photoCache.get(`${scope.accountId || 'offline'}:${storagePath}`, async () => {
+    if (scope.accountId !== deviceStorageScope().accountId) throw new Error('Photo account changed');
+    const cached = await readDownloadedPhoto(scope, storagePath);
+    if (scope.accountId !== deviceStorageScope().accountId) throw new Error('Photo account changed');
+    if (cached) return cached;
+    const bytes = await fetchPhotoBytes(storagePath);
+    if (scope.accountId !== deviceStorageScope().accountId) throw new Error('Photo account changed');
+    await storeDownloadedPhoto(scope, storagePath, bytes);
+    return bytes;
+  });
+}
+async function fetchPhotoBytes(storagePath) {
   const { data, error } = await supabase.storage.from(PHOTO_BUCKET).download(storagePath);
   if (error) throw error;
 
@@ -327,30 +343,20 @@ export async function surveyExistsOnServer(surveyId) {
   return !!(data && data.length);
 }
 
-export async function pullSurvey(surveyId, knownPhotos = {}) {
+export async function pullSurvey(surveyId, knownPhotos = {}, { includePhotoBytes = true } = {}) {
   if (!isCloudConfigured) return null;
 
-  const { data: rows, error } = await supabase
-    .from('condition_surveys')
-    .select('*')
-    .eq('id', surveyId)
-    .limit(1);
-  if (error) throw error;
-  if (!rows || !rows.length) return null;
-  const row = rows[0];
-
-  const itemResult = await supabase
-    .from('survey_items')
-    .select('*')
-    .eq('survey_id', surveyId)
-    .order('position');
+  // Independent reads share the same network round trip window.
+  const [surveyResult, itemResult, photoResult] = await Promise.all([
+    supabase.from('condition_surveys').select('*').eq('id', surveyId).limit(1),
+    supabase.from('survey_items').select('*').eq('survey_id', surveyId).order('position'),
+    supabase.from('survey_photos').select('*').eq('survey_id', surveyId)
+  ]);
+  if (surveyResult.error) throw surveyResult.error;
+  if (!surveyResult.data?.length) return null;
   if (itemResult.error) throw itemResult.error;
-
-  const photoResult = await supabase
-    .from('survey_photos')
-    .select('*')
-    .eq('survey_id', surveyId);
   if (photoResult.error) throw photoResult.error;
+  const row = surveyResult.data[0];
 
   // Photos the device already holds are reused; the rest download in parallel.
   // One after another, a facility with forty photos took long enough to open
@@ -358,6 +364,7 @@ export async function pullSurvey(surveyId, knownPhotos = {}) {
   const photoRows = photoResult.data || [];
   const withBytes = await mapWithConcurrency(photoRows, PHOTO_FETCH_CONCURRENCY, async (p) => {
     if (knownPhotos[p.id]) return knownPhotos[p.id];
+    if (!includePhotoBytes) return null;
     try {
       return await downloadPhoto(p.storage_path);
     } catch (err) {

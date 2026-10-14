@@ -1,4 +1,6 @@
-import React, { useEffect, useRef, useState } from 'react';
+import { useStableEvent } from '../hooks/useStableEvent';
+import CloudPhoto from '../components/CloudPhoto';
+import React, { useEffect, useRef, useState, useMemo } from 'react';
 import { Capacitor } from '@capacitor/core';
 import { captureFromCamera, pickFromGallery, photosFromFiles } from '../utils/photoCapture';
 import { hydratePhotos } from '../utils/cloudSync';
@@ -23,6 +25,32 @@ function Field({ label, value, onChange, multiline, ...props }) {
   return <label className="block text-sm font-semibold text-slate-700">{label}<Tag {...props} className={`${control} mt-1 font-normal`} value={value || ''} onChange={e => onChange(e.target.value)} rows={multiline ? 3 : undefined} /></label>;
 }
 
+const FindingCard = React.memo(function FindingCard({ item, index, fields, onItem, onDelete, choosePhotos, busy, canDelete }) {
+  const data = findingData(item);
+  const custom = (key, value) => onItem({ ...item, customValues: { ...item.customValues, [key]: value } });
+  return <article id={`qhse-entry-${item.id}`} className="qhse-finding bg-white border rounded-xl p-5 space-y-4" style={{ borderLeft: `5px solid #${riskColor(data.severity)}` }}>
+    <div className="flex justify-between gap-3"><h3 className="font-bold text-ocs-600">{item.customValues?.qhseEvidenceOnly ? 'Report photos' : `Finding ${index + 1}`}</h3>{canDelete && <button className="text-red-700 text-sm" onClick={() => { if (confirm('Remove this entry and its photos?')) onDelete(item.id); }}>Remove entry</button>}</div>
+    {!item.customValues?.qhseEvidenceOnly && <div className="grid sm:grid-cols-2 gap-4">
+      {fields.map(field => {
+        const value = field.custom ? item.customValues?.[field.id] : data[field.id];
+        const change = v => field.custom ? custom(field.id, v) : field.id === 'location' ? onItem({ ...item, location: v }) : field.id === 'description' ? onItem({ ...item, defectDescription: v }) : custom({ type: 'qhseType', status: 'findingStatus' }[field.id] || field.id, v);
+        if (['severity', 'status'].includes(field.id) && !field.custom) return <label key={field.id} className="text-sm font-semibold">{field.label}{field.required ? ' *' : ''}<select data-review-field={field.id} aria-label={`Finding ${index + 1} ${field.id}`} className={`${control} mt-1`} value={value} onChange={e => change(e.target.value)}><option value="">Select {field.label.toLowerCase()}</option>{(field.id === 'severity' ? SEVERITIES : ['Open', 'Closed']).map(v => <option key={v}>{v}</option>)}</select></label>;
+        return <Field data-review-field={field.id} key={field.id} label={field.label + (field.required ? ' *' : '')} type={field.type === 'textarea' ? undefined : field.type || 'text'} multiline={field.type === 'textarea'} list={field.id === 'type' ? 'qhse-types' : undefined} value={value} onChange={change} />;
+      })}
+    </div>}
+    <div className="flex flex-wrap gap-3">
+      <button disabled={busy} className="inline-flex items-center gap-2 border rounded-lg px-4 py-2 text-sm font-semibold text-ocs-600" onClick={() => choosePhotos(item.id, true)}><Camera size={18} />Take photo</button>
+      <button disabled={busy} className="inline-flex items-center gap-2 border rounded-lg px-4 py-2 text-sm font-semibold text-ocs-600" onClick={() => choosePhotos(item.id)}><Images size={18} />Add photos</button>
+    </div>
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">{data.photos.map((p, n) => <div key={p.id} className="border rounded-xl p-3 bg-slate-50 space-y-2">
+      <CloudPhoto photo={p} alt={`Finding ${index + 1}, photo ${n + 1}`} className="w-full h-56 sm:h-44 rounded-lg bg-white" />
+      <Field data-review-field={`photo-${p.id}`} label={`Photo ${n + 1} remark`} multiline value={p.caption} onChange={v => onItem({ ...item, photos: item.photos.map(photo => photo.id === p.id ? { ...photo, caption: v } : photo) })} />
+      {!item.customValues?.qhseEvidenceOnly && <label className="flex items-center gap-2 text-sm text-ocs-600"><input type="checkbox" checked={(item.customValues?.closurePhotoIds || []).includes(p.id)} onChange={e => custom('closurePhotoIds', e.target.checked ? [...new Set([...(item.customValues?.closurePhotoIds || []), p.id])] : (item.customValues?.closurePhotoIds || []).filter(id => id !== p.id))} />Closure evidence photo</label>}
+      {canDelete && <button className="text-xs text-red-700 mt-2" onClick={() => { if (confirm('Remove this photo?')) onItem({ ...item, photos: item.photos.filter(photo => photo.id !== p.id), _deletedPhotoId: p.id }, { persistNow: true }); }}>Remove photo</button>}
+    </div>)}</div>
+  </article>;
+});
+
 export function QhseHub({ surveys, legacySurveys = [], project, canEdit, canDelete, canExport, onBack, onCreate, onOpen, onMove, onAction, onReports }) {
   const [templateId, setTemplateId] = useState('');
   const [busy, setBusy] = useState(false), [error, setError] = useState('');
@@ -39,6 +67,11 @@ export function QhseHub({ surveys, legacySurveys = [], project, canEdit, canDele
     setBusy(true); setError('');
     try { await onCreate(project.id, templates.find(s => s.id === templateId)?.facility?.qhse?.layout || null); } catch (e) { setError(e.message); } finally { setBusy(false); }
   }
+  const openInspection = async id => {
+    if (busy) return;
+    setBusy(true); setError('');
+    try { await onOpen(id); } catch (e) { setError(e.message); } finally { setBusy(false); }
+  };
   const act = async (s, action, confirmed = false) => {
     if (action === 'delete' && !confirmed) { setPendingDelete(s); return; }
     setBusy(true); setError('');
@@ -64,11 +97,11 @@ export function QhseHub({ surveys, legacySurveys = [], project, canEdit, canDele
     {legacySurveys.length > 0 && <div className="rounded-xl border border-amber-200 bg-amber-50 p-5 space-y-3"><h2 className="font-bold text-ocs-600">Older QHSE reports found</h2><p className="text-sm text-slate-600">These reports are still in Condition Survey. Move them here with their existing photos and remarks.</p>{legacySurveys.map(s => <div key={s.id} className="flex flex-wrap justify-between gap-3 items-center"><span className="text-sm font-semibold">{s.title || s.facilityName}</span>{canEdit && <button disabled={busy} className="rounded-lg bg-[#293771] text-white px-4 py-2 text-sm disabled:opacity-50" onClick={async () => { setBusy(true); setError(''); try { await onMove(s.id); } catch (e) { setError(e.message); } finally { setBusy(false); } }}>Move to QHSE</button>}</div>)}</div>}
     <div ref={listRef} className="scroll-mt-24 flex flex-wrap justify-between items-center gap-3"><h2 className="text-lg font-bold text-ocs-600">{showDeleted ? 'Deleted inspections' : 'Project inspections'}</h2><div className="flex flex-wrap items-center gap-3">{!showDeleted && filter !== 'all' && <button className="text-sm font-semibold text-ocs-600" onClick={() => setFilter('all')}>Show all inspections</button>}{canDelete && <button className="min-h-11 text-sm font-semibold text-ocs-600" onClick={() => setShowDeleted(v => !v)}>{showDeleted ? 'Show inspections' : `Deleted inspections (${deleted.length})`}</button>}</div></div>
     <div className="grid sm:grid-cols-2 gap-4">{shown.map(s => <article key={s.id} className="p-5 bg-white rounded-xl border text-left shadow-sm">
-      <div className="flex flex-wrap justify-between gap-2"><span className="text-xs font-semibold text-[#F15F22]">{s.facility?.qhse?.reportNumber || 'Report number pending'}</span><span className={`text-xs font-semibold border rounded-md px-2 py-1 ${STAGE_BY_KEY[stageOf(s)].badge}`}>{showDeleted ? 'Deleted' : STAGE_BY_KEY[stageOf(s)].label}</span></div><button disabled={showDeleted || busy} onClick={() => onOpen(s.id)} className="min-h-11 font-bold text-ocs-600 mt-2 text-left">{s.facility?.qhse?.auditTitle || 'Site inspection report'}</button>
+      <div className="flex flex-wrap justify-between gap-2"><span className="text-xs font-semibold text-[#F15F22]">{s.facility?.qhse?.reportNumber || 'Report number pending'}</span><span className={`text-xs font-semibold border rounded-md px-2 py-1 ${STAGE_BY_KEY[stageOf(s)].badge}`}>{showDeleted ? 'Deleted' : STAGE_BY_KEY[stageOf(s)].label}</span></div><button disabled={showDeleted || busy} onClick={() => openInspection(s.id)} className="min-h-11 font-bold text-ocs-600 mt-2 text-left">{s.facility?.qhse?.auditTitle || 'Site inspection report'}</button>
       <p className="text-sm text-slate-600 mt-2">{s.facility?.address || project?.location || 'Location pending'}</p><p className="text-xs text-slate-500 mt-3">{s.itemCount ?? s.items?.length ?? 0} entries · {s.photoCount ?? s.items?.reduce((n, i) => n + (i.photos || []).length, 0) ?? 0} photos · {s.facility?.qhse?.conductedOn?.replace('T', ' ') || 'Date pending'}</p>
       {s.submittedAt && <p className="text-xs text-slate-500 mt-2">Last submitted: {new Date(s.submittedAt).toLocaleString()}</p>}
       {!showDeleted && <div className="mt-4"><QhseReportDownloads records={[s]} projectId={project?.id} canExport={canExport} /></div>}
-      <div className="flex flex-wrap gap-3 mt-3">{!showDeleted && <button type="button" disabled={busy} onClick={() => onOpen(s.id)} className="inline-flex items-center justify-center gap-2 min-h-11 rounded-xl border border-ocs-600 px-4 py-2 text-sm font-semibold text-ocs-600 disabled:opacity-50">{canEdit && !isLocked(s) && <Pencil size={16} aria-hidden="true" />}{canEdit && !isLocked(s) ? 'Edit inspection' : 'View inspection'}</button>}{canEdit && !showDeleted && ['draft','changes_requested'].includes(stageOf(s)) && <button disabled={busy} className="min-h-11 text-sm font-semibold text-ocs-600" onClick={() => act(s, 'submit')}>Submit report</button>}{canDelete && !isLocked(s) && <button disabled={busy} className="min-h-11 text-sm font-semibold text-red-700" onClick={() => act(s, showDeleted ? 'restore' : 'delete')}>{showDeleted ? 'Restore inspection' : 'Delete inspection'}</button>}</div>
+      <div className="flex flex-wrap gap-3 mt-3">{!showDeleted && <button type="button" disabled={busy} onClick={() => openInspection(s.id)} className="inline-flex items-center justify-center gap-2 min-h-11 rounded-xl border border-ocs-600 px-4 py-2 text-sm font-semibold text-ocs-600 disabled:opacity-50">{canEdit && !isLocked(s) && <Pencil size={16} aria-hidden="true" />}{busy ? 'Opening…' : canEdit && !isLocked(s) ? 'Edit inspection' : 'View inspection'}</button>}{canEdit && !showDeleted && ['draft','changes_requested'].includes(stageOf(s)) && <button disabled={busy} className="min-h-11 text-sm font-semibold text-ocs-600" onClick={() => act(s, 'submit')}>Submit report</button>}{canDelete && !isLocked(s) && <button disabled={busy} className="min-h-11 text-sm font-semibold text-red-700" onClick={() => act(s, showDeleted ? 'restore' : 'delete')}>{showDeleted ? 'Restore inspection' : 'Delete inspection'}</button>}</div>
     </article>)}</div>
     {!shown.length && <div className="rounded-xl border border-dashed p-8 text-center text-slate-500">{showDeleted ? 'No deleted inspections.' : live.length ? 'No inspections match this filter.' : 'Start your first inspection for this project.'}</div>}
   </section>;
@@ -103,10 +136,14 @@ export default function QhseInspection({ project, survey, canEdit, canDelete, ca
   };
   const updateQ = (key, value) => onFacility({ ...f, qhse: { ...q, [key]: value }, ...(key === 'projectName' ? { facilityName: value } : {}) });
   const layout = q.layout || { hidden: [], custom: [] };
-  const checks = reviewChecks(survey);
+  const findingFields = useMemo(() => activeFields(survey, 'finding'), [q.layout]);
+  const updateItem = useStableEvent(onItem);
+  const deleteItem = useStableEvent(onDelete);
+  const selectPhotos = useStableEvent(choosePhotos);
+  const checks = useMemo(() => reviewChecks(survey), [survey]);
   const checkKey = JSON.stringify(checks);
   useEffect(() => { setAcceptWarnings(false); }, [survey.id, checkKey]);
-  const actions = actionSummary(survey.items);
+  const actions = useMemo(() => actionSummary(survey.items), [survey.items]);
   const blocking = checks.filter(c => c.blocking);
   function openCheck(check) {
     goToSection(check.section);
@@ -178,31 +215,7 @@ export default function QhseInspection({ project, survey, canEdit, canDelete, ca
       </div>
       <div ref={findingsRef} className="inspection-section bg-white border rounded-xl p-5 space-y-3"><h2 className="font-bold text-ocs-600">Photos & remarks</h2><p className="text-sm text-slate-600">Add multiple photos, including five at once. Each photo has its own remark and appears separately in PDF and Excel.</p><div className="flex flex-wrap gap-3"><button disabled={busy} className="inline-flex items-center gap-2 min-h-11 rounded-lg bg-[#293771] text-white px-4 py-2 disabled:opacity-50" onClick={() => choosePhotos(latest.current.items.find(i => i.customValues?.qhseEvidenceOnly)?.id || null)}><Images size={18} />Add photos</button><button disabled={busy} className="inline-flex items-center gap-2 min-h-11 rounded-lg border border-[#293771] text-ocs-600 px-4 py-2 disabled:opacity-50" onClick={() => choosePhotos(latest.current.items.find(i => i.customValues?.qhseEvidenceOnly)?.id || null, true)}><Camera size={18} />Take photo</button></div>{busy && <p role="status" className="text-sm text-slate-500">Processing photos / report…</p>}</div>
       <div className="flex justify-between items-center"><h2 className="text-lg font-bold">Findings ({survey.items.filter(i => !i.customValues?.qhseEvidenceOnly).length})</h2><button className="bg-[#293771] text-white px-4 py-2 rounded-lg" onClick={() => onAdd(createFinding())}>Add finding</button></div>
-      {survey.items.map((item, index) => {
-        const data = findingData(item);
-        const custom = (key, value) => onItem({ ...item, customValues: { ...item.customValues, [key]: value } });
-        return <article id={`qhse-entry-${item.id}`} key={item.id} className="bg-white border rounded-xl p-5 space-y-4" style={{ borderLeft: `5px solid #${riskColor(data.severity)}` }}>
-          <div className="flex justify-between gap-3"><h3 className="font-bold text-ocs-600">{item.customValues?.qhseEvidenceOnly ? 'Report photos' : `Finding ${index + 1}`}</h3>{canDelete && <button className="text-red-700 text-sm" onClick={() => { if (confirm('Remove this entry and its photos?')) onDelete(item.id); }}>Remove entry</button>}</div>
-          {!item.customValues?.qhseEvidenceOnly && <div className="grid sm:grid-cols-2 gap-4">
-            {activeFields(survey, 'finding').map(field => {
-              const value = field.custom ? item.customValues?.[field.id] : data[field.id];
-              const change = v => field.custom ? custom(field.id, v) : field.id === 'location' ? onItem({ ...item, location: v }) : field.id === 'description' ? onItem({ ...item, defectDescription: v }) : custom({ type: 'qhseType', status: 'findingStatus' }[field.id] || field.id, v);
-              if (['severity', 'status'].includes(field.id) && !field.custom) return <label key={field.id} className="text-sm font-semibold">{field.label}{field.required ? ' *' : ''}<select data-review-field={field.id} aria-label={`Finding ${index + 1} ${field.id}`} className={`${control} mt-1`} value={value} onChange={e => change(e.target.value)}><option value="">Select {field.label.toLowerCase()}</option>{(field.id === 'severity' ? SEVERITIES : ['Open', 'Closed']).map(v => <option key={v}>{v}</option>)}</select></label>;
-              return <Field data-review-field={field.id} key={field.id} label={field.label + (field.required ? ' *' : '')} type={field.type === 'textarea' ? undefined : field.type || 'text'} multiline={field.type === 'textarea'} list={field.id === 'type' ? 'qhse-types' : undefined} value={value} onChange={change} />;
-            })}
-          </div>}
-          <div className="flex flex-wrap gap-3">
-            <button disabled={busy} className="inline-flex items-center gap-2 border rounded-lg px-4 py-2 text-sm font-semibold text-ocs-600" onClick={() => choosePhotos(item.id, true)}><Camera size={18} />Take photo</button>
-            <button disabled={busy} className="inline-flex items-center gap-2 border rounded-lg px-4 py-2 text-sm font-semibold text-ocs-600" onClick={() => choosePhotos(item.id)}><Images size={18} />Add photos</button>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">{data.photos.map((p, n) => <div key={p.id} className="border rounded-xl p-3 bg-slate-50 space-y-2">
-            {p.dataUrl ? <img src={p.dataUrl} alt={`Finding ${index + 1}, photo ${n + 1}`} loading="lazy" decoding="async" className="w-full h-56 sm:h-44 object-contain rounded-lg bg-white" /> : <p className="text-xs">Photo available in cloud</p>}
-            <Field data-review-field={`photo-${p.id}`} label={`Photo ${n + 1} remark`} multiline value={p.caption} onChange={v => onItem({ ...item, photos: item.photos.map(photo => photo.id === p.id ? { ...photo, caption: v } : photo) })} />
-            {!item.customValues?.qhseEvidenceOnly && <label className="flex items-center gap-2 text-sm text-ocs-600"><input type="checkbox" checked={(item.customValues?.closurePhotoIds || []).includes(p.id)} onChange={e => custom('closurePhotoIds', e.target.checked ? [...new Set([...(item.customValues?.closurePhotoIds || []), p.id])] : (item.customValues?.closurePhotoIds || []).filter(id => id !== p.id))} />Closure evidence photo</label>}
-            {canDelete && <button className="text-xs text-red-700 mt-2" onClick={() => { if (confirm('Remove this photo?')) onItem({ ...item, photos: item.photos.filter(photo => photo.id !== p.id), _deletedPhotoId: p.id }, { persistNow: true }); }}>Remove photo</button>}
-          </div>)}</div>
-        </article>;
-      })}
+      {survey.items.map((item, index) => <FindingCard key={item.id} item={item} index={index} fields={findingFields} onItem={updateItem} onDelete={deleteItem} choosePhotos={selectPhotos} busy={busy} canDelete={canDelete} />)}
       <datalist id="qhse-types">{TYPES.map(t => <option key={t} value={t} />)}</datalist>
       <div ref={signatureRef} className="inspection-section bg-white border rounded-xl p-5 space-y-4">
         <h2 className="font-bold text-ocs-600">Inspector sign-off</h2>

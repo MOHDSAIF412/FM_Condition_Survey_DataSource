@@ -1,3 +1,4 @@
+import CloudPhoto from '../components/CloudPhoto';
 import React, { useEffect, useRef, useState } from 'react';
 import { Capacitor } from '@capacitor/core';
 import { Camera, Images, Gauge, Plus, ChevronDown } from 'lucide-react';
@@ -203,7 +204,7 @@ export default function MeterMapping({ project, survey, canEdit, canDelete, canE
                 <button disabled={busy} className="inline-flex items-center justify-center gap-2 min-h-11 rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-ocs-600 hover:bg-ocs-50 transition-colors disabled:opacity-50" onClick={() => choosePhotos(item.id)}><Images size={18} />Gallery</button>
               </div>
               {data.photos.length > 0 && <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">{data.photos.map((p, n) => <div key={p.id} className="border border-slate-200 rounded-xl p-3 bg-slate-50 space-y-2">
-                {p.dataUrl ? <img src={p.dataUrl} alt={`Meter ${index + 1}, photo ${n + 1}`} loading="lazy" decoding="async" className="w-full h-56 sm:h-44 object-contain rounded-lg bg-white" /> : <p className="text-xs">Photo available in cloud</p>}
+                <CloudPhoto photo={p} alt={`Meter ${index + 1}, photo ${n + 1}`} className="w-full h-56 sm:h-44 rounded-lg bg-white" />
                 <Field label={`Photo ${n + 1} remark`} multiline value={p.caption} onChange={v => onItem({ ...item, photos: item.photos.map(photo => photo.id === p.id ? { ...photo, caption: v } : photo) })} />
                 {canDelete && <button className="text-xs font-semibold text-red-700" onClick={() => { if (confirm('Remove this photo?')) onItem({ ...item, photos: item.photos.filter(photo => photo.id !== p.id), _deletedPhotoId: p.id }, { persistNow: true }); }}>Remove photo</button>}
               </div>)}</div>}

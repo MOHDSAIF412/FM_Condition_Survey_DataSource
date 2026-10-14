@@ -1,3 +1,4 @@
+import CloudPhoto from './CloudPhoto';
 import React, { useState, useRef, useEffect } from 'react';
 import { FieldError, useFieldError } from './SubmissionValidation';
 import { 
@@ -489,11 +490,7 @@ function AssetItemCard({
                       className="aspect-video relative cursor-pointer overflow-hidden bg-black"
                       onClick={() => setPreviewPhotoIndex(pIdx)}
                     >
-                      <img
-                        src={photo.dataUrl}
-                        alt={photo.caption || photo.name || 'Defect'}
-                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                      />
+                      <CloudPhoto photo={photo} alt={photo.caption || photo.name || 'Defect'} className="w-full h-full" />
                       <span className="absolute top-1.5 left-1.5 px-1.5 py-0.5 rounded-md bg-black/70 text-white font-bold text-[11px]">
                         #{pIdx + 1}
                       </span>
@@ -681,11 +678,7 @@ function AssetItemCard({
             </div>
 
             <div className="relative p-2 flex items-center justify-center bg-black flex-1 min-h-[300px] overflow-hidden">
-              <img 
-                src={photosList[previewPhotoIndex].dataUrl} 
-                alt="Enlarged snag defect" 
-                className="max-h-[65vh] w-auto object-contain rounded-lg"
-              />
+              <CloudPhoto photo={photosList[previewPhotoIndex]} alt="Enlarged snag defect" className="h-[65vh] w-full rounded-lg" />
 
               {photosList.length > 1 && (
                 <button

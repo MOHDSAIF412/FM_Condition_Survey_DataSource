@@ -9,6 +9,7 @@ import {
   ArrowRight
 } from 'lucide-react';
 import AssetItemCard from './AssetItemCard';
+import { useStableEvent } from '../hooks/useStableEvent';
 import { DEPARTMENTS, createDefaultAsset } from '../types/survey';
 import QuickAddSnag from './QuickAddSnag';
 import { ApplyTemplatePanel } from './TemplatePicker';
@@ -36,10 +37,12 @@ export default function SurveyList({
     return () => window.removeEventListener('fm:focus-field', focus);
   }, []);
 
+  const updateItem = useStableEvent(onUpdateItem);
+  const deleteItem = useStableEvent(onDeleteItem);
+  const addNextItem = useStableEvent((...args) => handleAddNewAsset(...args));
+  const locationKey = JSON.stringify(Array.from(new Set(items.map(i => i.location).filter(Boolean))));
   // Compute distinct recent locations to offer quick chips
-  const recentLocations = useMemo(() => {
-    return Array.from(new Set(items.map((i) => i.location).filter(Boolean)));
-  }, [items]);
+  const recentLocations = useMemo(() => JSON.parse(locationKey), [locationKey]);
 
   // Filter items
   const filteredItems = useMemo(() => {
@@ -253,12 +256,12 @@ export default function SurveyList({
               item={item}
               index={idx}
               totalItems={items.length}
-              onUpdate={onUpdateItem}
-              onUpdateItem={onUpdateItem}
-              onDelete={onDeleteItem}
-              onDeleteItem={onDeleteItem}
+              onUpdate={updateItem}
+              onUpdateItem={updateItem}
+              onDelete={deleteItem}
+              onDeleteItem={deleteItem}
               canDelete={canDelete}
-              onAddNextAsset={handleAddNewAsset}
+              onAddNextAsset={addNextItem}
               recentLocations={recentLocations}
             />
           ))}

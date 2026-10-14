@@ -1,3 +1,5 @@
+import { loadInitialInspection, canRefreshInspection, refreshInspectionMetadata } from './utils/inspectionOpening';
+import { deviceStorageScope } from './utils/deviceAccount';
 import { SubmissionValidation, focusSubmissionField } from './components/SubmissionValidation';
 import WorkflowBanner from './components/WorkflowBanner';
 import React, { useState, useEffect, useRef, useMemo, lazy, Suspense } from 'react';
@@ -75,13 +77,11 @@ import {
   deleteSurveyPermanently,
   withTimeout,
   cachedSurveyList,
-  surveyExistsOnServer,
   hydratePhotos
 } from './utils/cloudSync';
 
 // How long a surveyor is kept waiting on the server before the app gets on
 // with what it already has on the device.
-const OPEN_WAIT_MS = 6000;
 const LIST_WAIT_MS = 8000;
 const SIGN_OUT_UPLOAD_WAIT_MS = 6000;
 import { isCloudConfigured } from './utils/supabaseClient';
@@ -1191,34 +1191,21 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
    * saving it over the device copy as "synced" permanently destroyed those
    * edits. With no connection the device copy is opened instead of refusing.
    */
+  const openRequestRef = useRef(0);
+  const openingViewRef = useRef(view);
+  openingViewRef.current = view;
   const handleOpenSurvey = async (surveyId) => {
+    const request = ++openRequestRef.current;
+    const originView = view;
+    const openingAccount = deviceStorageScope().accountId;
     // Already loaded (the facility the app opened in the background, or the
     // one last worked on): show it. Returning silently made "Open" look dead.
     if (surveyId === survey?.id) { setView('survey'); return surveyRef.current; }
     setSyncState('syncing');
 
-    const local = await getSurveyOffline(surveyId);
-
-    let remote = null;
-    let remoteError = null;
-    // An unsent device copy is opened as it is, so the server copy (and all its
-    // photos) would be downloaded only to be thrown away. When a device copy
-    // exists, the server gets a few seconds and no more: with weak signal a
-    // request takes ~16s to fail, and the surveyor is standing there waiting.
-    if (!(local && local.pendingSync) && isCloudConfigured && isOnline()) {
-      try {
-        if (local) {
-          remote = await withTimeout(pullSurvey(surveyId, collectKnownPhotos(local)), OPEN_WAIT_MS, 'Opening facility');
-        } else if (await withTimeout(surveyExistsOnServer(surveyId), OPEN_WAIT_MS, 'Reaching the server')) {
-          // Nothing to fall back on, so the download itself is waited out.
-          remote = await pullSurvey(surveyId, {});
-        }
-      } catch (err) {
-        remoteError = err;
-      }
-    } else if (!isOnline() && !local) {
-      remoteError = new Error('offline');
-    }
+    const { local, remote, error: remoteError } = await loadInitialInspection(surveyId);
+    if (request !== openRequestRef.current || originView !== openingViewRef.current
+      || openingAccount !== deviceStorageScope().accountId) return;
 
     const { survey: chosen, source, reason } = chooseSurveyToOpen(local, remote);
 
@@ -1248,8 +1235,11 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
 
     if (source === 'remote') {
       markAsExternalChange();
+      surveyRef.current = chosen;
       setSurvey(chosen);
-      await saveSurveyOffline(chosen, { pendingSync: false });
+      setView('survey');
+      // Persist independently so a large IndexedDB write does not delay opening.
+      saveSurveyOffline(chosen, { pendingSync: false }).catch(err => { localSaveFailed.current = true; console.error('Opening cache save failed:', err); });
       setSyncState('synced');
     } else if (reason === 'unsent-edits') {
       // Already stored exactly as it is, so skip the local save -- but let the
@@ -1264,7 +1254,29 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
       if (!remoteError) setSyncState('idle');
       else reportSyncFailure(remoteError);
     }
+    surveyRef.current = chosen;
+    hasUnpushedEditsRef.current = !!chosen.pendingSync;
     setView('survey');
+    if (local && !local.pendingSync && isCloudConfigured && isOnline()) {
+      const base = chosen;
+      const account = currentUser?.id;
+      // Reference and dirty guards protect keystrokes, account changes and navigation.
+      const stillCurrent = () => openingViewRef.current === 'survey' && canRefreshInspection(base, surveyRef.current, {
+        dirty: hasUnpushedEditsRef.current, request, latestRequest: openRequestRef.current,
+        account, currentAccount: deviceStorageScope().accountId
+      });
+      refreshInspectionMetadata(base)
+        .then(async fresh => {
+          if (!fresh || !stillCurrent()) return;
+          const stored = await saveSurveyOffline(fresh, { pendingSync: false });
+          if (!stillCurrent() || stored?.conflict) return;
+          markAsExternalChange();
+          surveyRef.current = fresh;
+          setSurvey(fresh);
+          setSyncState('synced');
+        })
+        .catch(err => { if (stillCurrent()) reportSyncFailure(err); });
+    }
     return chosen;
   };
 
