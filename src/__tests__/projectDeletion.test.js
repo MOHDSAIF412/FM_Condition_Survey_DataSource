@@ -16,7 +16,7 @@ beforeEach(() => { state.records = []; state.patch = null; state.refused = false
 test('shared projects cannot be removed while FM facilities, live QHSE inspections or live meter mappings remain', async () => {
   for (const facility of [{ facilityName: 'FM' }, { module: 'qhse', qhse: {} }, { module: 'meter', meter: {} }]) {
     state.records = [{ id: 'report', facility }];
-    await expect(setProjectDeleted({ id: 'p' }, true)).rejects.toThrow('existing inspections, meter mappings and Condition Survey');
+    await expect(setProjectDeleted({ id: 'p' }, true)).rejects.toThrow('existing facilities');
     expect(state.patch).toBeNull();
   }
 });
@@ -29,3 +29,11 @@ test('project deletion retains deleted inspection records and notes and refuses 
   await setProjectDeleted({ id: 'p' }, false); expect(state.patch.notes).toBe('Keep original notes');
   state.refused = true; await expect(setProjectDeleted({ id: 'p' }, true)).rejects.toThrow('Refresh');
 });
+
+ test.each(['meter','qhse'])('archiving a %s project preserves reports and does not touch its sibling project',async module=>{
+  state.original.work_module=module;
+  state.records=[{id:'keep',facility:{module}}];
+  await setProjectDeleted({id:'module-project',module},true);
+  expect(readProjectTrash(state.patch.notes).notes).toBe('Keep original notes');
+  expect(state.checks).toContainEqual(['id','module-project']);
+ });

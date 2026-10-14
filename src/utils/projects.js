@@ -1,3 +1,4 @@
+import { canArchiveProjectWithRecords } from './projectModules';
 /**
  * Projects: the layer above facilities.
  *
@@ -14,7 +15,7 @@
  */
 import { supabase, isCloudConfigured } from './supabaseClient';
 import { readProjectTrash, projectTrashNotes } from './projectTrash';
-import { isConditionSurvey, isDeletedRecord } from './modules';
+import { isDeletedRecord } from './modules';
 
 const PROJECTS_CACHE_KEY = 'fm_projects_cache';
 const ACTIVE_PROJECT_KEY = 'fm_active_project_id';
@@ -55,6 +56,8 @@ function normalise(row) {
   const trash = readProjectTrash(row.notes);
   return {
     id: row.id,
+    module: row.work_module || 'condition',
+    legacyParentId: row.legacy_parent_id || null,
     projectNumber: row.project_number,
     name: row.name || '',
     client: row.client || '',
@@ -75,7 +78,7 @@ function normalise(row) {
 export async function listProjects({ includeDeleted = false } = {}) {
   if (!isCloudConfigured) return cachedProjects({ includeDeleted });
 
-  const columns = 'id, project_number, name, client, location, notes, status, created_at, updated_at';
+  const columns = 'id, project_number, name, client, location, notes, status, created_at, updated_at, work_module, legacy_parent_id';
   let { data, error } = await supabase
     .from('projects')
     .select(`${columns}, due_date`)
@@ -100,7 +103,7 @@ export async function listProjects({ includeDeleted = false } = {}) {
   if (!countErr) {
     const counts = {};
     for (const row of facilityRows || []) {
-      if (row.project_id && isConditionSurvey(row)) counts[row.project_id] = (counts[row.project_id] || 0) + 1;
+      if (row.project_id && !isDeletedRecord(row)) counts[row.project_id] = (counts[row.project_id] || 0) + 1;
     }
     for (const p of projects) p.facilityCount = counts[p.id] || 0;
   }
@@ -116,16 +119,16 @@ export async function setProjectDeleted(project, deleted) {
     const next = all.map(p => p.id === project.id ? { ...p, deletedAt: deleted ? new Date().toISOString() : null } : p);
     cacheProjects(next); return;
   }
-  if (deleted) {
+  const { data: original, error: readError } = await supabase.from('projects').select('notes,updated_at,work_module').eq('id', project.id).single();
+  if (readError) throw new Error('Could not load this project. Check your connection and access.');
+  if (deleted && !canArchiveProjectWithRecords({ module: original.work_module || 'condition' })) {
     for (let from = 0; ; from += 1000) {
       const { data, error } = await supabase.from('condition_surveys').select('id,facility').eq('project_id', project.id).range(from, from + 999);
       if (error) throw new Error('Could not check the project reports. Try again when connected.');
-      if ((data || []).some(s => !isDeletedRecord(s))) throw new Error('Delete or move the existing inspections, meter mappings and Condition Survey facilities before deleting this shared project.');
+      if ((data || []).some(s => !isDeletedRecord(s))) throw new Error('Move or remove the existing facilities before deleting this Condition Survey project.');
       if (!data || data.length < 1000) break;
     }
   }
-  const { data: original, error: readError } = await supabase.from('projects').select('notes,updated_at').eq('id', project.id).single();
-  if (readError) throw new Error('Could not load this project. Check your connection and access.');
   let update = supabase.from('projects').update({ notes: projectTrashNotes(original.notes, deleted), updated_at: new Date().toISOString() }).eq('id', project.id);
   update = original.updated_at ? update.eq('updated_at', original.updated_at) : update.is('updated_at', null);
   const { error } = await update.select('id').single();
@@ -148,11 +151,12 @@ export async function createProject(details) {
     .from('projects')
     .insert({
       name,
+      work_module: ['condition','qhse','meter'].includes(details.module) ? details.module : 'condition',
       client: (details.client || '').trim() || null,
       location: (details.location || '').trim() || null,
       notes: (details.notes || '').trim() || null
     })
-    .select('id, project_number, name, client, location, notes, status, created_at, updated_at')
+    .select('id, project_number, name, client, location, notes, status, created_at, updated_at, work_module, legacy_parent_id')
     .single();
 
   if (error) {
@@ -191,7 +195,7 @@ export async function updateProject(projectId, details) {
     .from('projects')
     .update(patch)
     .eq('id', projectId)
-    .select('id, project_number, name, client, location, notes, status, created_at, updated_at')
+    .select('id, project_number, name, client, location, notes, status, created_at, updated_at, work_module, legacy_parent_id')
     .single();
 
   if (error) {

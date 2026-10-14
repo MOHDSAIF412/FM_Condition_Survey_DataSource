@@ -1,3 +1,4 @@
+import { projectsForModule } from '../utils/projectModules';
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import {
   FileText, FileSpreadsheet, FolderOpen, CheckCircle2, Loader2, Trash2, CloudOff, RefreshCw,
@@ -48,8 +49,9 @@ const FACILITY_FETCH_CONCURRENCY = 4;
  */
 export default function SavedFacilities({
   surveys = [], currentId, onOpen, onEdit, onDelete, onRefresh, onSyncNow, onSubmit, focus, canDownloadReports = true,
-  projects = null, narrow = null, onClearNarrow, title = 'Saved Facilities', scrollOnFocus = true
+  projects: allProjects = null, narrow = null, onClearNarrow, title = 'Saved Facilities', scrollOnFocus = true
 }) {
+  const projects = useMemo(() => allProjects ? projectsForModule(allProjects, 'condition') : null, [allProjects]);
   const [busy, setBusy] = useState(null);
   const [syncing, setSyncing] = useState(false);
   const [syncResult, setSyncResult] = useState('');

@@ -77,7 +77,7 @@ export default function ProjectDashboard({
 
   return (
     <div className="space-y-7 pb-10">
-      {pendingDelete && <ConfirmDelete title="Delete project?" onCancel={() => setPendingDelete(null)} onConfirm={() => { const p = pendingDelete; setPendingDelete(null); changeProject(p, false); }}>Only projects without live inspections or Condition Survey facilities can be deleted. Deleted records and photos are retained. Restore the project from Deleted projects.</ConfirmDelete>}
+      {pendingDelete && <ConfirmDelete title="Delete project?" onCancel={() => setPendingDelete(null)} onConfirm={() => { const p = pendingDelete; setPendingDelete(null); changeProject(p, false); }}>This removes the project from this module. Reports and photos are retained and can be recovered by restoring the project from Deleted projects. Condition Survey projects must have no live facilities before deletion.</ConfirmDelete>}
       {onBack && <BackButton onClick={onBack}>Choose module</BackButton>}
       {/* Brand navy header: the module you are in, what to do here, and the
           two numbers that matter. */}

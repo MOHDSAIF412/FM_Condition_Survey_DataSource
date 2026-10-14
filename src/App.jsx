@@ -1,3 +1,4 @@
+import { projectModule, projectsForModule, remapSurveyProject, canArchiveProjectWithRecords } from './utils/projectModules';
 import { loadInitialInspection, canRefreshInspection, refreshInspectionMetadata } from './utils/inspectionOpening';
 import { deviceStorageScope } from './utils/deviceAccount';
 import { SubmissionValidation, focusSubmissionField } from './components/SubmissionValidation';
@@ -164,6 +165,8 @@ export default function App({ currentUser = null, onSignOut } = {}) {
   const [adminModule, setAdminModule] = useState('forms');
   const openAdmin = (module) => { setAdminModule(module); setView('admin'); };
   const [projects, setProjects] = useState(() => cachedProjects());
+  const projectsRef = useRef(projects);
+  projectsRef.current = projects;
   const [deletedProjects, setDeletedProjects] = useState(() => cachedProjects({ includeDeleted: true }).filter(p => p.deletedAt));
   const [projectsLoading, setProjectsLoading] = useState(false);
   // Fields, sections and rules published from the Admin Dashboard.
@@ -1164,7 +1167,7 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
       remoteIsCached,
       serverIsAuthoritative: isCloudConfigured && !remoteIsCached,
       visibleProjectIds
-    }));
+    }).map(record => remapSurveyProject(record, projectsRef.current)));
   };
 
   // On launch, upload anything left unsent by an earlier offline session --
@@ -1203,7 +1206,10 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
     if (surveyId === survey?.id) { setView('survey'); return surveyRef.current; }
     setSyncState('syncing');
 
-    const { local, remote, error: remoteError } = await loadInitialInspection(surveyId);
+    const initial = await loadInitialInspection(surveyId);
+    const local = remapSurveyProject(initial.local, projects);
+    const remote = initial.remote;
+    const remoteError = initial.error;
     if (request !== openRequestRef.current || originView !== openingViewRef.current
       || openingAccount !== deviceStorageScope().accountId) return;
 
@@ -1345,6 +1351,12 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
    * The list is cached, so with no signal the picker still shows the projects
    * this device has seen rather than an empty screen.
    */
+  useEffect(() => {
+    if (!projects.length) return;
+    setSurvey(prev => remapSurveyProject(prev, projects));
+    setSurveyList(prev => prev.map(record => remapSurveyProject(record, projects)));
+  }, [projects, survey?.projectId, survey?.facility?.module]);
+
   const refreshProjects = async () => {
     setProjectsLoading(true);
     try {
@@ -1383,7 +1395,9 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
     activeProjectRef.current = project;
     setActiveProject(project);
     setActiveProjectId(project.id);
-    setView(['qhse', 'meter'].includes(workModule) ? workModule : 'facilities');
+    const module = projectModule(project);
+    setWorkModule(module);
+    setView(['qhse', 'meter'].includes(module) ? module : 'facilities');
     refreshSurveyList();
   };
 
@@ -1627,7 +1641,7 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
   async function handleMoveLegacyQhse(id) {
     if (!mayEditSurveys) throw new Error('Your role cannot move inspections.');
     const row = surveyList.find(s => s.id === id);
-    if (!row || !isLegacyQhse(row) || row.projectId !== activeProjectRef.current?.id) throw new Error('Select the project containing this older QHSE report.');
+    if (!row || !isLegacyQhse(row) || ![activeProjectRef.current?.id, activeProjectRef.current?.legacyParentId].includes(row.projectId)) throw new Error('Select the project containing this older QHSE report.');
     if (isLocked(row)) throw new Error('This approved report must be reopened before moving it.');
     if (mayEditOpen) {
       const kept = await saveSurveyOffline(surveyRef.current);
@@ -1637,7 +1651,7 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
     if (!record) throw new Error('The older report could not be opened.');
     if (isLocked(record)) throw new Error('This approved report must be reopened before moving it.');
     await saveSurveyRecovery({ ...record, recoveryUserId: currentUser?.id });
-    const moved = moveLegacyQhse(record, activeProjectRef.current);
+    const moved = { ...moveLegacyQhse(record, activeProjectRef.current), projectId: activeProjectRef.current.id };
     const saved = await saveSurveyOffline(moved);
     if (saved?.conflict) throw new Error('This report changed on another device. Compare the copies before moving it.');
     surveyRef.current = moved; setSurvey(moved);
@@ -1675,10 +1689,10 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
 
   async function handleProjectTrash(project, deleted) {
     if (!mayDeleteProjects) throw new Error('Only the owner can delete or restore projects.');
-    if (deleted) {
+    if (deleted && !canArchiveProjectWithRecords(project)) {
       const local = await listAllSurveysOffline();
-      if (local.some(s => s.projectId === project.id && !isDeletedRecord(s)))
-        throw new Error('Delete or move the existing inspections, meter mappings and Condition Survey facilities before deleting this shared project.');
+      if (local.some(s => s.projectId === project.id && isConditionSurvey(s) && !isDeletedRecord(s)))
+        throw new Error('Move or remove the existing facilities before deleting this Condition Survey project.');
     }
     await setProjectDeleted(project, deleted);
     if (deleted && activeProjectRef.current?.id === project.id) {
@@ -1696,7 +1710,7 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
   };
 
   const handleCreateProject = async (details) => {
-    const created = await createProjectRecord(details);
+    const created = await createProjectRecord({ ...details, module: workModule });
     setProjects((prev) => [{ ...created, facilityCount: 0 }, ...prev]);
     handleOpenProject(created);
     return created;
@@ -2123,7 +2137,7 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
           <PortalHome
             currentUser={currentUser}
             surveys={listRows}
-            projects={projects}
+            projects={projectsForModule(projects, 'condition')}
             formsConfig={formsConfig}
             formsVersion={formsVersion}
             templates={templates}
@@ -2143,7 +2157,7 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
       {view === 'qhse' && <main className="flex-1 min-w-0 w-full px-3 sm:px-8 py-6 safe-area-content-pb">
         <QhseHub surveys={surveyList.filter(s => isQhse(s) && s.projectId === activeProject?.id)} project={activeProject} canEdit={mayEditSurveys} canDelete={!isCloudConfigured || mayDeleteSnags} canExport={!isCloudConfigured || mayDownloadReports} onAction={handleQhseAction}
           onReports={() => navigatePortal({ view: 'reports', reportModule: 'qhse' })}
-          onBack={handleAppBack} legacySurveys={surveyList.filter(s => s.projectId === activeProject?.id && isLegacyQhse(s) && !isLocked(s))} onMove={handleMoveLegacyQhse} onCreate={startQhse} onOpen={openSurveyFromPortal} />
+          onBack={handleAppBack} legacySurveys={surveyList.filter(s => [activeProject?.id, activeProject?.legacyParentId].includes(s.projectId) && isLegacyQhse(s) && !isLocked(s))} onMove={handleMoveLegacyQhse} onCreate={startQhse} onOpen={openSurveyFromPortal} />
       </main>}
       {view === 'survey' && isQhse(survey) && <main className="flex-1 min-w-0 w-full px-3 sm:px-8 py-6 safe-area-content-pb">
         <QhseInspection project={activeProject} survey={survey} canEdit={mayEditOpen} canDelete={!isCloudConfigured || mayDeleteSnags} canExport={!isCloudConfigured || mayDownloadReports}
@@ -2175,8 +2189,8 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
             moduleName={moduleLabels(workModule).name}
             countLabel={moduleLabels(workModule).records}
             onBack={handleAppBack}
-            projects={workModule !== 'condition' ? projects.map(p => ({ ...p, facilityCount: surveyList.filter(s => s.facility?.module === workModule && !isDeletedRecord(s) && s.projectId === p.id).length })) : projects}
-            deletedProjects={deletedProjects}
+            projects={projectsForModule(projects, workModule).map(p => ({ ...p, facilityCount: surveyList.filter(s => (s.facility?.module || 'condition') === workModule && !isDeletedRecord(s) && s.projectId === p.id).length }))}
+            deletedProjects={projectsForModule(deletedProjects, workModule)}
             onDeleteProject={mayDeleteProjects ? p => handleProjectTrash(p, true) : null}
             onRestoreProject={mayDeleteProjects ? p => handleProjectTrash(p, false) : null}
             loading={projectsLoading}

@@ -1,3 +1,4 @@
+import { projectsForModule } from '../utils/projectModules';
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   FileSpreadsheet, FileText, Loader2, CheckSquare, Square, AlertCircle, Search, X, Camera, ImageOff
@@ -39,7 +40,9 @@ const fmtDate = (d) => (d ? new Date(d).toLocaleDateString([], { day: 'numeric',
 export default function ReportDashboard({ qhseSurveys = [], meterSurveys = [], initialModule = 'condition', onModuleChange, ...props }) {
   const [module, setModule] = useState(initialModule);
   useEffect(() => setModule(initialModule), [initialModule]);
-  return <div className="space-y-5"><div className="sticky top-[calc(5rem+env(safe-area-inset-top))] z-20 max-w-5xl mx-auto flex flex-wrap gap-3 rounded-xl bg-[#F5F7FB] py-3" aria-label="Report module">{[['condition', 'Condition Survey reports'], ['qhse', 'QHSE Inspection reports'], ['meter', 'Meter Mapping reports']].map(([id,label]) => <button key={id} type="button" aria-pressed={module === id} onClick={() => { setModule(id); onModuleChange?.(id); }} className={`min-h-11 rounded-xl border px-5 py-3 text-sm font-semibold ${module === id ? 'bg-[#293771] text-white' : 'bg-white text-[#293771]'}`}>{label}</button>)}</div>{module === 'qhse' ? <QhseReportDashboard {...props} surveys={qhseSurveys} /> : module === 'meter' ? <MeterReportDashboard {...props} surveys={meterSurveys} /> : <ConditionReportDashboard {...props} />}</div>;
+  const moduleProjects = projectsForModule(props.projects, module);
+  const scopedProps = { ...props, projects: moduleProjects, initialProjectId: moduleProjects.some(p => p.id === props.initialProjectId) ? props.initialProjectId : moduleProjects[0]?.id || '' };
+  return <div className="space-y-5"><div className="sticky top-[calc(5rem+env(safe-area-inset-top))] z-20 max-w-5xl mx-auto flex flex-wrap gap-3 rounded-xl bg-[#F5F7FB] py-3" aria-label="Report module">{[['condition', 'Condition Survey reports'], ['qhse', 'QHSE Inspection reports'], ['meter', 'Meter Mapping reports']].map(([id,label]) => <button key={id} type="button" aria-pressed={module === id} onClick={() => { setModule(id); onModuleChange?.(id); }} className={`min-h-11 rounded-xl border px-5 py-3 text-sm font-semibold ${module === id ? 'bg-[#293771] text-white' : 'bg-white text-[#293771]'}`}>{label}</button>)}</div>{module === 'qhse' ? <QhseReportDashboard {...scopedProps} surveys={qhseSurveys} /> : module === 'meter' ? <MeterReportDashboard {...scopedProps} surveys={meterSurveys} /> : <ConditionReportDashboard {...scopedProps} />}</div>;
 }
 
 function ConditionReportDashboard({ projects = [], surveys = [], initialProjectId = null, canDownloadReports = true }) {
