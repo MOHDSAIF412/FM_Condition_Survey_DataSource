@@ -11,6 +11,7 @@ import { sortDate } from '../utils/surveySelection';
 import { loadSurveyForReading } from '../utils/surveyLoader';
 import { confirmReportReady } from '../utils/reportCompleteness';
 import NoReportAccess from './NoReportAccess';
+import { SketchThumb } from './PencilSkyline';
 import { generateSurveyPDF } from '../utils/reportExports';
 import { generateSurveyExcel } from '../utils/reportExports';
 import { formatMoney } from '../utils/currency';
@@ -786,7 +787,7 @@ export default function SavedFacilities({
         <div className="hidden lg:block overflow-x-auto">
           <table className="w-full text-left">
             <thead>
-              <tr className="bg-slate-50/80 border-b border-slate-200 text-[11px] uppercase tracking-wide text-slate-500">
+              <tr className="bg-slate-50 border-b border-slate-200 text-[11px] uppercase tracking-wide text-slate-500">
                 <th className="w-10 pl-6 py-3">
                   <input
                     type="checkbox"
@@ -797,11 +798,13 @@ export default function SavedFacilities({
                     className="w-4 h-4 rounded border-slate-300 accent-ocs-600"
                   />
                 </th>
-                <th className="py-3 font-bold">Facility / ID</th>
-                <th className="py-3 font-bold">Type</th>
-                <th className="py-3 font-bold">Status</th>
-                <th className="py-3 font-bold">Last Updated</th>
-                <th className="py-3 pr-6" />
+                <th className="py-3 pl-3 font-bold border-l border-slate-200">Facility / ID</th>
+                <th className="py-3 pl-4 font-bold border-l border-slate-200">Type</th>
+                <th className="py-3 pl-4 font-bold border-l border-slate-200">Status</th>
+                <th className="py-3 px-4 font-bold border-l border-slate-200 text-center">Snags</th>
+                <th className="py-3 px-4 font-bold border-l border-slate-200 text-center">Photos</th>
+                <th className="py-3 pl-4 font-bold border-l border-slate-200">Last Updated</th>
+                <th className="py-3 pl-4 pr-6 font-bold border-l border-slate-200 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -825,14 +828,12 @@ export default function SavedFacilities({
                           className="w-4 h-4 rounded border-slate-300 accent-ocs-600"
                         />
                       </td>
-                      <td className="py-3 pr-4">
+                      <td className="py-3 pl-3 pr-4 border-l border-slate-100">
                         <div className="flex items-center gap-3 min-w-0">
                           <ChevronDown
                             className={`w-4 h-4 text-slate-400 shrink-0 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`}
                           />
-                          <span className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0 border border-emerald-100">
-                            <Building2 className="w-4 h-4" />
-                          </span>
+                          <SketchThumb seed={s.id} />
                           <div className="min-w-0">
                             <div className="flex items-center gap-2 flex-wrap">
                               <span className="font-bold text-slate-900 text-sm truncate">{describe(s)}</span>
@@ -880,9 +881,11 @@ export default function SavedFacilities({
                           </div>
                         </div>
                       </td>
-                      <td className="py-3 pr-4"><TypeBadge facility={s.facility} /></td>
-                      <td className="py-3 pr-4"><StatusBadge s={s} /></td>
-                      <td className="py-3 pr-4">
+                      <td className="py-3 pl-4 pr-4 border-l border-slate-100"><TypeBadge facility={s.facility} /></td>
+                      <td className="py-3 pl-4 pr-4 border-l border-slate-100"><StatusBadge s={s} /></td>
+                      <td className="py-3 px-4 border-l border-slate-100 text-center text-sm font-semibold text-slate-700">{snagCount ?? 0}</td>
+                      <td className="py-3 px-4 border-l border-slate-100 text-center text-sm font-semibold text-slate-700">{s.photoCount ?? 0}</td>
+                      <td className="py-3 pl-4 pr-4 border-l border-slate-100">
                         <span className="inline-flex items-start gap-1.5 text-xs text-slate-600">
                           <Calendar className="w-3.5 h-3.5 mt-0.5 text-slate-400 shrink-0" />
                           <span>
@@ -892,11 +895,11 @@ export default function SavedFacilities({
                           </span>
                         </span>
                       </td>
-                      <td className="py-3 pr-6"><RowActions s={s} /></td>
+                      <td className="py-3 pl-4 pr-6 border-l border-slate-100"><RowActions s={s} /></td>
                     </tr>
                     {isOpen && (
                       <tr>
-                        <td colSpan={6} className="px-6 pb-5 pt-0 bg-slate-50/40">
+                        <td colSpan={8} className="px-6 pb-5 pt-0 bg-slate-50/40">
                           <div className="pl-10"><SnagDetail detail={detail} /></div>
                         </td>
                       </tr>
