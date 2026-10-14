@@ -12,8 +12,9 @@ A `BEFORE DELETE` trigger on `survey_items`, `survey_photos` and
 it goes. This fires no matter what issued the delete — the phone, the web app, a
 sync fault, or a stray SQL statement.
 
-The archive is **read-only to the app**: the anon key has a `SELECT` policy and
-nothing else, so the same bug that deletes a snag cannot erase the evidence.
+The archive is **read-only to the verified owner account**. Anonymous access and
+other accounts are refused; the app has no write policy, so the same bug that
+deletes a snag cannot erase the evidence. Enrolled owners must complete MFA.
 
 ## 2. Mass deletion is refused
 

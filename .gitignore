@@ -50,3 +50,15 @@ android-build-output/
 
 # Local research notes and scanner, not part of the app. Kept out of the public repo.
 mitti clone/
+
+# Private QA, backups and local tool state
+outputs/
+settings.local.json
+supabase/.temp/
+
+# Private signing material
+*.keystore
+*.jks
+*.p12
+*.key
+*.pem

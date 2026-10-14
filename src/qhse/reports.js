@@ -1,3 +1,4 @@
+import { checkReportCancelled, yieldToScreen } from '../utils/reportTask';
 import { BRAND, findingData, reportDetails, riskColor, isQhse, reportFindingFields, findingDetails, photoRemark } from './model';
 import { OCS_LOGO_TRIMMED } from '../assets/logoTrimmed';
 import { saveBlob } from '../utils/fileSaver';
@@ -40,11 +41,13 @@ export async function generateQhsePDF(input, options = {}) {
     didDrawPage: header, rowPageBreak: 'avoid'
   });
   for (const [si, survey] of surveys.entries()) {
+    checkReportCancelled(options.signal); await yieldToScreen();
     if (si) doc.addPage();
     header();
     table(reportDetails(survey).map(([a,b]) => [a, b || '']), 30);
     table([['Finding summary', countSummary(survey)]], doc.lastAutoTable.finalY + 5);
     for (const [index, item] of (survey.items || []).entries()) {
+    checkReportCancelled(options.signal); await yieldToScreen();
       const f = findingData(item);
       const entryName = item.customValues?.qhseEvidenceOnly ? 'Report photos' : `Finding ${index + 1}`;
       doc.addPage(); header();
@@ -78,6 +81,7 @@ export async function generateQhsePDF(input, options = {}) {
     doc.text('OCS | QHSE Inspection', 15, 288); doc.text(`Page ${p} of ${doc.getNumberOfPages()}`, 195, 288, { align: 'right' });
   }
   const blob = doc.output('blob');
+  checkReportCancelled(options.signal);
   if (!options.returnBlob) await saveBlob(blob, `${filename(surveys[0])}.pdf`, 'QHSE inspection report');
   return blob;
 }
@@ -96,6 +100,7 @@ export async function generateQhseExcel(input, options = {}) {
       ext: { width, height }, editAs: 'oneCell' });
   };
   for (const [si, survey] of surveys.entries()) {
+    checkReportCancelled(options.signal); await yieldToScreen();
     const info = workbook.addWorksheet(`Inspection ${si + 1}`, { views: [{ showGridLines: false }],
       properties: { tabColor: { argb: `FF${BRAND.blue}` } },
       pageSetup: { orientation: 'portrait', paperSize: 9, fitToPage: true, fitToWidth: 1, fitToHeight: 0,
@@ -121,6 +126,7 @@ export async function generateQhseExcel(input, options = {}) {
     ws.columns = [8, ...fields.map(f => f.type === 'textarea' ? 42 : 20), 10, 38, 42].map(width => ({ width }));
     ws.addRow(['Finding', ...fields.map(f => f.label), 'Photo', 'Evidence', 'Remark']);
     for (const [index, item] of (survey.items || []).entries()) {
+    checkReportCancelled(options.signal); await yieldToScreen();
       const f = findingData(item);
       for (const [pi, photo] of (f.photos.length ? f.photos : [null]).entries()) {
         const row = ws.addRow([index + 1, ...findingDetails(survey, item).map(([,value]) => value === '' ? null : value), photo ? `${pi + 1}/${f.photos.length}` : null, photo ? null : 'No photo', photo ? photoRemark(item, photo) || null : null]);
@@ -168,6 +174,7 @@ export async function generateQhseExcel(input, options = {}) {
     };
   }
   const blob = new Blob([await workbook.xlsx.writeBuffer()], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  checkReportCancelled(options.signal);
   if (!options.returnBlob) await saveBlob(blob, `${filename(surveys[0])}.xlsx`, 'QHSE inspection report');
   return blob;
 }

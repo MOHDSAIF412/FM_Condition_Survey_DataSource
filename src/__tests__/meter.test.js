@@ -8,7 +8,7 @@ import { mergeSurveyLists } from '../utils/surveySelection';
 vi.mock('../utils/fileSaver', () => ({ saveBlob: vi.fn() }));
 const { generateMeterPDF, generateMeterExcel } = await import('../meter/reports');
 const ExcelJS = (await import('exceljs')).default;
-const photo = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aO1sAAAAASUVORK5CYII=';
+const photo = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+ip1sAAAAASUVORK5CYII=';
 
 // The two rows of the meter mapping spreadsheet the module was built from.
 function fixture() {

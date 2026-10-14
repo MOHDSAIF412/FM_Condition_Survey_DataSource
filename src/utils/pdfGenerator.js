@@ -1,3 +1,4 @@
+import { checkReportCancelled, yieldToScreen } from './reportTask';
 import { recordFormsConfig } from './projectTemplates';
 import { cachedPublishedConfig } from '../config/configStore';
 /* jsPDF and its autotable plugin are loaded on demand inside
@@ -66,9 +67,8 @@ export async function generateSurveyPDF(input, selectedFacility = 'ALL', options
   const layout = resolveLayout(options.layout);
   const show = layout.sections;
   const costs = layout.showCosts;
-  // autotable patches jsPDF's prototype, so it must finish loading before the
-  // document is constructed or doc.autoTable would not exist.
-  const [{ default: jsPDF }] = await Promise.all([
+  // Use the explicit API; the current plugin no longer patches jsPDF in Node.
+  const [{ jsPDF }, { default: autoTable }] = await Promise.all([
     import('jspdf'),
     import('jspdf-autotable')
   ]);
@@ -99,6 +99,7 @@ export async function generateSurveyPDF(input, selectedFacility = 'ALL', options
   // keeps its own cover, totals and register, so a combined report reads as
   // the single-facility report repeated, not a merged jumble.
   for (let n = 0; n < surveys.length; n++) {
+    checkReportCancelled(options.signal); await yieldToScreen();
     const survey = surveys[n];
     if (n > 0) doc.addPage();
 
@@ -404,7 +405,7 @@ export async function generateSurveyPDF(input, selectedFacility = 'ALL', options
       ? ['TOTAL (All Departments Combined)', stats.total, formatMoney(stats.totalCost), '100.0%']
       : ['TOTAL (All Departments Combined)', stats.total]);
 
-    doc.autoTable({
+    autoTable(doc, {
       startY: currentY + 4,
       head: [costs
         ? ['Maintenance Department / Trade', 'Defect Count', 'Remedial Budget (AED)', 'CapEx Share (%)']
@@ -450,7 +451,7 @@ export async function generateSurveyPDF(input, selectedFacility = 'ALL', options
       ['Priority 4 (Long Term)', PRIORITY_LEVELS[4].timeframe, 'Routine long-term lifecycle replacements and preventative monitoring.', stats.priorityCounts[4]]
     ];
 
-    doc.autoTable({
+    autoTable(doc, {
       startY: currentY + 4,
       head: [['Priority Level', 'Target Timeframe', 'Standard Urgency Criteria', 'Items']],
       body: priorityRows,
@@ -528,7 +529,7 @@ export async function generateSurveyPDF(input, selectedFacility = 'ALL', options
       return columns.map((c) => cell[c.key]);
     });
 
-    doc.autoTable({
+    autoTable(doc, {
       startY: 26,
       head: [columns.map((c) => c.label)],
       body: assetTableRows,
@@ -563,6 +564,7 @@ export async function generateSurveyPDF(input, selectedFacility = 'ALL', options
       let photoY = 28;
 
       for (let i = 0; i < itemsWithPhotos.length; i++) {
+    checkReportCancelled(options.signal); await yieldToScreen();
         const item = itemsWithPhotos[i];
         const deptName = DEPARTMENTS[item.department]?.name || 'General FM';
         const snagPhotos = photosFor(layout, item.photos || []);
@@ -688,6 +690,7 @@ export async function generateSurveyPDF(input, selectedFacility = 'ALL', options
     .replace(/^_|_$/g, '')
     .toLowerCase() || 'fm_condition_survey';
   const pdfName = `${safeFilename}${facilitySuffix}_audit_report.pdf`;
+  checkReportCancelled(options.signal);
   await saveBlob(doc.output('blob'), pdfName, 'FM Condition Survey Report');
   return pdfName;
 }

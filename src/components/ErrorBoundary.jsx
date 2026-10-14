@@ -1,3 +1,4 @@
+import { recordDiagnostic } from '../utils/diagnostics';
 import React from 'react';
 import { AlertTriangle, RotateCcw, Home } from 'lucide-react';
 
@@ -12,6 +13,7 @@ export default class ErrorBoundary extends React.Component {
   }
 
   componentDidCatch(error, errorInfo) {
+    recordDiagnostic('render_error');
     console.error('ErrorBoundary caught an unhandled error:', error, errorInfo);
     this.setState({ errorInfo });
   }

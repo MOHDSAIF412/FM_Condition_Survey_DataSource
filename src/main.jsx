@@ -1,3 +1,4 @@
+import { installDiagnostics } from './utils/diagnostics';
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import AuthGate from './components/AuthGate';
@@ -12,6 +13,7 @@ function BootReady() {
   return null;
 }
 
+installDiagnostics();
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <ErrorBoundary>

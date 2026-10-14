@@ -1,3 +1,4 @@
+import { checkReportCancelled, yieldToScreen } from './reportTask';
 import { recordFormsConfig } from './projectTemplates';
 import { cachedPublishedConfig } from '../config/configStore';
 /* ExcelJS is loaded on demand inside generateSurveyExcel rather than imported
@@ -630,6 +631,7 @@ export async function generateSurveyExcel(input, selectedFacility = 'ALL', optio
   // One section per facility. A single-survey report produces exactly one
   // section, so this reads the same as before for the common case.
   for (const group of groups) {
+    checkReportCancelled(options.signal); await yieldToScreen();
     const groupFacility = group.facility || {};
     const groupItems = group.items || [];
     if (isCombined && !groupItems.length) continue;   // nothing to show for it
@@ -655,6 +657,7 @@ export async function generateSurveyExcel(input, selectedFacility = 'ALL', optio
     const cellH = rowHeightToPx(THUMB_ROW_HEIGHT_PTS);
 
     for (let i = 0; i < groupItems.length; i++) {
+    checkReportCancelled(options.signal); await yieldToScreen();
       const item = groupItems[i];
       const dept = DEPARTMENTS[item.department] || DEPARTMENTS.GENERAL;
       const photos = hasPhotoColumn ? photosFor(layout, (item.photos || []).filter((p) => p && p.dataUrl)) : [];
@@ -802,7 +805,9 @@ export async function generateSurveyExcel(input, selectedFacility = 'ALL', optio
         .replace(/[^a-z0-9]/gi, '_')
         .toLowerCase();
   
+  checkReportCancelled(options.signal);
   const buffer = await workbook.xlsx.writeBuffer();
+  checkReportCancelled(options.signal);
   
   if (typeof window !== 'undefined') {
     const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });

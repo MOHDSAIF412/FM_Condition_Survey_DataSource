@@ -7,7 +7,7 @@ import { Capacitor } from '@capacitor/core';
 import AutomaticUpdates from '../components/AutomaticUpdates';
 import { useEscapeKey } from '../utils/useEscapeKey';
 
-export const APP_VERSION = '1.5';
+export const APP_VERSION = '1.6';
 
 /**
  * Web portal navigation. A fixed rail on wide screens; a slide-in drawer from

@@ -29,6 +29,7 @@ const MENU_HEADING = 'px-4 pt-2 pb-1 text-[10px] font-bold uppercase tracking-wi
  */
 export default function Header({
   survey,
+  onAccountSecurity,
   onReset,
   onOpenReport,
   onExportJSON,
@@ -300,6 +301,8 @@ export default function Header({
                           <span>Change Password</span>
                         </button>
                       )}
+
+                      {onAccountSecurity && <button onClick={() => { setShowMenu(false); onAccountSecurity(); }} className={MENU_ITEM}><KeyRound className="w-4 h-4 text-slate-400"/><span>Account security & backup</span></button>}
 
                       {onSignOut && (
                         <button

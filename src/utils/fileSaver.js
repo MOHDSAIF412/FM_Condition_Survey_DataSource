@@ -77,6 +77,7 @@ async function saveViaFilesystem(blob, filename, shareTitle) {
  * Returns the native file URI, or null in the browser.
  */
 export async function saveBlob(blob, filename, shareTitle) {
+  filename = safeFilename(filename);
   if (isNativeApp()) {
     return saveViaFilesystem(blob, filename, shareTitle);
   }
@@ -87,4 +88,9 @@ export async function saveBlob(blob, filename, shareTitle) {
 /** Convenience wrapper for saving text (JSON backups). */
 export async function saveText(text, filename, mimeType = 'application/json', shareTitle) {
   return saveBlob(new Blob([text], { type: mimeType }), filename, shareTitle);
+}
+
+export function safeFilename(filename) {
+  const value = String(filename || 'report').replace(/[\x00-\x1f\x7f\\/:*?"<>|]/g, '_').replace(/\.\./g, '_').replace(/^\.+/, '').trim();
+  return value.slice(0, 180) || 'report';
 }

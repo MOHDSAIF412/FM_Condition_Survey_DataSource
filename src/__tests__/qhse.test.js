@@ -4,7 +4,7 @@ import { createQhse, createFinding, createPhotoEvidence, findingData, inspection
 vi.mock('../utils/fileSaver', () => ({ saveBlob: vi.fn() }));
 const { generateQhsePDF, generateQhseExcel } = await import('../qhse/reports');
 const ExcelJS = (await import('exceljs')).default;
-const photo = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aO1sAAAAASUVORK5CYII=';
+const photo = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+ip1sAAAAASUVORK5CYII=';
 function fixture() {
   const survey = createQhse('project-test');
   survey.facility.address = 'Abu Dhabi'; survey.facility.surveyorName = 'Test Inspector';

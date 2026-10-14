@@ -1,3 +1,4 @@
+import { checkReportCancelled, yieldToScreen } from '../utils/reportTask';
 import { BRAND } from '../qhse/model';
 import { isMeter, meterData, reportDetails, costTotals, activeMeterFields, METER_FIELDS } from './model';
 import { OCS_LOGO_TRIMMED } from '../assets/logoTrimmed';
@@ -38,6 +39,7 @@ export async function generateMeterPDF(input, options = {}) {
     didDrawPage: header, rowPageBreak: 'avoid', ...extra
   });
   for (const [si, survey] of surveys.entries()) {
+    checkReportCancelled(options.signal); await yieldToScreen();
     if (si) doc.addPage();
     header();
     table(reportDetails(survey).map(([a, b]) => [a, b || '']), 30, null, { columnStyles: { 0: { cellWidth: 60, fontStyle: 'bold' } } });
@@ -47,6 +49,7 @@ export async function generateMeterPDF(input, options = {}) {
     });
     if (rows.length) table(rows, doc.lastAutoTable.finalY + 6, ['No.', 'Tenant', 'Location', 'Meter no.', 'kW', 'Monthly AED', 'Annual AED', 'Status', 'kWh'], { styles: { font: 'OpenSans', fontSize: 7.5, cellPadding: 2, overflow: 'linebreak', textColor: `#${BRAND.grey}` } });
     for (const [index, item] of (survey.items || []).entries()) {
+    checkReportCancelled(options.signal); await yieldToScreen();
       const d = meterData(survey, item);
       const name = `Meter ${index + 1}${d.tenant ? ` | ${d.tenant}` : ''}`;
       doc.addPage(); header();
@@ -76,6 +79,7 @@ export async function generateMeterPDF(input, options = {}) {
     doc.text('OCS | Meter Mapping', 15, 288); doc.text(`Page ${p} of ${doc.getNumberOfPages()}`, 195, 288, { align: 'right' });
   }
   const blob = doc.output('blob');
+  checkReportCancelled(options.signal);
   if (!options.returnBlob) await saveBlob(blob, `${filename(surveys[0])}.pdf`, 'Meter mapping report');
   return blob;
 }
@@ -98,6 +102,7 @@ export async function generateMeterExcel(input, options = {}) {
       ext: { width, height }, editAs: 'oneCell' });
   };
   for (const [si, survey] of surveys.entries()) {
+    checkReportCancelled(options.signal); await yieldToScreen();
     const m = survey.facility?.meter || {};
     const info = workbook.addWorksheet(`Mapping ${si + 1}`, { views: [{ showGridLines: false }], properties: { tabColor: { argb: `FF${BRAND.blue}` } } });
     info.columns = [{ width: 34 }, { width: 60 }];
@@ -129,6 +134,7 @@ export async function generateMeterExcel(input, options = {}) {
     }
     const numeric = new Set(activeMeterFields(survey, 'meter').filter(f => f.type === 'number').map(f => f.id));
     for (const item of survey.items || []) {
+    checkReportCancelled(options.signal); await yieldToScreen();
       const d = meterData(survey, item);
       const value = id => { const v = d[id]; if (v === '' || v == null) return null; return numeric.has(id) && Number.isFinite(Number(v)) ? Number(v) : v; };
       const values = [m.branch || null, m.region || null, ...METER_FIELDS.slice(0, 23).map(f => f.calculated ? null : value(f.id)), value('kwhReading'), null, value('remarks'), value('otherRemarks'), ...customFields.map(f => value(f.id))];
@@ -158,6 +164,7 @@ export async function generateMeterExcel(input, options = {}) {
     ws.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: sheetColumns.length } };
   }
   const blob = new Blob([await workbook.xlsx.writeBuffer()], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  checkReportCancelled(options.signal);
   if (!options.returnBlob) await saveBlob(blob, `${filename(surveys[0])}.xlsx`, 'Meter mapping report');
   return blob;
 }

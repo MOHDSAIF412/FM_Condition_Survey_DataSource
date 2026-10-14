@@ -1,0 +1,21 @@
+import { test, expect, vi } from 'vitest';
+import { indexedDB } from 'fake-indexeddb';
+import { selectDeviceAccount } from '../utils/deviceAccount';
+import { saveSurveyOffline, getSurveyOffline } from '../utils/storage';
+import { restoreMissingDeviceRecords } from '../utils/deviceBackup';
+const data = new Map();
+vi.stubGlobal('localStorage',{getItem:k=>data.get(k)||null,setItem:(k,v)=>data.set(k,String(v))});
+vi.stubGlobal('indexedDB',indexedDB); vi.stubGlobal('BroadcastChannel',undefined);
+test('backup restore retains unsent photos and revisions without replacing newer device work', async () => {
+  selectDeviceAccount('backup-user');
+  const existing={id:'existing',facility:{facilityName:'Newer edit'},items:[],cloudRevision:8};
+  await saveSurveyOffline(existing,{pendingSync:true});
+  const missing={id:'missing',facility:{facilityName:'Draft'},items:[{id:'i',photos:[{id:'p',dataUrl:'evidence',caption:'Remark'}]}],cloudRevision:4,pendingSync:true};
+  const backup={schemaVersion:1,backupType:'device-records',accountId:'backup-user',records:[{...existing,facility:{facilityName:'Old backup'}},missing]};
+  expect(await restoreMissingDeviceRecords(backup,'backup-user')).toEqual({restored:1,kept:1});
+  expect((await getSurveyOffline('existing')).facility.facilityName).toBe('Newer edit');
+  const restored=await getSurveyOffline('missing');
+  expect(restored.pendingSync).toBe(true); expect(restored.cloudRevision).toBe(4);
+  expect(restored.items[0].photos[0]).toEqual(missing.items[0].photos[0]);
+  expect(await restoreMissingDeviceRecords(backup,'backup-user')).toEqual({restored:0,kept:2});
+});

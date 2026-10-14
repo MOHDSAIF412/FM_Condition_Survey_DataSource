@@ -1,3 +1,5 @@
+import AccountSecurity from './AccountSecurity';
+import { needsMfa } from '../utils/mfa';
 import React, { useState, useEffect } from 'react';
 import { FormsConfigProvider } from '../config/FormsConfigContext';
 import { Loader2 } from 'lucide-react';
@@ -20,7 +22,10 @@ async function loadProfile(session) {
     try {
       const fresh = await withTimeout(getMyProfile(), 6000, 'Loading profile');
       if (fresh?.id === userId) return fresh;
-    } catch { /* fall back to the cached profile */ }
+    } catch (error) {
+      if (error?.accessDenied) return { id: userId, is_active: false };
+      /* transient failures fall back to the cached profile */
+    }
   }
   return cachedProfile(userId);
 }
@@ -77,6 +82,21 @@ export default function AuthGate() {
     return () => { cancelled = true; unsubscribe(); };
   }, []);
 
+  useEffect(() => {
+    if (!isCloudConfigured || !session?.user?.id || !online) return;
+    let cancelled = false, running = false;
+    const refresh = async () => {
+      if (running || document.visibilityState === 'hidden') return;
+      running = true;
+      try { const next = await loadProfile(session); if (!cancelled && next) setProfile(next); }
+      finally { running = false; }
+    };
+    const timer = setInterval(refresh, 5 * 60 * 1000);
+    document.addEventListener('visibilitychange', refresh);
+    refresh();
+    return () => { cancelled = true; clearInterval(timer); document.removeEventListener('visibilitychange', refresh); };
+  }, [session?.user?.id, online]);
+
   if (!isCloudConfigured) return <FormsConfigProvider enabled={false}><App /></FormsConfigProvider>;
 
   if (checking) {
@@ -90,6 +110,9 @@ export default function AuthGate() {
   if (!session) {
     return <Login online={online} onSignedIn={(s) => { noteSignedInAccount(s?.user?.id); setSession(s); }} />;
   }
+
+  if (profile?.is_active === false) return <div className="min-h-screen flex items-center justify-center p-6"><section className="bg-white border rounded-xl p-6 max-w-md space-y-4"><h1 className="font-bold text-xl">Account unavailable</h1><p className="text-sm text-slate-600">Ask your administrator to check account access. Your saved device work is retained.</p><button className="min-h-11 text-ocs-600 font-semibold" onClick={async () => { await signOut(); clearCachedProfile(); setSession(null); }}>Sign out</button></section></div>;
+  if (needsMfa(session)) return <AccountSecurity challenge session={session} onSignOut={async () => { await signOut(); setSession(null); setProfile(null); }} />;
 
   // A session exists but the profile row failed to load (offline on first
   // launch, or the row is still being created). Rather than lock the

@@ -2,11 +2,11 @@
 export async function generateSurveyPDF(...args) {
   if (has(args[0], 'meter')) {
     const module = await import('../meter/reports');
-    return module.generateMeterPDF(args[0]);
+    return module.generateMeterPDF(args[0], args[2] || (typeof args[1] === 'object' ? args[1] : {}));
   }
   if (has(args[0], 'qhse')) {
     const module = await import('../qhse/reports');
-    return module.generateQhsePDF(args[0]);
+    return module.generateQhsePDF(args[0], args[2] || (typeof args[1] === 'object' ? args[1] : {}));
   }
   const module = await import('./pdfGenerator');
   return module.generateSurveyPDF(...args);
@@ -14,11 +14,11 @@ export async function generateSurveyPDF(...args) {
 export async function generateSurveyExcel(...args) {
   if (has(args[0], 'meter')) {
     const module = await import('../meter/reports');
-    return module.generateMeterExcel(args[0]);
+    return module.generateMeterExcel(args[0], args[2] || (typeof args[1] === 'object' ? args[1] : {}));
   }
   if (has(args[0], 'qhse')) {
     const module = await import('../qhse/reports');
-    return module.generateQhseExcel(args[0]);
+    return module.generateQhseExcel(args[0], args[2] || (typeof args[1] === 'object' ? args[1] : {}));
   }
   const module = await import('./excelGenerator');
   return module.generateSurveyExcel(...args);

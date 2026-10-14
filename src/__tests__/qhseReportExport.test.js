@@ -43,3 +43,9 @@ test('one unavailable inspection prevents a silently incomplete combined report'
   await expect(exportQhseReports([{id:'one'},{id:'missing'}], 'p', 'excel')).rejects.toThrow('unavailable');
   expect(io.excel).not.toHaveBeenCalled();
 });
+
+test('cancelled report loading never downloads a partial selection', async () => {
+  const controller = new AbortController(); controller.abort();
+  await expect(exportQhseReports([{id:'one'}],'p','pdf',()=>{},controller.signal)).rejects.toMatchObject({name:'AbortError'});
+  expect(io.load).not.toHaveBeenCalled(); expect(io.pdf).not.toHaveBeenCalled();
+});

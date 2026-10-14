@@ -9,19 +9,19 @@ vi.stubGlobal('indexedDB', indexedDB); vi.stubGlobal('BroadcastChannel', undefin
 beforeEach(() => vi.restoreAllMocks());
 function response() { return { setHeader: vi.fn(), status: vi.fn().mockReturnThis(), json: vi.fn() }; }
 test('OTA ignores attacker host headers for both manifest lookup and download URLs', async () => {
-  const fetcher = vi.spyOn(globalThis, 'fetch').mockResolvedValue({ ok:true, json:async()=>({version:'1.0.123',path:'/ota/bundle-1.0.123.zip'}) });
+  const fetcher = vi.spyOn(globalThis, 'fetch').mockResolvedValue({ ok:true, json:async()=>({version:'1.0.123',path:'/ota/bundle-1.0.123.zip',sha256:'a'.repeat(64)}) });
   const res = response();
   await ota({ method:'POST', headers:{host:'attacker.example','x-forwarded-host':'127.0.0.1:9999','x-forwarded-proto':'http'},body:{} },res);
   expect(fetcher.mock.calls[0][0]).toBe('https://fm-condition-survey-data-source.vercel.app/ota/manifest.json');
   expect(res.json).toHaveBeenCalledWith(expect.objectContaining({url:'https://fm-condition-survey-data-source.vercel.app/ota/bundle-1.0.123.zip'}));
 });
 test.each(['//attacker.example/evil.zip','/ota/../evil.zip','/ota/bundle-1.0.999.zip'])('OTA refuses untrusted manifest path %s', async path => {
-  vi.spyOn(globalThis,'fetch').mockResolvedValue({ok:true,json:async()=>({version:'1.0.123',path})});
+  vi.spyOn(globalThis,'fetch').mockResolvedValue({ok:true,json:async()=>({version:'1.0.123',path,sha256:'a'.repeat(64)})});
   const res=response(); await ota({method:'GET',headers:{},body:{}},res);
   expect(res.json).toHaveBeenCalledWith(expect.objectContaining({error:'no_new_version_available'}));
 });
 test('OTA current version returns a normal payload, not a native download failure', async () => {
-  vi.spyOn(globalThis, 'fetch').mockResolvedValue({ ok: true, json: async () => ({ version: '1.0.123', path: '/ota/bundle-1.0.123.zip' }) });
+  vi.spyOn(globalThis, 'fetch').mockResolvedValue({ ok: true, json: async () => ({ version: '1.0.123', path: '/ota/bundle-1.0.123.zip', sha256: 'a'.repeat(64) }) });
   const res = response();
   await ota({ method: 'POST', body: { version_name: '1.0.123' } }, res);
   const result = res.json.mock.calls[0][0];

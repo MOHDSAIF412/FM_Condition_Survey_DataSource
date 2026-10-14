@@ -1,3 +1,4 @@
+import { recordDiagnostic } from './diagnostics';
 import { Capacitor, CapacitorHttp } from '@capacitor/core';
 import { createOtaController } from './otaController';
 
@@ -7,10 +8,14 @@ let state = { phase: 'idle', message: 'Updates download automatically while onli
 const listeners = new Set();
 export const otaStatus = () => state;
 export function subscribeOta(fn) { listeners.add(fn); return () => listeners.delete(fn); }
-function publish(changes) { state = { ...state, ...changes }; listeners.forEach(fn => fn()); }
+function publish(changes) { if (changes.phase === 'error') recordDiagnostic('update_failed'); state = { ...state, ...changes }; listeners.forEach(fn => fn()); }
 const UPDATE_ORIGIN = 'https://fm-condition-survey-data-source.vercel.app';
 async function latestUpdate() {
-  try { return await updater.getLatest(); }
+  try {
+    const latest = await updater.getLatest();
+    if (latest.url && !/^[a-f0-9]{64}$/i.test(latest.checksum || '')) throw new Error('Update checksum missing');
+    return latest;
+  }
   catch (nativeError) {
     // A failed native POST must not prevent checking the self-hosted release.
     // CapacitorHttp is built into the installed shell and avoids WebView CORS.
@@ -49,16 +54,17 @@ async function runCheck() {
     const current = await updater.current();
     publish({ version: current.bundle.version });
     const latest = await latestUpdate();
-    if (!latest.version) throw new Error('The update server did not return a version.');
+    if (!/^\d+\.\d+\.\d+$/.test(latest.version || '')) throw new Error('The update server did not return a valid version.');
     publish({ checkedAt: Date.now() });
-    if (latest.version === current.bundle.version) {
+    if (current.bundle.id !== 'builtin' && compareVersions(latest.version, current.bundle.version) <= 0) {
       publish({ phase: 'current', message: 'Your app is up to date.' });
       return;
     }
     // Only accept this app's HTTPS update bundles.
     const url = new URL(latest.url);
     if (url.origin !== 'https://fm-condition-survey-data-source.vercel.app'
-        || !/^\/ota\/bundle-\d+\.\d+\.\d+\.zip$/.test(url.pathname)) throw new Error('Invalid update download address.');
+        || url.pathname !== `/ota/bundle-${latest.version}.zip`) throw new Error('Invalid update download address.');
+    if (!/^[a-f0-9]{64}$/i.test(latest.checksum || '')) throw new Error('Update checksum missing');
     publish({ phase: 'downloading', message: 'Downloading update…', percent: 0 });
     let bundle = await updater.getNextBundle().catch(() => null);
     if (bundle?.version !== latest.version || !['pending', 'success'].includes(bundle.status)) {
@@ -122,4 +128,11 @@ export async function getOtaVersion() {
     const { CapacitorUpdater } = await import('@capgo/capacitor-updater');
     return (await CapacitorUpdater.current())?.bundle?.version || null;
   } catch { return null; }
+}
+
+export function compareVersions(a, b) {
+  const parse = value => /^\d+\.\d+\.\d+$/.test(value || '') ? value.split('.').map(Number) : [0,0,0];
+  const left = parse(a), right = parse(b);
+  for (let i = 0; i < 3; i++) if (left[i] !== right[i]) return left[i] > right[i] ? 1 : -1;
+  return 0;
 }

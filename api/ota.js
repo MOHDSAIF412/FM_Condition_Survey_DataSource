@@ -44,7 +44,8 @@ export default async function handler(req, res) {
 
   if (!manifest || !/^\d+\.\d+\.\d+$/.test(manifest.version || '')
       || !/^\/ota\/bundle-\d+\.\d+\.\d+\.zip$/.test(manifest.path || '')
-      || manifest.path !== `/ota/bundle-${manifest.version}.zip`) {
+      || manifest.path !== `/ota/bundle-${manifest.version}.zip`
+      || !/^[a-f0-9]{64}$/i.test(manifest.sha256 || '')) {
     return res.status(200).json(NO_UPDATE);
   }
 
@@ -63,6 +64,7 @@ export default async function handler(req, res) {
   return res.status(200).json({
     version: manifest.version,
     url: `${origin}${manifest.path}`,
+    checksum: manifest.sha256,
     old: current || undefined
   });
 }

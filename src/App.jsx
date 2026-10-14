@@ -1,3 +1,6 @@
+import SyncHealth from './components/SyncHealth';
+import { restoreMissingDeviceRecords } from './utils/deviceBackup';
+import AccountSecurity from './components/AccountSecurity';
 import { projectModule, projectsForModule, remapSurveyProject, canArchiveProjectWithRecords } from './utils/projectModules';
 import { loadInitialInspection, canRefreshInspection, refreshInspectionMetadata } from './utils/inspectionOpening';
 import { deviceStorageScope } from './utils/deviceAccount';
@@ -157,6 +160,8 @@ export default function App({ currentUser = null, onSignOut } = {}) {
    *   'survey'     the existing five tabs, always for one chosen facility
    */
   // Both platforms start by choosing the work module.
+  const [accountSecurityBusy, setAccountSecurityBusy] = useState(false);
+  const [showAccountSecurity, setShowAccountSecurity] = useState(false);
   const [view, setView] = useState('modules');
   const [workModule, setWorkModule] = useState('condition');
   const [navOpen, setNavOpen] = useState(false);
@@ -231,11 +236,11 @@ export default function App({ currentUser = null, onSignOut } = {}) {
   const localSaveFailed = useRef(false);
   useEffect(() => allowOtaAtSafeScreen(() =>
     isLoaded && view === 'modules' && !navOpen && !showPasswordModal
-    && !showReportModal && !showRecoveries && !conflictId
+    && !showReportModal && !showRecoveries && !showAccountSecurity && !conflictId
     && !pendingSaveRef.current && !uploadInFlight.current && !flushInFlight.current
     && !localSavesInFlight.current && !localSaveFailed.current
     && !document.querySelector('[role="dialog"]')
-  ), [isLoaded, view, navOpen, showPasswordModal, showReportModal, showRecoveries, conflictId]);
+  ), [isLoaded, view, navOpen, showPasswordModal, showReportModal, showRecoveries, showAccountSecurity, conflictId]);
 
   function markAsExternalChange() {
     skipLocalSaveRef.current = true;
@@ -1609,6 +1614,7 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
   const openHub = view === 'reports' ? (['qhse', 'meter'].includes(workModule) ? workModule : null) : isQhse(survey) ? 'qhse' : isMeter(survey) ? 'meter' : null;
   const parentScreen = backTarget({ view, hub: openHub, hasProject: !!activeProject, activeTab });
   async function handleAppBack(native = false) {
+    if (showAccountSecurity) { if (!accountSecurityBusy) setShowAccountSecurity(false); return; }
     if (backBusy.current) return;
     if (navOpen) { setNavOpen(false); return; }
     if (showReportModal) { setShowReportModal(false); return; }
@@ -2083,8 +2089,17 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
         />
       )}
       <div className="min-h-screen flex-1 flex flex-col min-w-0">
+      {showAccountSecurity && <AccountSecurity onBusyChange={setAccountSecurityBusy} onClose={() => setShowAccountSecurity(false)} onRestore={async backup => { const result = await restoreMissingDeviceRecords(backup, deviceStorageScope().accountId); await refreshSurveyList(); return result; }} onBackup={async () => {
+        const account = deviceStorageScope().accountId;
+        await saveSurveyOffline(surveyRef.current);
+        const records = await listAllSurveysOffline();
+        if (account !== deviceStorageScope().accountId) throw new Error('Account changed. Reopen the backup screen.');
+        await saveText(JSON.stringify({ schemaVersion: 1, backupType: 'device-records', exportedAt: new Date().toISOString(), accountId: currentUser?.id || null, projects, records }, null, 2), `OCS_Device_Backup_${new Date().toISOString().slice(0,10)}.json`);
+      }}/>}
+      <SyncHealth online={online} syncState={syncState} onReview={() => setShowAccountSecurity(true)}/>
       {/* Top Header */}
       <Header
+        onAccountSecurity={() => setShowAccountSecurity(true)}
         survey={survey || {}}
         onReset={handleReset}
         onOpenReport={() => setShowReportModal(true)}

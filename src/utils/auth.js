@@ -1,3 +1,4 @@
+import { assertSafePassword } from '../../supabase/functions/_shared/passwordSecurity';
 /**
  * Login for the app.
  *
@@ -47,7 +48,7 @@ export async function signIn(email, password) {
 export async function changePassword(newPassword) {
   if (!isCloudConfigured) throw new Error('Cloud sync is not configured on this build.');
   const password = (newPassword || '').trim();
-  if (password.length < 8) throw new Error('Password must be at least 8 characters.');
+  await assertSafePassword(password);
 
   const { error } = await supabase.auth.updateUser({ password });
   if (error) throw new Error(error.message || 'Could not change the password.');
@@ -85,7 +86,7 @@ export function cachedProfile(userId) {
 // work -- and the list screens hide the ones the server no longer lists.
 const ACCOUNT_CACHES = [
   'fm_survey_list_cache', 'fm_projects_cache', 'fm_portal_priority_cache', 'fm_portal_priority_by_survey',
-  'fm_portal_activity_cache', 'fm_roles_cache', 'fm_active_project_id'
+  'fm_portal_activity_cache', 'fm_roles_cache', 'fm_active_project_id', 'fm_templates_cache', 'fm_profile_cache'
 ];
 const LAST_ACCOUNT_KEY = 'fm_last_account';
 
@@ -107,8 +108,9 @@ export function clearCachedProfile() {
 /** This device's own row in fm_survey_users -- name, role, active flag. */
 export async function getMyProfile() {
   if (!isCloudConfigured) return null;
-  const { data: auth } = await supabase.auth.getUser();
-  if (!auth?.user) return null;
+  const { data: auth, error: authError } = await supabase.auth.getUser();
+  if (authError) { authError.accessDenied = [401, 403].includes(authError.status); throw authError; }
+  if (!auth?.user) { const denied = new Error('Account unavailable'); denied.accessDenied = true; throw denied; }
 
   const { data, error } = await supabase
     .from('fm_survey_users')
@@ -118,8 +120,9 @@ export async function getMyProfile() {
 
   if (error) {
     console.warn('[auth] could not load profile:', error.message);
-    return null;
+    throw error;
   }
+  if (!data) { const denied = new Error('Account unavailable'); denied.accessDenied = true; throw denied; }
   if (data) {
     // The role's current permissions travel with the profile (and its cache),
     // so an administrator's change to a role reaches the screens on the next

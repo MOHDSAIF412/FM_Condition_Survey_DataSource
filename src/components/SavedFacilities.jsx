@@ -1,3 +1,5 @@
+import { useRecordPage } from '../hooks/useRecordPage';
+import RecordPageFooter from '../components/RecordPageFooter';
 import MobileRecordCard from './MobileRecordCard';
 import { projectsForModule } from '../utils/projectModules';
 import React, { useState, useMemo, useEffect, useRef } from 'react';
@@ -165,6 +167,7 @@ export default function SavedFacilities({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [base, query, filter, sort, currentId]);
 
+  const page = useRecordPage(visible, `${query}:${filter}:${projectFilter}:${sort}`, focus);
   const visibleIds = visible.map((s) => s.id);
   const selectedVisible = selected.filter((id) => visibleIds.includes(id));
   const allTicked = visible.length > 0 && selectedVisible.length === visible.length;
@@ -824,7 +827,7 @@ export default function SavedFacilities({
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {visible.map((s) => {
+              {page.rows.map((s) => {
                 const isOpen = expandedId === s.id;
                 const detail = detailsById[s.id];
                 const snagCount = detail && detail.items ? detail.items.length : s.itemCount;
@@ -930,7 +933,7 @@ export default function SavedFacilities({
 
       {/* Phone / tablet: stacked rows */}
       <ul className="lg:hidden space-y-3 mobile-record-list">
-        {visible.map((s) => {
+        {page.rows.map((s) => {
           const isOpen = expandedId === s.id;
           const detail = detailsById[s.id];
           const snagCount = detail && detail.items ? detail.items.length : s.itemCount;
@@ -955,6 +958,7 @@ export default function SavedFacilities({
           );
         })}
       </ul>
+      <RecordPageFooter page={page}/>
     </div>
   );
 }

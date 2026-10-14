@@ -1,15 +1,11 @@
 // Only place in the whole system that can create, delete, or reset a login.
 //
-// verify_jwt is OFF deliberately, with authentication done by hand below, for
-// one reason: this function also has to handle the very first admin account,
-// when there is no admin (and no session) yet to present a JWT at all. The
-// gateway's automatic JWT check has no concept of "unless the table is
-// empty", so it has to be handled in code instead.
-//
-// SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are injected automatically by
-// the Edge Functions runtime -- the service role key is never sent to, or
-// held by, the browser.
-import { createClient } from 'jsr:@supabase/supabase-js@2';
+// This established production app requires a verified caller on every request.
+// JWT validation is performed by getUser and permission checks run with that
+// caller's token, so service-role access cannot bypass MFA or account deactivation.
+import { createClient } from 'jsr:@supabase/supabase-js@2.115.0';
+
+import { assertSafePassword } from '../_shared/passwordSecurity.js';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -36,12 +32,14 @@ const ADMIN_ROLES = ['super_admin', 'admin'];
  * Whether the caller may manage users: an administrator, or a role (or the
  * caller's own ticks) holding manage_users -- the same rule as fm_can().
  */
-async function canManageUsers(caller: { role: string; is_active: boolean; permissions?: Record<string, unknown> } | null) {
-  if (!caller || !caller.is_active) return false;
-  if (ADMIN_ROLES.includes(caller.role)) return true;
-  if (caller.permissions?.manage_users === true) return true;
-  const { data: role } = await admin.from('fm_roles').select('permissions').eq('key', caller.role).maybeSingle();
-  return role?.permissions?.manage_users === true;
+async function canManageUsers(req: Request, caller: { id: string; is_active: boolean } | null) {
+  if (!caller?.is_active) return false;
+  const client = createClient(SUPABASE_URL, Deno.env.get('SUPABASE_ANON_KEY')!, {
+    global: { headers: { Authorization: req.headers.get('Authorization') || '' } },
+    auth: { autoRefreshToken: false, persistSession: false }
+  });
+  const { data, error } = await client.rpc('fm_can', { p_permission: 'manage_users' });
+  return !error && data === true;
 }
 
 /** Changing an administrator account (or creating one) is for a Super Admin only. */
@@ -75,13 +73,9 @@ Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return json({});
 
   try {
-    const { count } = await admin
-      .from('fm_survey_users')
-      .select('id', { count: 'exact', head: true });
-    const bootstrapMode = (count || 0) === 0;
-
-    const caller = bootstrapMode ? null : await callerProfile(req);
-    const isAdmin = bootstrapMode || await canManageUsers(caller);
+    const bootstrapMode = false;
+    const caller = await callerProfile(req);
+    const isAdmin = await canManageUsers(req, caller);
 
     if (req.method === 'GET') {
       if (!isAdmin) return json({ error: 'Admin access required.' }, 403);
@@ -109,7 +103,7 @@ Deno.serve(async (req) => {
       const password = String(body.password || '').trim() || randomPassword();
 
       if (!email || !email.includes('@')) return json({ error: 'A valid email is required.' }, 400);
-      if (password.length < 8) return json({ error: 'Password must be at least 8 characters.' }, 400);
+      try { await assertSafePassword(password); } catch(error) { return json({ error: error.message }, 400); }
 
       const { data: created, error: createErr } = await admin.auth.admin.createUser({
         email,
@@ -176,7 +170,7 @@ Deno.serve(async (req) => {
       if (!userId) return json({ error: 'userId is required.' }, 400);
 
       const password = String(body.password || '').trim() || randomPassword();
-      if (password.length < 8) return json({ error: 'Password must be at least 8 characters.' }, 400);
+      try { await assertSafePassword(password); } catch(error) { return json({ error: error.message }, 400); }
 
       const { data: target } = await admin
         .from('fm_survey_users')

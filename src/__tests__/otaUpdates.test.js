@@ -35,7 +35,7 @@ test('fallback stages a new release with its checksum', async () => {
   http.get.mockResolvedValue({ status: 200, data: { version: '1.0.124', path: '/ota/bundle-1.0.124.zip', sha256: 'a'.repeat(64) } });
   updater.download.mockResolvedValue({ id: 'new', version: '1.0.124', status: 'pending' });
   await ota.checkOtaUpdate();
-  expect(updater.download).toHaveBeenCalledWith({ url: 'https://fm-condition-survey-data-source.vercel.app/ota/bundle-1.0.124.zip', version: '1.0.124', checksum: 'a'.repeat(64) });
+  expect(updater.download).toHaveBeenCalledWith({ url: 'https://fm-condition-survey-data-source.vercel.app/ota/bundle-1.0.124.zip', checksum: 'a'.repeat(64), version: '1.0.124', checksum: 'a'.repeat(64) });
   expect(ota.otaStatus().phase).toBe('ready');
 });
 
@@ -68,7 +68,7 @@ test('a successful check clears a stale download failure and reports current ver
 test('Get update downloads and stages a new bundle; repeat clicks share one request', async () => {
   const ota = await import('../utils/otaUpdates');
   await ota.initOtaUpdates(); await ota.checkOtaUpdate();
-  updater.getLatest.mockResolvedValue({ version: '1.0.124', url: 'https://fm-condition-survey-data-source.vercel.app/ota/bundle-1.0.124.zip' });
+  updater.getLatest.mockResolvedValue({ version: '1.0.124', url: 'https://fm-condition-survey-data-source.vercel.app/ota/bundle-1.0.124.zip', checksum: 'a'.repeat(64) });
   updater.download.mockResolvedValue({ id: 'new', version: '1.0.124', status: 'pending' });
   const first = ota.checkOtaUpdate();
   expect(ota.checkOtaUpdate()).toBe(first);
@@ -103,4 +103,16 @@ test('startup ignores an already installed next bundle and delayed native events
   expect(updater.set).not.toHaveBeenCalled();
   expect(updater.download).not.toHaveBeenCalled();
   expect(ota.otaStatus()).toMatchObject({ phase: 'current', message: 'Your app is up to date.' });
+});
+
+test('older OTA bundles are refused but a fresh native shell can enter the OTA version family', async () => {
+  const ota = await import('../utils/otaUpdates');
+  await ota.initOtaUpdates(); await ota.checkOtaUpdate();
+  updater.getLatest.mockResolvedValue({version:'1.0.122',url:'https://fm-condition-survey-data-source.vercel.app/ota/bundle-1.0.122.zip',checksum:'a'.repeat(64)});
+  await ota.checkOtaUpdate(); expect(updater.download).not.toHaveBeenCalled();
+  updater.current.mockResolvedValue({bundle:{id:'builtin',version:'1.6'}});
+  updater.getLatest.mockResolvedValue({version:'1.0.124',url:'https://fm-condition-survey-data-source.vercel.app/ota/bundle-1.0.124.zip',checksum:'a'.repeat(64)});
+  updater.download.mockResolvedValue({id:'first-ota',version:'1.0.124',status:'pending'});
+  await ota.checkOtaUpdate(); expect(updater.download).toHaveBeenCalledWith(expect.objectContaining({version:'1.0.124',checksum:'a'.repeat(64)}));
+  expect(ota.otaStatus().phase).toBe('ready');
 });

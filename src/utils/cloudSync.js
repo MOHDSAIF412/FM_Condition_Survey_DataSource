@@ -1,3 +1,4 @@
+import { checkReportCancelled } from './reportTask';
 import { readDownloadedPhoto, storeDownloadedPhoto } from './downloadedPhotos';
 import { photoCache } from './photoCache';
 import { deviceStorageScope } from './deviceAccount';
@@ -68,10 +69,10 @@ function blobToDataUrl(blob) {
 }
 
 /** Uploads a photo if it is not in the bucket yet. Returns its storage path. */
-async function uploadPhoto(surveyId, itemId, photo) {
+async function uploadPhoto(surveyId, itemId, photo, projectId) {
   if (photo.storagePath) return photo.storagePath;
 
-  const path = `${surveyId}/${itemId}/${photo.id}.jpg`;
+  const path = projectId ? `projects/${projectId}/${surveyId}/${itemId}/${photo.id}.jpg` : `${surveyId}/${itemId}/${photo.id}.jpg`;
   const body = await dataUrlToUploadableBlob(photo.dataUrl);
   const { error } = await supabase.storage
     .from(PHOTO_BUCKET)
@@ -172,7 +173,7 @@ export async function pushSurvey(survey) {
 
       let storagePath;
       try {
-        storagePath = await uploadPhoto(survey.id, item.id, photo);
+        storagePath = await uploadPhoto(survey.id, item.id, photo, survey.projectId);
       } catch (err) {
         // Skip this image rather than losing the whole survey's sync. It stays
         // on the device and is retried on the next push -- never discarded.
@@ -791,7 +792,8 @@ export function withTimeout(promise, ms, label = 'Request') {
   return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
 }
 
-export async function hydratePhotos(survey) {
+export async function hydratePhotos(survey, { signal, onProgress = () => {} } = {}) {
+  checkReportCancelled(signal);
   if (!isCloudConfigured || !survey) return survey;
 
   const needsBytes = (survey.items || []).some((it) =>
@@ -811,9 +813,11 @@ export async function hydratePhotos(survey) {
 
   let fetched = 0;
   let failed = 0;
+  onProgress(0, wanted.length);
   const bytesByKey = new Map();
 
   await mapWithConcurrency(wanted, PHOTO_FETCH_CONCURRENCY, async ({ itemIdx, photoIdx, photo }) => {
+    checkReportCancelled(signal);
     try {
       const dataUrl = await downloadPhoto(photo.storagePath);
       bytesByKey.set(`${itemIdx}:${photoIdx}`, dataUrl);
@@ -822,6 +826,8 @@ export async function hydratePhotos(survey) {
       console.warn('[report] photo unavailable:', photo.storagePath, err?.message);
       failed++;
     }
+    onProgress(fetched + failed, wanted.length);
+    checkReportCancelled(signal);
   });
 
   const items = (survey.items || []).map((item, itemIdx) => ({
