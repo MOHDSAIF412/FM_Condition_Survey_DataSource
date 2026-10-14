@@ -5,7 +5,7 @@ import { hydratePhotos } from '../utils/cloudSync';
 import { generateSurveyPDF, generateSurveyExcel } from '../utils/reportExports';
 import { createFinding, findingData, inspectionIssues, TYPES, SEVERITIES, riskColor, activeFields, inspectionValue, INSPECTION_FIELDS, FINDING_FIELDS } from './model';
 import { CanvasSignaturePad } from '../components/SignatureSection';
-import { Camera, Images } from 'lucide-react';
+import { Camera, Images, Pencil } from 'lucide-react';
 import BackButton from '../components/BackButton';
 import ConfirmDelete from '../components/ConfirmDelete';
 import { createPhotoEvidence } from './model';
@@ -68,7 +68,7 @@ export function QhseHub({ surveys, legacySurveys = [], project, canEdit, canDele
       <p className="text-sm text-slate-600 mt-2">{s.facility?.address || project?.location || 'Location pending'}</p><p className="text-xs text-slate-500 mt-3">{s.itemCount ?? s.items?.length ?? 0} entries · {s.photoCount ?? s.items?.reduce((n, i) => n + (i.photos || []).length, 0) ?? 0} photos · {s.facility?.qhse?.conductedOn?.replace('T', ' ') || 'Date pending'}</p>
       {s.submittedAt && <p className="text-xs text-slate-500 mt-2">Last submitted: {new Date(s.submittedAt).toLocaleString()}</p>}
       {!showDeleted && <div className="mt-4"><QhseReportDownloads records={[s]} projectId={project?.id} canExport={canExport} /></div>}
-      <div className="flex flex-wrap gap-3 mt-3">{canEdit && !showDeleted && ['draft','changes_requested'].includes(stageOf(s)) && <button disabled={busy} className="min-h-11 text-sm font-semibold text-ocs-600" onClick={() => act(s, 'submit')}>Submit report</button>}{canDelete && !isLocked(s) && <button disabled={busy} className="min-h-11 text-sm font-semibold text-red-700" onClick={() => act(s, showDeleted ? 'restore' : 'delete')}>{showDeleted ? 'Restore inspection' : 'Delete inspection'}</button>}</div>
+      <div className="flex flex-wrap gap-3 mt-3">{!showDeleted && <button type="button" disabled={busy} onClick={() => onOpen(s.id)} className="inline-flex items-center justify-center gap-2 min-h-11 rounded-xl border border-ocs-600 px-4 py-2 text-sm font-semibold text-ocs-600 disabled:opacity-50">{canEdit && !isLocked(s) && <Pencil size={16} aria-hidden="true" />}{canEdit && !isLocked(s) ? 'Edit inspection' : 'View inspection'}</button>}{canEdit && !showDeleted && ['draft','changes_requested'].includes(stageOf(s)) && <button disabled={busy} className="min-h-11 text-sm font-semibold text-ocs-600" onClick={() => act(s, 'submit')}>Submit report</button>}{canDelete && !isLocked(s) && <button disabled={busy} className="min-h-11 text-sm font-semibold text-red-700" onClick={() => act(s, showDeleted ? 'restore' : 'delete')}>{showDeleted ? 'Restore inspection' : 'Delete inspection'}</button>}</div>
     </article>)}</div>
     {!shown.length && <div className="rounded-xl border border-dashed p-8 text-center text-slate-500">{showDeleted ? 'No deleted inspections.' : live.length ? 'No inspections match this filter.' : 'Start your first inspection for this project.'}</div>}
   </section>;
