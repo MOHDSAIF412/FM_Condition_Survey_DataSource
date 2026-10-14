@@ -10,7 +10,7 @@ export default function MeterReportDashboard({ projects = [], surveys = [], init
   const visible = records.filter(s => [s.facility?.meter?.branch, s.facility?.meter?.region].some(v => String(v || '').toLowerCase().includes(query.toLowerCase())));
   const chosen = records.filter(s => selected.has(s.id));
   function toggle(id) { setSelected(prev => { const next = new Set(prev); if (next.has(id)) next.delete(id); else next.add(id); return next; }); }
-  return <section className="max-w-5xl mx-auto space-y-5">
+  return <section className="w-full min-w-0 space-y-5">
     <div className="rounded-2xl bg-[#293771] p-6 text-white"><h2 className="text-xl font-bold">Generate Meter Mapping Reports</h2><p className="mt-2 text-sm text-blue-100">Choose branch mappings to download. Multiple mappings are combined in one PDF or Excel workbook.</p></div>
     <div className="rounded-2xl border bg-white p-5 space-y-4">
       <label className="block text-sm font-semibold text-slate-700">Meter Mapping project<select className="mt-2 w-full rounded-lg border p-3 bg-white" value={projectId} onChange={e => { setProjectId(e.target.value); setSelected(new Set()); }}><option value="">Select a project</option>{projects.map(p => <option key={p.id} value={p.id}>{p.projectNumber} · {p.name}</option>)}</select></label>

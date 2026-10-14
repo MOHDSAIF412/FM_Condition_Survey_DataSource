@@ -2140,12 +2140,12 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
 
       {/* Project picker: nothing project-specific is reachable until one is chosen. */}
       {view === 'modules' && <main className="flex-1 px-4 sm:px-8 py-8 safe-area-content-pb"><ModulePicker onSelect={module => navigatePortal({ module })} /></main>}
-      {view === 'qhse' && <main className="flex-1 max-w-6xl w-full mx-auto px-3 sm:px-8 py-6 safe-area-content-pb">
+      {view === 'qhse' && <main className="flex-1 min-w-0 w-full px-3 sm:px-8 py-6 safe-area-content-pb">
         <QhseHub surveys={surveyList.filter(s => isQhse(s) && s.projectId === activeProject?.id)} project={activeProject} canEdit={mayEditSurveys} canDelete={!isCloudConfigured || mayDeleteSnags} canExport={!isCloudConfigured || mayDownloadReports} onAction={handleQhseAction}
           onReports={() => navigatePortal({ view: 'reports', reportModule: 'qhse' })}
           onBack={handleAppBack} legacySurveys={surveyList.filter(s => s.projectId === activeProject?.id && isLegacyQhse(s) && !isLocked(s))} onMove={handleMoveLegacyQhse} onCreate={startQhse} onOpen={openSurveyFromPortal} />
       </main>}
-      {view === 'survey' && isQhse(survey) && <main className="flex-1 max-w-6xl w-full mx-auto px-3 sm:px-6 py-6 safe-area-content-pb">
+      {view === 'survey' && isQhse(survey) && <main className="flex-1 min-w-0 w-full px-3 sm:px-8 py-6 safe-area-content-pb">
         <QhseInspection project={activeProject} survey={survey} canEdit={mayEditOpen} canDelete={!isCloudConfigured || mayDeleteSnags} canExport={!isCloudConfigured || mayDownloadReports}
           onFacility={handleUpdateFacility} onItem={(item, options) => { if (surveyRef.current?.id !== survey.id) throw new Error('Reopen the original inspection to attach these photos.'); handleUpdateItem(item, options); }} onDelete={handleDeleteItem}
           onAdd={async item => { if (!mayEditOpen) return; if (surveyRef.current?.id !== survey.id) throw new Error('Reopen the original inspection to attach these photos.'); const next = { ...surveyRef.current, items: [...surveyRef.current.items, item] }; surveyRef.current = next; setSurvey(next); await saveSurveyOffline(next); }}
@@ -2154,12 +2154,12 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
           onAction={handleQhseAction}
           onBackup={handleExportJSON} />
       </main>}
-      {view === 'meter' && <main className="flex-1 max-w-6xl w-full mx-auto px-3 sm:px-8 py-6 safe-area-content-pb">
+      {view === 'meter' && <main className="flex-1 min-w-0 w-full px-3 sm:px-8 py-6 safe-area-content-pb">
         <MeterHub surveys={surveyList.filter(s => isMeter(s) && s.projectId === activeProject?.id)} project={activeProject} canEdit={mayEditSurveys} canDelete={!isCloudConfigured || mayDeleteSnags} canExport={!isCloudConfigured || mayDownloadReports} onAction={handleQhseAction}
           onReports={() => navigatePortal({ view: 'reports', reportModule: 'meter' })}
           onBack={handleAppBack} onCreate={startMeter} onOpen={openSurveyFromPortal} />
       </main>}
-      {view === 'survey' && isMeter(survey) && <main className="flex-1 max-w-6xl w-full mx-auto px-3 sm:px-6 py-6 safe-area-content-pb">
+      {view === 'survey' && isMeter(survey) && <main className="flex-1 min-w-0 w-full px-3 sm:px-8 py-6 safe-area-content-pb">
         <MeterMapping project={activeProject} survey={survey} canEdit={mayEditOpen} canDelete={!isCloudConfigured || mayDeleteSnags} canExport={!isCloudConfigured || mayDownloadReports}
           onFacility={handleUpdateFacility} onItem={(item, options) => { if (surveyRef.current?.id !== survey.id) throw new Error('Reopen the original mapping to attach these photos.'); handleUpdateItem(item, options); }} onDelete={handleDeleteItem}
           onAdd={async item => { if (!mayEditOpen) return; if (surveyRef.current?.id !== survey.id) throw new Error('Reopen the original mapping to add meters.'); const next = { ...surveyRef.current, items: [...surveyRef.current.items, item] }; surveyRef.current = next; setSurvey(next); await saveSurveyOffline(next); }}
