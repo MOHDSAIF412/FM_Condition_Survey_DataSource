@@ -355,6 +355,21 @@ export default function SavedFacilities({
   // past its due date. A draft (or one sent back) can be submitted from here.
   const StatusBadge = ({ s }) => {
     const stage = STAGE_BY_KEY[stageOf(s)];
+    // On every facility. An approved one is reopened first (App handles it).
+    const editButton = onEdit && (
+      <button
+        type="button"
+        disabled={busy !== null}
+        onClick={(e) => { e.stopPropagation(); edit(s); }}
+        title={isLocked(s) ? 'Approved and locked: reopen it to add or change snags' : 'Open this facility to add or change snags'}
+        className="px-2.5 py-1 rounded-full text-[11px] font-bold bg-ocs-600 hover:bg-ocs-500 disabled:opacity-50 text-white inline-flex items-center gap-1.5"
+      >
+        {busy === `${s.id}:edit`
+          ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+          : <Pencil className="w-3.5 h-3.5" />}
+        Edit
+      </button>
+    );
     const overdue = isOverdue(s) && (
       <span title={`Due ${s.effectiveDue}`} className="px-2 py-1 rounded-full text-[11px] font-bold bg-rose-600 text-white inline-flex items-center gap-1">
         Overdue
@@ -367,22 +382,7 @@ export default function SavedFacilities({
             <CheckCircle2 className="w-3.5 h-3.5" /> {stage.label}
           </span>
           {overdue}
-          {/* Submitted is not locked: more snags can still be added. Approved
-              is, and needs a Manager's Reopen first. */}
-          {onEdit && !isLocked(s) && (
-            <button
-              type="button"
-              disabled={busy !== null}
-              onClick={(e) => { e.stopPropagation(); edit(s); }}
-              title="Open this submitted facility to add or change snags"
-              className="px-2.5 py-1 rounded-full text-[11px] font-bold bg-ocs-600 hover:bg-ocs-500 disabled:opacity-50 text-white inline-flex items-center gap-1.5"
-            >
-              {busy === `${s.id}:edit`
-                ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                : <Pencil className="w-3.5 h-3.5" />}
-              Edit
-            </button>
-          )}
+          {editButton}
         </span>
       );
     }
@@ -393,6 +393,7 @@ export default function SavedFacilities({
           <Clock className="w-3.5 h-3.5" /> {stage.label}
         </span>
         {overdue}
+        {editButton}
         {onSubmit && (
           <button
             type="button"

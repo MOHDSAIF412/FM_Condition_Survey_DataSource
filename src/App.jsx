@@ -1511,11 +1511,49 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
   };
 
   /**
-   * "Edit" on a submitted facility: open it on its snags, ready to add more.
-   * It stays submitted -- only approval locks a facility -- so the edits sync
-   * like any other and reviewers see the updated snags.
+   * "Edit" on any facility: open it on its snags, ready to add more.
+   *
+   * Draft and submitted facilities are already editable; a submitted one stays
+   * submitted, so the edits sync like any other and reviewers see them.
+   * An approved one is locked by the database, so it is reopened first --
+   * the same server step as Reopen, which needs Approve and is audited.
    */
   const handleEditSurvey = async (surveyId, fromPortal = false) => {
+    const row = surveyList.find((s) => s.id === surveyId);
+    const rowStage = surveyRef.current?.id === surveyId && openStage ? openStage : row;
+    if (isLocked(rowStage)) {
+      if (!can(currentUser, 'approve_surveys')) {
+        alert('This facility is approved and locked. Ask a Manager or Admin to reopen it, then you can edit it.');
+        return;
+      }
+      if (!confirm('This facility is approved and locked.\n\nReopen it to edit? It goes back to Draft and needs to be submitted and approved again.')) return;
+      try {
+        const fields = await moveFacility(surveyId, 'reopen', null);
+        // Take the server's new revision, as a Reopen from the facility screen
+        // does, so the next upload is not refused as stale.
+        const apply = (rec) => ({
+          ...rec,
+          status: fields.status,
+          review: { status: fields.reviewStatus, note: fields.reviewNote, reviewedAt: fields.reviewedAt, approvedAt: fields.approvedAt },
+          revision: fields.revision,
+          cloudRevision: fields.revision
+        });
+        if (surveyRef.current?.id === surveyId) {
+          const next = apply(surveyRef.current);
+          markAsExternalChange();
+          surveyRef.current = next;
+          setSurvey(next);
+          await saveSurveyOffline(next, { pendingSync: !!next.pendingSync });
+        } else {
+          const local = await getSurveyOffline(surveyId);
+          if (local) await saveSurveyOffline(apply(local), { pendingSync: !!local.pendingSync });
+        }
+        await refreshSurveyList();
+      } catch (err) {
+        alert(err.message);
+        return;
+      }
+    }
     const opened = fromPortal ? await openSurveyFromPortal(surveyId) : await handleOpenSurvey(surveyId);
     if (opened !== undefined) setActiveTab('items');
   };
