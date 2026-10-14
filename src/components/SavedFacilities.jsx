@@ -1,3 +1,4 @@
+import MobileRecordCard from './MobileRecordCard';
 import { projectsForModule } from '../utils/projectModules';
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import {
@@ -146,6 +147,7 @@ export default function SavedFacilities({
         describe(s),
         s.status === 'submitted' ? 'submitted' : 'draft',
         type?.name || '',
+        s.facility?.address || s.facility?.location || '',
         projects ? projectLabel(s) : '',
         s.id === currentId ? 'open now' : ''
       ].join(' ').toLowerCase();
@@ -356,10 +358,10 @@ export default function SavedFacilities({
    */
   // Where the facility is in review and approval, plus Overdue when it is
   // past its due date. A draft (or one sent back) can be submitted from here.
-  const StatusBadge = ({ s }) => {
+  const StatusBadge = ({ s, mobile = false }) => {
     const stage = STAGE_BY_KEY[stageOf(s)];
     // On every facility. An approved one is reopened first (App handles it).
-    const editButton = onEdit && (
+    const editButton = !mobile && onEdit && (
       <button
         type="button"
         disabled={busy !== null}
@@ -397,7 +399,7 @@ export default function SavedFacilities({
         </span>
         {overdue}
         {editButton}
-        {onSubmit && (
+        {onSubmit && !mobile && (
           <button
             type="button"
             disabled={busy !== null}
@@ -416,8 +418,8 @@ export default function SavedFacilities({
   };
 
   const RowActions = ({ s, compact }) => (
-    <div className={`flex items-center gap-2 ${compact ? 'flex-wrap' : 'justify-end'}`} onClick={(e) => e.stopPropagation()}>
-      {s.id !== currentId && (
+    <div className={`items-center gap-2 ${compact ? 'mobile-record-actions grid grid-cols-2 min-[380px]:grid-cols-4 w-full' : 'flex justify-end'}`} onClick={(e) => e.stopPropagation()}>
+      {(compact || s.id !== currentId) && (
         <button
           type="button"
           onClick={() => onOpen(s.id)}
@@ -457,7 +459,7 @@ export default function SavedFacilities({
           title="Permanently delete this facility"
           className="px-3 py-2 rounded-xl bg-red-50 hover:bg-red-100 disabled:opacity-50 text-red-600 text-xs font-bold inline-flex items-center gap-1 border border-red-200"
         >
-          {busy === `${s.id}:delete` ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+          {busy === `${s.id}:delete` ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}{compact && 'Delete'}
         </button>
       )}
     </div>
@@ -638,9 +640,21 @@ export default function SavedFacilities({
       : `Loading ${progress.done} of ${progress.total}…`;
 
   return (
-    <div ref={panelRef} className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden scroll-mt-4">
+    <div ref={panelRef} className="saved-facilities-panel lg:bg-white lg:rounded-2xl lg:border lg:border-slate-200 lg:shadow-sm lg:overflow-hidden scroll-mt-4">
       {renderPhotoViewer()}
-      <div className="px-4 sm:px-6 py-4 border-b border-slate-200 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
+      <div className="lg:hidden space-y-3 pb-3">
+        <h3 className="sr-only">{title}</h3>
+        <div className="mobile-status-tabs flex gap-2" aria-label="Facility status">{pills.map(p=><button type="button" key={p.key} aria-pressed={filter===p.key} onClick={()=>setFilter(p.key)} className={`shrink-0 min-h-11 rounded-full px-4 text-xs font-bold ${filter===p.key?'bg-blue-600 text-white':'bg-white text-ocs-600 border border-slate-200'}`}>{p.label} ({p.n})</button>)}</div>
+        <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2"><label className="relative min-w-0"><Search size={17} className="absolute left-3 top-3.5 text-slate-400"/><input type="search" aria-label="Search facilities" value={query} onChange={e=>setQuery(e.target.value)} placeholder="Search ID, name or location…" className="w-full min-h-11 rounded-2xl border border-slate-200 bg-white pl-9 pr-3 text-sm"/></label><select aria-label="Sort facilities" className="min-h-11 rounded-2xl border border-slate-200 bg-white px-2 text-xs max-w-36" value={sort} onChange={e=>setSort(e.target.value)}><option value="newest">Newest first</option><option value="oldest">Oldest first</option><option value="name">Name / ID</option><option value="snags">Most snags</option><option value="photos">Most photos</option></select></div>
+        <details className="text-xs text-slate-600"><summary className="min-h-11 inline-flex items-center gap-2 cursor-pointer font-semibold"><Filter size={15}/>Filters & list tools</summary><div className="flex flex-wrap gap-3 pt-2">
+          {projects&&<label className="w-full">Project<select aria-label="Filter facilities by project" className="mt-1 w-full rounded-xl border bg-white px-3 py-2" value={projectFilter} onChange={e=>setProjectFilter(e.target.value)}><option value="all">All projects</option>{projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></label>}
+          <button type="button" onClick={onRefresh}>Refresh</button>
+          {onSyncNow&&<button type="button" disabled={syncing} onClick={syncNow}>{syncing?'Syncing…':'Sync now'}</button>}
+          {visible.length>1&&canDownloadReports&&<button type="button" disabled={busy!==null} onClick={downloadAll} className="rounded-xl bg-emerald-600 text-white px-3">{excelLabel}</button>}
+          {narrow&&<button type="button" onClick={onClearNarrow}>Clear {narrow.label}</button>}
+        </div></details>
+      </div>
+      <div className="px-4 sm:px-6 py-4 border-b border-slate-200 hidden lg:flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
         <h3 className="text-base font-bold text-slate-800 whitespace-nowrap inline-flex items-center gap-2">
           <Building2 className="w-4 h-4 text-ocs-600" />
           {title} <span className="text-slate-400 font-semibold">({surveys.length})</span>
@@ -695,8 +709,8 @@ export default function SavedFacilities({
       </div>
 
       {/* Filter pills + sort */}
-      <div className="px-4 sm:px-6 py-3 border-b border-slate-200 flex items-center justify-between gap-3 flex-wrap">
-        <div className="flex items-center gap-2 flex-wrap">
+      <div className="hidden lg:flex px-4 sm:px-6 py-3 border-b border-slate-200 items-center justify-between gap-3 flex-wrap">
+        <div className="mobile-status-tabs flex items-center gap-2 flex-wrap">
           {pills.map((p) => (
             <button
               key={p.key}
@@ -915,74 +929,25 @@ export default function SavedFacilities({
       )}
 
       {/* Phone / tablet: stacked rows */}
-      <ul className="lg:hidden divide-y divide-slate-100">
+      <ul className="lg:hidden space-y-3 mobile-record-list">
         {visible.map((s) => {
           const isOpen = expandedId === s.id;
           const detail = detailsById[s.id];
           const snagCount = detail && detail.items ? detail.items.length : s.itemCount;
           return (
             <li key={s.id}>
-              <div
-                role="button"
-                tabIndex={0}
-                onClick={() => toggleExpand(s)}
-                onKeyDown={(e) => { if (e.key === 'Enter') toggleExpand(s); }}
-                className="w-full text-left px-4 sm:px-6 py-4 flex flex-col gap-3 cursor-pointer hover:bg-slate-50/80 transition-colors"
-              >
-                <div className="flex items-start gap-3 min-w-0 flex-1">
-                  <ChevronDown
-                    className={`w-5 h-5 text-slate-400 shrink-0 mt-0.5 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`}
-                  />
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-bold text-slate-900 text-base">{describe(s)}</span>
-                      <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-slate-100 text-slate-600 border border-slate-200 inline-flex items-center gap-1 shrink-0">
-                        <ClipboardList className="w-3 h-3" />
-                        {snagCount ?? 0} snag{snagCount === 1 ? '' : 's'}
-                      </span>
-                      <StatusBadge s={s} />
-                      {s.id === currentId && (
-                        <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-ocs-50 text-ocs-700 border border-ocs-200 shrink-0">
-                          Open now
-                        </span>
-                      )}
-                      {s.pendingSync && (
-                        <span
-                          title="Saved on this device. It uploads automatically when there is a connection."
-                          className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-amber-50 text-amber-700 border border-amber-200 inline-flex items-center gap-1 shrink-0"
-                        >
-                          <CloudOff className="w-3 h-3" /> Waiting to upload
-                        </span>
-                      )}
-                      {s.cached && !s.onDevice && (
-                        <span
-                          title="Known from the last list downloaded, but not stored on this device. Connect to the internet to open it."
-                          className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-slate-100 text-slate-500 border border-slate-200 shrink-0"
-                        >
-                          Not on this device
-                        </span>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-                      <TypeBadge facility={s.facility} />
-                      {projects && (
-                        <span className="text-[12px] text-ocs-600 font-semibold inline-flex items-center gap-1">
-                          <FolderKanban className="w-3.5 h-3.5" /> {projectLabel(s)}
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-xs text-slate-500 mt-1.5">
-                      {s.submittedAt
-                        ? `Submitted ${new Date(s.submittedAt).toLocaleString()}`
-                        : `Updated ${new Date(s.updatedAt).toLocaleString()}`}
-                    </p>
-                  </div>
-                </div>
-                <div className="pl-8"><RowActions s={s} compact /></div>
-              </div>
+              <MobileRecordCard code={s.facility?.facilityCode || facilityCode(s.facility?.facilityNumber) || 'Facility'} title={s.facilityName || s.facility?.facilityName || 'Unnamed facility'} Icon={TYPE_ICONS[facilityTypeOf(s.facility)?.icon] || Building2} count={`${snagCount ?? 0} snag${snagCount === 1 ? '' : 's'}`} badges={<><StatusBadge s={s} mobile />{facilityTypeOf(s.facility) && <TypeBadge facility={s.facility}/>}</>} date={(s.submittedAt ? 'Submitted ' : 'Updated ') + (sortDate(s) ? new Date(sortDate(s)).toLocaleString() : 'Date pending')} actions={<RowActions s={s} compact />} secondaryActions={<>
+                {onEdit && <button type="button" disabled={busy !== null} onClick={() => edit(s)} className="inline-flex items-center gap-1 text-xs font-semibold text-ocs-600"><Pencil size={15}/>Edit</button>}
+                {onSubmit && s.status !== 'submitted' && <button type="button" disabled={busy !== null} onClick={() => submit(s)} className="text-xs font-semibold text-emerald-700">Submit</button>}
+                <button type="button" aria-expanded={isOpen} onClick={() => toggleExpand(s)} className="inline-flex items-center gap-1 text-xs font-semibold text-slate-600"><ChevronDown size={15}/>{isOpen ? 'Hide snags' : 'Show snags'}</button>
+              </>}>
+                {projects && <p>{projectLabel(s)}</p>}
+                {s.pendingSync && <p className="text-amber-700">Waiting to sync</p>}
+                {s.cached && !s.onDevice && <p>Not downloaded to this device</p>}
+              </MobileRecordCard>
 
               {isOpen && (
-                <div className="px-4 sm:px-6 pb-5 pl-12 -mt-1">
+                <div className="px-4 py-3 bg-white rounded-2xl border mt-2">
                   <SnagDetail detail={detail} />
                 </div>
               )}

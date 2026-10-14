@@ -1,7 +1,8 @@
+import MobileRecordCard from '../components/MobileRecordCard';
 import CloudPhoto from '../components/CloudPhoto';
 import React, { useEffect, useRef, useState } from 'react';
 import { Capacitor } from '@capacitor/core';
-import { Camera, Images, Gauge, Plus, ChevronDown } from 'lucide-react';
+import { Camera, Images, Gauge, Plus, ChevronDown, Search, FolderOpen, Trash2 } from 'lucide-react';
 import { captureFromCamera, pickFromGallery, photosFromFiles } from '../utils/photoCapture';
 import { hydratePhotos } from '../utils/cloudSync';
 import { generateSurveyPDF, generateSurveyExcel } from '../utils/reportExports';
@@ -28,10 +29,12 @@ export function MeterHub({ surveys, project, canEdit, canDelete, canExport, onBa
   const [showDeleted, setShowDeleted] = useState(false);
   const [pendingDelete, setPendingDelete] = useState(null);
   const [filter, setFilter] = useState('all');
+  const [query, setQuery] = useState(''), [sort, setSort] = useState('newest');
   const listRef = useRef(null);
   const live = surveys.filter(s => !isDeletedMapping(s)), deleted = surveys.filter(isDeletedMapping);
-  const shown = (showDeleted ? deleted : live).filter(s => showDeleted || !['submitted', 'draft'].includes(filter) || (filter === 'submitted' ? s.status === 'submitted' : s.status !== 'submitted'))
-    .sort((a, b) => filter === 'photos' ? (b.photoCount || 0) - (a.photoCount || 0) : filter === 'snags' ? (b.itemCount ?? b.items?.length ?? 0) - (a.itemCount ?? a.items?.length ?? 0) : 0);
+  const shown = (showDeleted ? deleted : live).filter(s => showDeleted || (filter === 'submitted' ? s.status === 'submitted' : filter === 'draft' ? s.status !== 'submitted' : filter === 'photos' ? (s.photoCount || s.items?.reduce((n,i)=>n+(i.photos||[]).length,0) || 0)>0 : true))
+    .filter(s => [s.id, s.facility?.meter?.branch, s.facility?.meter?.region].join(' ').toLowerCase().includes(query.trim().toLowerCase()))
+    .sort((a, b) => sort === 'name' ? String(a.facility?.meter?.branch || '').localeCompare(String(b.facility?.meter?.branch || '')) : sort === 'meters' ? (b.itemCount ?? b.items?.length ?? 0) - (a.itemCount ?? a.items?.length ?? 0) : sort === 'oldest' ? new Date(a.updatedAt || a.submittedAt || 0) - new Date(b.updatedAt || b.submittedAt || 0) : new Date(b.updatedAt || b.submittedAt || 0) - new Date(a.updatedAt || a.submittedAt || 0));
   async function newMapping() {
     if (busy) return;
     setBusy(true); setError('');
@@ -45,14 +48,23 @@ export function MeterHub({ surveys, project, canEdit, canDelete, canExport, onBa
   return <section className="space-y-6">
     {pendingDelete && <ConfirmDelete title="Delete meter mapping?" onCancel={() => setPendingDelete(null)} onConfirm={() => { const s = pendingDelete; setPendingDelete(null); act(s, 'delete', true); }}>This removes the mapping from the project list. Its meters and photos are retained. Restore it from Deleted mappings.</ConfirmDelete>}
     <BackButton onClick={onBack}>Meter Mapping projects</BackButton>
-    {project && <ProjectHero module="meter" project={project} facilities={live} onOpenReports={canExport ? onReports : undefined} onAddFacility={canEdit && !busy ? newMapping : undefined} onFocusList={key => { setShowDeleted(false); setFilter(key); listRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }} />}
+    {project && <ProjectHero module="meter" project={project} facilities={live} onOpenReports={canExport ? onReports : undefined} onAddFacility={canEdit && !busy ? newMapping : undefined} onFocusList={key => { setShowDeleted(false); setFilter(key === 'snags' ? 'all' : key); setSort(key === 'snags' ? 'meters' : 'newest'); setQuery(''); listRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }} />}
     {canEdit && project && <div className="bg-white p-5 rounded-xl border flex flex-wrap gap-4 items-center justify-between">
       <p className="text-sm text-slate-600">Start one mapping per branch, then add each tenant meter to it.</p>
       <button disabled={busy} className="bg-[#F15F22] text-white rounded-lg px-5 py-3 font-semibold disabled:opacity-50" onClick={newMapping}>New meter mapping</button>
     </div>}
     {error && <p role="alert" className="text-red-700">{error}</p>}
     <div ref={listRef} className="scroll-mt-24 flex flex-wrap justify-between items-center gap-3"><h2 className="text-lg font-bold text-ocs-600">{showDeleted ? 'Deleted mappings' : 'Project meter mappings'}</h2><div className="flex flex-wrap items-center gap-3">{!showDeleted && filter !== 'all' && <button className="text-sm font-semibold text-ocs-600" onClick={() => setFilter('all')}>Show all mappings</button>}{canDelete && <button className="min-h-11 text-sm font-semibold text-ocs-600" onClick={() => setShowDeleted(v => !v)}>{showDeleted ? 'Show mappings' : `Deleted mappings (${deleted.length})`}</button>}</div></div>
-    <div className="grid sm:grid-cols-2 gap-4">{shown.map(s => <article key={s.id} className="p-5 bg-white rounded-xl border text-left shadow-sm">
+    <div className="mobile-status-tabs flex gap-2 overflow-x-auto pb-1" aria-label="Mapping status">
+      {[['all','All',live.length],['submitted','Submitted',live.filter(s=>s.status==='submitted').length],['draft','Draft',live.filter(s=>s.status!=='submitted').length],['photos','With photos',live.filter(s=>(s.photoCount||s.items?.reduce((n,i)=>n+(i.photos||[]).length,0)||0)>0).length]].map(([key,label,count])=><button key={key} type="button" aria-pressed={filter===key} onClick={()=>{setShowDeleted(false);setFilter(key);}} className={`shrink-0 min-h-11 rounded-full px-4 text-xs font-bold ${filter===key?'bg-blue-600 text-white':'bg-white text-ocs-600 border border-slate-200'}`}>{label} ({count})</button>)}
+    </div>
+    <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2"><label className="relative min-w-0"><Search size={17} className="absolute left-3 top-3.5 text-slate-400"/><input aria-label="Search meter mappings" className="w-full min-h-11 rounded-2xl border border-slate-200 bg-white pl-9 pr-3 text-sm" placeholder="Search branch or region…" value={query} onChange={e=>setQuery(e.target.value)}/></label><select aria-label="Sort meter mappings" className="min-h-11 rounded-2xl border border-slate-200 bg-white px-2 text-xs max-w-36" value={sort} onChange={e=>setSort(e.target.value)}><option value="newest">Newest first</option><option value="oldest">Oldest first</option><option value="name">Branch name</option><option value="meters">Most meters</option></select></div>
+    <div className="lg:hidden mobile-record-list space-y-3">{shown.map(s=><MobileRecordCard key={s.id} code={s.facility?.facilityNumber ? `MAP-${String(s.facility.facilityNumber).padStart(3,'0')}` : s.id} title={s.facility?.meter?.branch ? `Branch ${s.facility.meter.branch}` : 'Branch pending'} Icon={Gauge} count={`${s.itemCount ?? s.items?.length ?? 0} meters`} badges={<span className={`text-xs font-semibold border rounded-lg px-3 py-1 ${STAGE_BY_KEY[stageOf(s)].badge}`}>{showDeleted?'Deleted':STAGE_BY_KEY[stageOf(s)].label}</span>} date={s.updatedAt || s.submittedAt ? `Updated ${new Date(s.updatedAt || s.submittedAt).toLocaleString()}` : 'Date pending'} actions={<div className="mobile-record-actions grid grid-cols-2 min-[380px]:grid-cols-4 gap-2">
+      {!showDeleted&&<button type="button" disabled={busy} onClick={()=>act(s,'submit')} className="min-h-11 flex items-center justify-center gap-2 rounded-xl border bg-slate-50 px-3 py-2 text-sm font-semibold text-ocs-600"><FolderOpen size={17}/>Open</button>}
+      {!showDeleted&&<MeterReportDownloads records={[s]} projectId={project?.id} canExport={canExport} compact/>}
+      {canDelete&&!isLocked(s)&&<button type="button" disabled={busy} onClick={()=>act(s,showDeleted?'restore':'delete')} className="min-h-11 flex items-center justify-center gap-2 rounded-xl border border-red-200 bg-red-50 text-red-600 px-3 py-2 text-sm font-semibold"><Trash2 size={17}/>{showDeleted?'Restore':'Delete'}</button>}
+    </div>} secondaryActions={!showDeleted&&canEdit&&!isLocked(s)&&<><button type="button" disabled={busy} onClick={()=>act(s,'submit')} className="text-xs font-semibold text-ocs-600">Edit mapping</button>{s.status!=='submitted'&&<button type="button" disabled={busy} onClick={()=>act(s,'submit')} className="text-xs font-semibold text-emerald-700">Submit mapping</button>}</>}><p>{s.photoCount ?? s.items?.reduce((n,i)=>n+(i.photos||[]).length,0) ?? 0} photos · {s.facility?.meter?.readingDate || 'Reading date pending'}</p></MobileRecordCard>)}</div>
+    <div className="hidden lg:grid lg:grid-cols-2 gap-4">{shown.map(s => <article key={s.id} className="p-5 bg-white rounded-xl border text-left shadow-sm">
       <div className="flex flex-wrap justify-between gap-2"><span className="text-xs font-semibold text-[#F15F22]">{s.facility?.meter?.region || 'Region pending'}</span><span className={`text-xs font-semibold border rounded-md px-2 py-1 ${STAGE_BY_KEY[stageOf(s)].badge}`}>{showDeleted ? 'Deleted' : STAGE_BY_KEY[stageOf(s)].label}</span></div>
       <button disabled={showDeleted || busy} onClick={() => onOpen(s.id)} className="min-h-11 font-bold text-ocs-600 mt-2 text-left">{s.facility?.meter?.branch ? `Branch ${s.facility.meter.branch}` : 'Branch pending'}</button>
       <p className="text-xs text-slate-500 mt-3">{s.itemCount ?? s.items?.length ?? 0} meters · {s.photoCount ?? s.items?.reduce((n, i) => n + (i.photos || []).length, 0) ?? 0} photos · {s.facility?.meter?.readingDate || 'Reading date pending'}</p>

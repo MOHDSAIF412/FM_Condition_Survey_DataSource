@@ -202,3 +202,10 @@ fieldset:disabled label[role='button'] {
   opacity: 0.5;
   cursor: not-allowed;
 }
+@media (max-width: 1023px) {
+  .workspace-app main:has(.mobile-record-list) { padding-left: 8px; padding-right: 8px; }
+  .mobile-status-tabs { flex-wrap: nowrap; overflow-x: auto; width: 100%; padding-bottom: 4px; scrollbar-width: none; }
+  .mobile-status-tabs button { flex-shrink: 0; min-height: 44px; padding-left: 12px; padding-right: 12px; }
+  .mobile-record-actions button { width: 100%; justify-content: center; min-height: 46px; font-size: 13px; padding-left: 8px; padding-right: 8px; gap: 6px; }
+  .saved-facilities-panel > div:first-of-type { padding-left: 4px; padding-right: 4px; }
+}
