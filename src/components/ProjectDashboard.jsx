@@ -1,3 +1,6 @@
+import ProjectTemplateSetup from './ProjectTemplateSetup';
+import { standardProjectTemplate } from '../utils/projectTemplates';
+import { useFormsConfig } from '../config/FormsConfigContext';
 import BackButton from './BackButton';
 import ConfirmDelete from './ConfirmDelete';
 import React, { useState, useMemo, useEffect } from 'react';
@@ -24,6 +27,7 @@ import {
 export default function ProjectDashboard({
   projects = [],
   deletedProjects = [], onDeleteProject, onRestoreProject,
+  workModule = 'condition', templates = [], onSaveTemplate,
   moduleName = 'Condition Survey', countLabel = 'facilities', onBack,
   loading = false,
   online = true,
@@ -32,6 +36,8 @@ export default function ProjectDashboard({
   onRefresh,
   openCreateSignal = 0
 }) {
+  const { config } = useFormsConfig();
+  const [reportTemplate, setReportTemplate] = useState(null);
   const [showForm, setShowForm] = useState(false);
   const [showDeleted, setShowDeleted] = useState(false);
   const [changing, setChanging] = useState(false);
@@ -65,7 +71,8 @@ export default function ProjectDashboard({
 
     setSaving(true);
     try {
-      await onCreateProject(form);
+      await onCreateProject({ ...form, reportTemplate: reportTemplate || standardProjectTemplate(workModule, config) });
+      setReportTemplate(null);
       setForm({ name: '', client: '', location: '', notes: '' });
       setShowForm(false);
     } catch (err) {
@@ -143,6 +150,7 @@ export default function ProjectDashboard({
               </label>
               <input
                 type="text"
+                aria-label="Project Name"
                 value={form.name}
                 onChange={(e) => setForm({ ...form, name: e.target.value })}
                 className="w-full px-4 py-3 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-ocs-500 text-base font-semibold"
@@ -154,6 +162,7 @@ export default function ProjectDashboard({
               <label className="block text-xs font-semibold text-slate-700 mb-1">Client</label>
               <input
                 type="text"
+                aria-label="Client"
                 value={form.client}
                 onChange={(e) => setForm({ ...form, client: e.target.value })}
                 className="w-full px-4 py-3 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-ocs-500 text-sm"
@@ -164,6 +173,7 @@ export default function ProjectDashboard({
               <label className="block text-xs font-semibold text-slate-700 mb-1">Location</label>
               <input
                 type="text"
+                aria-label="Location"
                 value={form.location}
                 onChange={(e) => setForm({ ...form, location: e.target.value })}
                 className="w-full px-4 py-3 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-ocs-500 text-sm"
@@ -174,12 +184,15 @@ export default function ProjectDashboard({
               <label className="block text-xs font-semibold text-slate-700 mb-1">Notes</label>
               <textarea
                 rows={2}
+                aria-label="Notes"
                 value={form.notes}
                 onChange={(e) => setForm({ ...form, notes: e.target.value })}
                 className="w-full px-4 py-3 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-ocs-500 text-sm"
               />
             </div>
           </div>
+
+          <ProjectTemplateSetup module={workModule} templates={templates} value={reportTemplate} onChange={setReportTemplate} onSaveTemplate={onSaveTemplate} disabled={saving}/>
 
           <p className="text-[11px] text-slate-500">
             The project number is issued automatically and cannot be duplicated.

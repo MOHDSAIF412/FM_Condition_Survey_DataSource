@@ -58,6 +58,7 @@ function normalise(row) {
     id: row.id,
     module: row.work_module || 'condition',
     legacyParentId: row.legacy_parent_id || null,
+    reportTemplate: row.report_template || null,
     projectNumber: row.project_number,
     name: row.name || '',
     client: row.client || '',
@@ -78,7 +79,7 @@ function normalise(row) {
 export async function listProjects({ includeDeleted = false } = {}) {
   if (!isCloudConfigured) return cachedProjects({ includeDeleted });
 
-  const columns = 'id, project_number, name, client, location, notes, status, created_at, updated_at, work_module, legacy_parent_id';
+  const columns = 'id, project_number, name, client, location, notes, status, created_at, updated_at, work_module, legacy_parent_id, report_template';
   let { data, error } = await supabase
     .from('projects')
     .select(`${columns}, due_date`)
@@ -154,9 +155,10 @@ export async function createProject(details) {
       work_module: ['condition','qhse','meter'].includes(details.module) ? details.module : 'condition',
       client: (details.client || '').trim() || null,
       location: (details.location || '').trim() || null,
+      report_template: details.reportTemplate || null,
       notes: (details.notes || '').trim() || null
     })
-    .select('id, project_number, name, client, location, notes, status, created_at, updated_at, work_module, legacy_parent_id')
+    .select('id, project_number, name, client, location, notes, status, created_at, updated_at, work_module, legacy_parent_id, report_template')
     .single();
 
   if (error) {
@@ -195,7 +197,7 @@ export async function updateProject(projectId, details) {
     .from('projects')
     .update(patch)
     .eq('id', projectId)
-    .select('id, project_number, name, client, location, notes, status, created_at, updated_at, work_module, legacy_parent_id')
+    .select('id, project_number, name, client, location, notes, status, created_at, updated_at, work_module, legacy_parent_id, report_template')
     .single();
 
   if (error) {

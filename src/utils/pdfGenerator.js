@@ -1,3 +1,5 @@
+import { recordFormsConfig } from './projectTemplates';
+import { cachedPublishedConfig } from '../config/configStore';
 /* jsPDF and its autotable plugin are loaded on demand inside
    generateSurveyPDF, not imported here: between them and ExcelJS they were the
    bulk of the bundle every surveyor downloaded before they could record a
@@ -262,7 +264,7 @@ export async function generateSurveyPDF(input, selectedFacility = 'ALL', options
       ['Total Snags:', `${stats.total} Snags`],
       ['GPS Accuracy:', googleLoc.accuracy ? `${googleLoc.accuracy} m` : null],
       // Facility fields added in the Admin Dashboard with "PDF report" on.
-      ...reportFieldsFor('facility', 'pdf', [facility]).map((f) => [`${f.label.length > 18 ? f.label.slice(0, 16) + '..' : f.label}:`, reportValue(f, facility, 'facility')])
+      ...reportFieldsFor('facility', 'pdf', [facility], recordFormsConfig(survey, cachedPublishedConfig('forms').config)).map((f) => [`${f.label.length > 18 ? f.label.slice(0, 16) + '..' : f.label}:`, reportValue(f, facility, 'facility')])
     ].filter(([, v]) => v !== null && v !== undefined && String(v).trim() !== '');
 
     metaPairs.forEach(([label, value], i) => {
@@ -506,7 +508,7 @@ export async function generateSurveyPDF(input, selectedFacility = 'ALL', options
 
     // Snag fields added in the Admin Dashboard with "PDF report" on. They are
     // printed under the observations, so the table keeps its page-fitted widths.
-    const customSnagFields = reportFieldsFor('snag', 'pdf', itemsToReport);
+    const customSnagFields = reportFieldsFor('snag', 'pdf', itemsToReport, recordFormsConfig(survey, cachedPublishedConfig('forms').config));
     const assetTableRows = itemsToReport.map((item, index) => {
       const deptName = (DEPARTMENTS[item.department]?.name || 'General').split('&')[0];
       const extra = customSnagFields

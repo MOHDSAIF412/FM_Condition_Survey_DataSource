@@ -37,7 +37,7 @@ export default function TemplateManager({ facilities = [], projects = [] }) {
     setLoading(true);
     setError('');
     try {
-      setTemplates(await listTemplates());
+      setTemplates((await listTemplates()).filter(t => (t.module || 'condition') === 'condition' && !t.fieldLayout));
     } catch (err) {
       setError(err.message || 'Could not load templates.');
     } finally {

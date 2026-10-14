@@ -1,5 +1,5 @@
 import { BRAND } from '../qhse/model';
-import { isMeter, meterData, reportDetails, costTotals, METER_FIELDS } from './model';
+import { isMeter, meterData, reportDetails, costTotals, activeMeterFields, METER_FIELDS } from './model';
 import { OCS_LOGO_TRIMMED } from '../assets/logoTrimmed';
 import { saveBlob } from '../utils/fileSaver';
 import { OpenSansRegular, OpenSansBold } from '../qhse/fonts/fontData';
@@ -51,7 +51,7 @@ export async function generateMeterPDF(input, options = {}) {
       const name = `Meter ${index + 1}${d.tenant ? ` | ${d.tenant}` : ''}`;
       doc.addPage(); header();
       doc.setFontSize(12); doc.setTextColor(blue); doc.text(name, 15, 32, { maxWidth: 176 });
-      table(METER_FIELDS.map(f => [f.label, display(f, d[f.id])]), 37, null, { columnStyles: { 0: { cellWidth: 70, fontStyle: 'bold' } } });
+      table(activeMeterFields(survey, 'meter').map(f => [f.label, display(f, d[f.id])]), 37, null, { columnStyles: { 0: { cellWidth: 70, fontStyle: 'bold' } } });
       let y = doc.lastAutoTable.finalY + 8;
       for (const [pi, photo] of d.photos.entries()) {
         if (y + 84 > 276) { doc.addPage(); header(); y = 32; }
@@ -115,15 +115,23 @@ export async function generateMeterExcel(input, options = {}) {
 
     const ws = workbook.addWorksheet(`Meters ${si + 1}`, { views: [{ state: 'frozen', ySplit: 1, xSplit: 4 }], properties: { tabColor: { argb: `FF${BRAND.orange}` } },
       pageSetup: { orientation: 'landscape', paperSize: 8, fitToPage: true, fitToWidth: 1, fitToHeight: 0, printTitlesRow: '1:1' } });
-    ws.columns = SHEET_COLUMNS.map(([, width]) => ({ width }));
-    const head = ws.addRow(SHEET_COLUMNS.map(([label]) => label));
+    const customFields = activeMeterFields(survey, 'meter').filter(f => f.custom);
+    const sheetColumns = [...SHEET_COLUMNS, ...customFields.map(f => [f.label, 26])];
+    ws.columns = sheetColumns.map(([, width]) => ({ width }));
+    const head = ws.addRow(sheetColumns.map(([label]) => label));
     head.height = 42;
     head.eachCell(cell => { cell.fill = fill(BRAND.blue); cell.font = { bold: true, color: { argb: 'FFFFFFFF' } }; cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true }; });
-    const numeric = new Set(METER_FIELDS.filter(f => f.type === 'number').map(f => f.id));
+    const activeIds = new Set(activeMeterFields(survey, 'meter').map(f => f.id));
+    METER_FIELDS.slice(0, 23).forEach((field, i) => { ws.getColumn(i + 3).hidden = !activeIds.has(field.id); });
+    for (const id of ['kwhReading', 'remarks', 'otherRemarks']) {
+      const field = METER_FIELDS.find(f => f.id === id);
+      ws.getColumn(SHEET_COLUMNS.findIndex(([label]) => label.toLowerCase() === field.label.toLowerCase()) + 1).hidden = !activeIds.has(id);
+    }
+    const numeric = new Set(activeMeterFields(survey, 'meter').filter(f => f.type === 'number').map(f => f.id));
     for (const item of survey.items || []) {
       const d = meterData(survey, item);
       const value = id => { const v = d[id]; if (v === '' || v == null) return null; return numeric.has(id) && Number.isFinite(Number(v)) ? Number(v) : v; };
-      const values = [m.branch || null, m.region || null, ...METER_FIELDS.slice(0, 23).map(f => f.calculated ? null : value(f.id)), value('kwhReading'), null, value('remarks'), value('otherRemarks')];
+      const values = [m.branch || null, m.region || null, ...METER_FIELDS.slice(0, 23).map(f => f.calculated ? null : value(f.id)), value('kwhReading'), null, value('remarks'), value('otherRemarks'), ...customFields.map(f => value(f.id))];
       const row = ws.addRow(values);
       // Live formulas, like the source sheet, so edits in Excel recalculate.
       const col = id => 3 + METER_FIELDS.findIndex(f => f.id === id);
@@ -147,7 +155,7 @@ export async function generateMeterExcel(input, options = {}) {
     total.getCell(3 + METER_FIELDS.findIndex(f => f.id === 'monthlyCost')).value = totals.monthly;
     total.getCell(3 + METER_FIELDS.findIndex(f => f.id === 'annualCost')).value = totals.annual;
     total.eachCell(cell => { cell.font = { bold: true }; cell.numFmt = '#,##0.00'; });
-    ws.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: SHEET_COLUMNS.length } };
+    ws.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: sheetColumns.length } };
   }
   const blob = new Blob([await workbook.xlsx.writeBuffer()], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
   if (!options.returnBlob) await saveBlob(blob, `${filename(surveys[0])}.xlsx`, 'Meter mapping report');

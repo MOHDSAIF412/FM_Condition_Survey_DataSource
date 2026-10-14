@@ -87,3 +87,10 @@ export function useFormsConfig() {
   const { config, version } = cachedPublishedConfig('forms');
   return { config, version, platform: currentPlatform(), reports: cachedPublishedConfig('reports'), settings: cachedPublishedConfig('settings'), refresh: async () => {} };
 }
+
+/** Keep the parent report/settings context while rendering the project field snapshot. */
+export function ProjectFormsConfig({ config, children }) {
+  const parent = useFormsConfig();
+  const value = useMemo(() => ({ ...parent, config: config || parent.config }), [parent, config]);
+  return <FormsConfigContext.Provider value={value}>{children}</FormsConfigContext.Provider>;
+}

@@ -9,7 +9,8 @@ export function createQhse(projectId = null, number = 1, project = {}, template 
   return { ...survey, title: 'QHSE Site Inspection Report', projectId, items: [],
     facility: { ...survey.facility, facilityName: project.name || '', address: project.location || '', module: 'qhse', scopeNotes: '', qhse: {
       projectName: project.name || '', auditTitle: 'QHSE Site Inspection Report', reportNumber: '', region: '', site: '',
-      layout: template ? structuredClone(template) : { hidden: [], custom: [] },
+      layout: structuredClone(template || project.reportTemplate?.fieldLayout || { hidden: [], custom: [] }),
+      projectTemplateName: project.reportTemplate?.name || '',
       conductedOn: '', personnel: '', summary: ''
     } } };
 }

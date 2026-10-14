@@ -5,7 +5,7 @@ import {
 import FormBuilder from './FormBuilder';
 import AuditLog from './AuditLog';
 import UserManagement from '../components/UserManagement';
-import TemplateManager from '../components/TemplateManager';
+import ModuleTemplateManager from '../components/ModuleTemplateManager';
 import RolesPermissions from './RolesPermissions';
 import ReportBuilder from './ReportBuilder';
 import SettingsPage from './SettingsPage';
@@ -84,7 +84,7 @@ export default function AdminDashboard({
         {active.key === 'versions' && <FormBuilder key="versions" onPublished={onConfigPublished} openHistory />}
         {active.key === 'users' && <UserManagement myId={currentUser?.id} me={currentUser} projects={projects} />}
         {active.key === 'roles' && <RolesPermissions onOpenUsers={() => onModuleChange('users')} />}
-        {active.key === 'templates' && <TemplateManager facilities={facilities} projects={projects} />}
+        {active.key === 'templates' && <ModuleTemplateManager facilities={facilities} projects={projects} />}
         {active.key === 'audit' && <AuditLog />}
       </section>
     </div>

@@ -1,3 +1,5 @@
+import { recordFormsConfig } from './projectTemplates';
+import { cachedPublishedConfig } from '../config/configStore';
 /* ExcelJS is loaded on demand inside generateSurveyExcel rather than imported
    at the top. It is one of the largest things the app depends on, and importing
    it here put the whole spreadsheet engine into the bundle every surveyor
@@ -348,7 +350,7 @@ export async function generateSurveyExcel(input, selectedFacility = 'ALL', optio
     ['Building Age / Year Built', facility.buildingAge || 'N/A'],
     ['Building Levels & Floors', facility.floorsCount || 'N/A'],
     // Facility fields added in the Admin Dashboard with "Excel report" on.
-    ...reportFieldsFor('facility', 'excel', [facility]).map((f) => [f.label, reportValue(f, facility, 'facility') || 'N/A']),
+    ...reportFieldsFor('facility', 'excel', [facility], recordFormsConfig(primarySurvey, cachedPublishedConfig('forms').config)).map((f) => [f.label, reportValue(f, facility, 'facility') || 'N/A']),
     ['Report Scope', selectedFacility === 'ALL' ? 'Comprehensive facility-wide audit' : `Facility-specific audit for ${selectedFacility}`]
   ];
 
@@ -584,7 +586,7 @@ export async function generateSurveyExcel(input, selectedFacility = 'ALL', optio
   sheetColumns.forEach((c, i) => { COL[c.key] = i + 1; });
   const hasPhotoColumn = !!COL.photo;
   // Snag fields added in the Admin Dashboard with "Excel report" on, after the built-in columns.
-  const customSnagFields = reportFieldsFor('snag', 'excel', groups.flatMap((g) => g.items || []));
+  const customSnagFields = [...new Map(surveys.flatMap(s => reportFieldsFor('snag', 'excel', s.items || [], recordFormsConfig(s, cachedPublishedConfig('forms').config))).map(f => [f.key, f])).values()];
   const customCol = (idx) => sheetColumns.length + 1 + idx;
   const lastCol = Math.max(1, sheetColumns.length + customSnagFields.length);
 

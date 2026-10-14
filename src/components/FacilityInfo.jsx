@@ -382,7 +382,7 @@ export default function FacilityInfo({ facility = {}, onChange, onCreate, creati
       {/* Only while no snag has been written: autosave can upload the facility
           seconds after its name is typed, so "not created yet" is the wrong
           test. Later, templates are loaded from the Survey Items tab. */}
-      {canStartFromTemplate && (
+      {canStartFromTemplate && !facility.projectTemplate && (
         <CreateTemplatePicker
           templates={templates}
           facilityType={facility.facilityType || ''}
@@ -390,6 +390,8 @@ export default function FacilityInfo({ facility = {}, onChange, onCreate, creati
           onChange={setTemplateId}
         />
       )}
+
+      {facility.projectTemplate && <p className="rounded-xl border border-ocs-100 bg-ocs-50 px-4 py-3 text-sm text-ocs-600">Project template: <strong>{facility.projectTemplate.name}</strong>. Its fields and starting checklist are applied automatically.</p>}
 
       {/* Creating the facility is the deliberate step that fixes its reference
           number. Until then the code on screen is provisional. */}

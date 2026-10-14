@@ -45,6 +45,8 @@ function normaliseRow(row = {}) {
     name: row.name || '',
     description: row.description || '',
     facilityType: row.facility_type || '',
+    module: row.work_module || 'condition',
+    fieldLayout: row.field_layout || null,
     items: (Array.isArray(row.items) ? row.items : []).map(normaliseTemplateItem),
     archived: !!row.archived,
     createdAt: row.created_at,
@@ -57,7 +59,7 @@ export function validateTemplate(template = {}) {
   const problems = [];
   if (!(template.name || '').trim()) problems.push('Give the template a name.');
   const items = template.items || [];
-  if (!items.length) problems.push('Add at least one checklist item.');
+  if (!items.length && !template.fieldLayout) problems.push('Add at least one checklist item.');
   const blank = items.filter((i) => !(i.description || '').trim()).length;
   if (blank) problems.push(`${blank} checklist item${blank === 1 ? ' has' : 's have'} no description.`);
   return problems;
@@ -69,7 +71,7 @@ export function validateTemplate(template = {}) {
  * school is never offered the hotel checklist.
  */
 export function templatesForType(templates = [], facilityType = '') {
-  const live = templates.filter((t) => !t.archived);
+  const live = templates.filter((t) => !t.archived && (!t.module || t.module === 'condition') && (!t.fieldLayout || (t.items || []).length));
   const byName = (a, b) => a.name.localeCompare(b.name);
   const matching = facilityType ? live.filter((t) => t.facilityType === facilityType).sort(byName) : [];
   const general = live.filter((t) => !t.facilityType).sort(byName);
@@ -79,7 +81,7 @@ export function templatesForType(templates = [], facilityType = '') {
 /** The template to preselect for a type: only when exactly one is made for it. */
 export function suggestedTemplate(templates = [], facilityType = '') {
   if (!facilityType) return null;
-  const matching = templates.filter((t) => !t.archived && t.facilityType === facilityType);
+  const matching = templates.filter((t) => !t.archived && (!t.module || t.module === 'condition') && (!t.fieldLayout || (t.items || []).length) && t.facilityType === facilityType);
   return matching.length === 1 ? matching[0] : null;
 }
 
@@ -161,7 +163,7 @@ export async function listTemplates() {
   if (!isCloudConfigured) return cachedTemplates();
   const { data, error } = await supabase
     .from('inspection_templates')
-    .select('id, name, description, facility_type, items, archived, created_at, updated_at')
+    .select('id, name, description, facility_type, items, work_module, field_layout, archived, created_at, updated_at')
     .order('updated_at', { ascending: false });
   if (error) {
     console.warn('[templates] using the cached list:', error.message);
@@ -182,6 +184,8 @@ export async function saveTemplate(template) {
     name: template.name.trim(),
     description: (template.description || '').trim() || null,
     facility_type: template.facilityType || null,
+    work_module: template.module || 'condition',
+    field_layout: template.fieldLayout || null,
     items: (template.items || []).map(normaliseTemplateItem)
   };
 
@@ -190,7 +194,7 @@ export async function saveTemplate(template) {
     : supabase.from('inspection_templates').insert(row);
 
   const { data, error } = await query
-    .select('id, name, description, facility_type, items, archived, created_at, updated_at')
+    .select('id, name, description, facility_type, items, work_module, field_layout, archived, created_at, updated_at')
     .single();
   if (error) {
     if (/row-level security|permission denied/i.test(error.message)) {
@@ -208,7 +212,7 @@ export async function setTemplateArchived(id, archived) {
     .from('inspection_templates')
     .update({ archived: !!archived })
     .eq('id', id)
-    .select('id, name, description, facility_type, items, archived, created_at, updated_at')
+    .select('id, name, description, facility_type, items, work_module, field_layout, archived, created_at, updated_at')
     .single();
   if (error) throw new Error(error.message);
   return normaliseRow(data);

@@ -12,7 +12,7 @@ import ConfirmDelete from '../components/ConfirmDelete';
 import ProjectHero from '../components/ProjectHero';
 import { stageOf, STAGE_BY_KEY, isLocked } from '../utils/workflow';
 import { formatMoney } from '../utils/currency';
-import { HEADER_FIELDS, METER_FIELDS, METER_GROUPS, createMeter, nextMappingNo, meterData, costTotals, headerValue, reviewChecks, blockingIssues, isDeletedMapping } from './model';
+import { activeMeterFields, HEADER_FIELDS, METER_FIELDS, METER_GROUPS, createMeter, nextMappingNo, meterData, costTotals, headerValue, reviewChecks, blockingIssues, isDeletedMapping } from './model';
 import MeterReportDownloads from './MeterReportDownloads';
 import { useSectionSpy } from '../utils/useSectionSpy';
 
@@ -172,7 +172,7 @@ export default function MeterMapping({ project, survey, canEdit, canDelete, canE
       <div ref={detailsRef} className="inspection-section bg-white border rounded-xl p-5 space-y-4">
         <h2 className="text-lg font-bold text-ocs-600">Mapping details</h2>
         <div><p className="text-xs uppercase font-semibold text-slate-500">Project</p><p className="font-bold text-ocs-600">{project?.name || f.facilityName}</p></div>
-        <div className="grid sm:grid-cols-2 gap-4">{HEADER_FIELDS.map(field => <Field data-review-field={field.id} key={field.id} label={field.label + (field.required ? ' *' : '')} type={field.type === 'textarea' ? undefined : field.type || 'text'} step={field.type === 'number' ? 'any' : undefined} inputMode={field.type === 'number' ? 'decimal' : undefined} multiline={field.type === 'textarea'} value={headerValue(survey, field.id)} onChange={value => changeHeader(field.id, value)} />)}</div>
+        <div className="grid sm:grid-cols-2 gap-4">{activeMeterFields(survey, 'header').map(field => <Field data-review-field={field.id} key={field.id} label={field.label + (field.required ? ' *' : '')} type={field.type === 'textarea' ? undefined : field.type || 'text'} step={field.type === 'number' ? 'any' : undefined} inputMode={field.type === 'number' ? 'decimal' : undefined} multiline={field.type === 'textarea'} value={headerValue(survey, field.id)} onChange={value => changeHeader(field.id, value)} />)}</div>
         <p className="text-xs text-slate-500">Each meter uses these defaults for hours, diversity and tariff unless you enter its own value.</p>
       </div>
       <div ref={metersRef} className="inspection-section space-y-3">
@@ -182,7 +182,7 @@ export default function MeterMapping({ project, survey, canEdit, canDelete, canE
       {survey.items.map((item, index) => {
         const data = meterData(survey, item);
         const expanded = open.has(item.id);
-        const fieldById = Object.fromEntries(METER_FIELDS.map(f => [f.id, f]));
+        const fieldById = Object.fromEntries(activeMeterFields(survey, 'meter').map(f => [f.id, f]));
         return <article id={`meter-entry-${item.id}`} key={item.id} className="bg-white border rounded-xl overflow-hidden">
           <button type="button" aria-expanded={expanded} onClick={() => toggle(item.id)} className="w-full flex items-center gap-3 p-4 sm:p-5 text-left hover:bg-slate-50/70 transition-colors">
             <span className="inline-flex items-center justify-center min-w-9 h-9 px-2 rounded-xl bg-ocs-50 text-ocs-600 text-sm font-bold shrink-0">{data.mappingNo === '' ? index + 1 : data.mappingNo}</span>
@@ -195,7 +195,7 @@ export default function MeterMapping({ project, survey, canEdit, canDelete, canE
             <ChevronDown className={`w-5 h-5 text-slate-400 shrink-0 transition-transform duration-200 ${expanded ? 'rotate-180' : ''}`} />
           </button>
           {expanded && <div className="border-t border-slate-100 p-4 sm:p-5 space-y-6">
-            {METER_GROUPS.map(([title, ids]) => <section key={title} className="space-y-3">
+            {[...METER_GROUPS, ['Custom fields', activeMeterFields(survey, 'meter').filter(f => f.custom).map(f => f.id)]].map(([title, ids]) => [title, ids.filter(id => activeMeterFields(survey, 'meter').some(f => f.id === id))]).filter(([, ids]) => ids.length).map(([title, ids]) => <section key={title} className="space-y-3">
               <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400">{title}</h4>
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-x-3 gap-y-4">{ids.map(id => {
                 const field = fieldById[id];

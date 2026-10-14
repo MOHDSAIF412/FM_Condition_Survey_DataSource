@@ -70,7 +70,7 @@ export function createMeterMapping(projectId = null, number = 1, project = {}) {
   const survey = createNewSurvey(number);
   return { ...survey, title: 'Meter Mapping Report', projectId, items: [],
     facility: { ...survey.facility, facilityName: project.name || '', address: project.location || '', module: 'meter', scopeNotes: '',
-      meter: { branch: '', region: '', readingDate: '', summary: '', ...DEFAULTS } } };
+      meter: { layout: structuredClone(project.reportTemplate?.fieldLayout || { hidden: [], custom: [] }), templateName: project.reportTemplate?.name || '', branch: '', region: '', readingDate: '', summary: '', ...DEFAULTS } } };
 }
 
 export function createMeter(mappingNo = '') {
@@ -108,7 +108,7 @@ export function meterCosts(survey, item) {
 }
 
 export function meterData(survey, item) {
-  const data = Object.fromEntries(METER_FIELDS.filter(f => !f.calculated).map(f => [f.id, meterValue(survey, item, f.id)]));
+  const data = Object.fromEntries([...METER_FIELDS, ...(survey.facility?.meter?.layout?.custom || []).filter(f => f.scope === 'meter')].filter(f => !f.calculated).map(f => [f.id, meterValue(survey, item, f.id)]));
   const { monthly, annual } = meterCosts(survey, item);
   return { ...data, monthlyCost: monthly, annualCost: annual, photos: item.photos || [] };
 }
@@ -126,19 +126,19 @@ export function headerValue(survey, id) {
 
 export function reportDetails(survey) {
   const f = survey.facility || {}, totals = costTotals(survey);
-  return [['Project', f.facilityName], ...HEADER_FIELDS.map(field => [field.label, headerValue(survey, field.id)]),
+  return [['Project', f.facilityName], ...activeMeterFields(survey, 'header').map(field => [field.label, headerValue(survey, field.id)]),
     ['Meters mapped', String((survey.items || []).length)],
     ['Est. monthly cost total (AED)', totals.monthly.toFixed(2)], ['Est. annual cost total (AED)', totals.annual.toFixed(2)]];
 }
 
 export function reviewChecks(survey) {
   const checks = [];
-  for (const field of HEADER_FIELDS.filter(f => f.required)) {
+  for (const field of activeMeterFields(survey, 'header').filter(f => f.required)) {
     if (!String(headerValue(survey, field.id)).trim()) checks.push({ message: `Enter ${field.label.toLowerCase()}.`, blocking: true, section: 'details', fieldId: field.id });
   }
   if (!(survey.items || []).length) checks.push({ message: 'Add at least one meter before submitting.', blocking: true, section: 'meters' });
   (survey.items || []).forEach((item, index) => {
-    for (const field of METER_FIELDS.filter(f => f.required)) {
+    for (const field of activeMeterFields(survey, 'meter').filter(f => f.required)) {
       if (!String(item.customValues?.[field.id] ?? '').trim()) checks.push({ message: `Meter ${index + 1}: enter ${field.label.toLowerCase()}.`, blocking: true, section: 'meters', itemId: item.id, fieldId: field.id });
     }
     if (!String(item.customValues?.kwhReading ?? '').trim()) checks.push({ message: `Meter ${index + 1}: record the kWh reading.`, section: 'meters', itemId: item.id, fieldId: 'kwhReading' });
@@ -165,4 +165,11 @@ export function changeMeterState(record, action, now = new Date().toISOString())
   if (action === 'delete') meter.deletedAt = now;
   else delete meter.deletedAt;
   return { ...record, facility: { ...record.facility, meter } };
+}
+
+/** Optional template fields; mandatory inputs and formula columns are always retained. */
+export function activeMeterFields(survey, scope) {
+  const fields = scope === 'header' ? HEADER_FIELDS : METER_FIELDS;
+  const hidden = survey.facility?.meter?.layout?.hidden || [];
+  return [...fields, ...(survey.facility?.meter?.layout?.custom || []).filter(f => f.scope === scope)].filter(f => f.required || f.calculated || ['powerLoad','operatingHours','diversityFactor','tariff'].includes(f.id) || !hidden.includes(`${scope}:${f.id}`));
 }

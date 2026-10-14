@@ -86,7 +86,7 @@ export function QhseHub({ surveys, legacySurveys = [], project, canEdit, canDele
       <p className="col-span-3 text-xs text-slate-500">Latest submitted report: {live.filter(s => s.submittedAt).sort((a,b) => Date.parse(b.submittedAt)-Date.parse(a.submittedAt))[0]?.facility?.qhse?.reportNumber || 'No numbered submission yet'}</p>
     </section>
     {canEdit && project && <div className="bg-white p-5 rounded-xl border grid sm:grid-cols-[1fr_auto] gap-4 items-end">
-      <label className="text-sm font-semibold text-slate-700">Inspection template<select className={`${control} mt-2`} value={templateId} onChange={e => setTemplateId(e.target.value)}><option value="">OCS standard fields</option>{templates.map(s => <option key={s.id} value={s.id}>{s.facility.qhse.templateName}</option>)}</select></label>
+      <label className="text-sm font-semibold text-slate-700">Inspection template<select className={`${control} mt-2`} value={templateId} onChange={e => setTemplateId(e.target.value)}><option value="">{project.reportTemplate?.name || 'OCS standard fields'} (project default)</option>{templates.map(s => <option key={s.id} value={s.id}>{s.facility.qhse.templateName}</option>)}</select></label>
       <button disabled={busy} className="bg-[#F15F22] text-white rounded-lg px-5 py-3 font-semibold disabled:opacity-50" onClick={async () => {
         setBusy(true); setError('');
         try { await onCreate(project.id, templates.find(s => s.id === templateId)?.facility?.qhse?.layout || null); } catch (e) { setError(e.message); } finally { setBusy(false); }

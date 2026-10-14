@@ -52,8 +52,9 @@ import {
 import { facilityListFilter } from './portal/portalData';
 import GlobalSearch from './portal/GlobalSearch';
 import { Capacitor } from '@capacitor/core';
-import { listTemplates, cachedTemplates, applyTemplateToItems, isBlankSnag } from './utils/templates';
-import { useFormsConfig } from './config/FormsConfigContext';
+import { listTemplates, saveTemplate, cachedTemplates, applyTemplateToItems, isBlankSnag } from './utils/templates';
+import { recordFormsConfig, attachProjectTemplate } from './utils/projectTemplates';
+import { useFormsConfig, ProjectFormsConfig } from './config/FormsConfigContext';
 import { submissionIssues } from './config/rulesEngine';
 import { createNewSurvey, calculateSurveyStats, facilityCode } from './types/survey';
 import {
@@ -180,14 +181,14 @@ export default function App({ currentUser = null, onSignOut } = {}) {
    * kept. Returns true when submission must stop.
    */
   const [validationSurveyId, setValidationSurveyId] = useState(null);
-  const validationIssues = validationSurveyId === survey?.id ? submissionIssues(formsConfig, survey, platform) : [];
+  const validationIssues = validationSurveyId === survey?.id ? submissionIssues(recordFormsConfig(survey, formsConfig), survey, platform) : [];
   function showValidationIssue(issue) {
     setView('survey');
     setActiveTab(issue.scope === 'facility' ? 'facility' : 'items');
     focusSubmissionField(issue);
   }
   function blockedByRequiredFields(record) {
-    const issues = submissionIssues(formsConfigRef.current, record, platform);
+    const issues = submissionIssues(recordFormsConfig(record, formsConfigRef.current), record, platform);
     if (!issues.length) return false;
     setValidationSurveyId(record.id);
     if (record.id === surveyRef.current?.id) showValidationIssue(issues[0]);
@@ -1103,7 +1104,7 @@ It stays available in the facility list for reports.`)) {
     // Fresh blank facility, with its own new id so nothing is overwritten,
     // its own reference number so it is identifiable straight away, and the
     // open project so it cannot be recorded under the wrong one.
-    const next = createNewSurvey(await nextFacilityNumber());
+    const next = attachProjectTemplate(createNewSurvey(await nextFacilityNumber()), activeProjectRef.current);
     next.projectId = activeProjectRef.current?.id || null;
     skipCloudPushRef.current = true;
     setSurvey(next);
@@ -1307,7 +1308,7 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
       // Deleted the one currently open: it no longer exists anywhere, so
       // start a fresh blank facility rather than keep editing a ghost.
       if (surveyId === survey?.id) {
-        const fresh = createNewSurvey(await nextFacilityNumber());
+        const fresh = attachProjectTemplate(createNewSurvey(await nextFacilityNumber()), activeProjectRef.current);
         fresh.projectId = activeProjectRef.current?.id || null;
         skipCloudPushRef.current = true;
         setSurvey(fresh);
@@ -1335,7 +1336,7 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
   // Reset / Clear
   const handleReset = async () => {
     if (confirm('Start a fresh blank condition survey?')) {
-      const fresh = createNewSurvey(await nextFacilityNumber());
+      const fresh = attachProjectTemplate(createNewSurvey(await nextFacilityNumber()), activeProjectRef.current);
       fresh.projectId = activeProjectRef.current?.id || null;
       setSurvey(fresh);
       await saveSurveyOffline(fresh);
@@ -1709,6 +1710,12 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
     refreshProjects();
   };
 
+  const saveProjectLibraryTemplate = async (template) => {
+    const saved = await saveTemplate(template);
+    setTemplates(prev => [saved, ...prev.filter(t => t.id !== saved.id)]);
+    return saved;
+  };
+
   const handleCreateProject = async (details) => {
     const created = await createProjectRecord({ ...details, module: workModule });
     setProjects((prev) => [{ ...created, facilityCount: 0 }, ...prev]);
@@ -1733,13 +1740,18 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
 
     // Reuse an untouched blank facility instead of stacking up empty ones.
     if (!currentIsBlankInThisProject) {
-      const fresh = createNewSurvey(await nextFacilityNumber());
+      const fresh = attachProjectTemplate(createNewSurvey(await nextFacilityNumber()), project);
       fresh.projectId = project.id;
       skipCloudPushRef.current = true;  // nothing worth a server row until it has content
       setSurvey(fresh);
       await saveSurveyOffline(fresh, { pendingSync: false });
     }
 
+    if (currentIsBlankInThisProject && !current.facility?.projectTemplate) {
+      const fresh = attachProjectTemplate(current, project);
+      surveyRef.current = fresh; setSurvey(fresh);
+      await saveSurveyOffline(fresh, { pendingSync: false });
+    }
     setActiveTab('facility');
     setView('survey');
   };
@@ -1878,8 +1890,9 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
     try {
       // The template goes in before the first save, so the facility and its
       // checklist snags reach the server together in one upload.
-      if (template) {
-        const { record, applied } = withTemplateApplied(surveyRef.current, template);
+      const startingTemplate = template || surveyRef.current?.facility?.projectTemplate;
+      if (startingTemplate) {
+        const { record, applied } = withTemplateApplied(surveyRef.current, startingTemplate);
         if (applied.added) {
           surveyRef.current = record;
           setSurvey(record);
@@ -1931,7 +1944,7 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
       return;
     }
 
-    const fresh = createNewSurvey(await nextFacilityNumber());
+    const fresh = attachProjectTemplate(createNewSurvey(await nextFacilityNumber()), activeProjectRef.current);
     fresh.projectId = activeProjectRef.current?.id || null;
     skipCloudPushRef.current = true;   // an empty facility is not worth a server row yet
     setSurvey(fresh);
@@ -2050,6 +2063,7 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
   const urgentCount = stats?.priorityCounts?.[1] || 0;
 
   return (
+    <ProjectFormsConfig config={view === 'survey' ? recordFormsConfig(survey, formsConfig) : formsConfig}>
     <SubmissionValidation.Provider value={validationSurveyId === survey?.id}>
     <Suspense fallback={<div role="status" className="p-6 text-slate-600">Loading screen…</div>}>
     <div className="workspace-app min-h-screen bg-[#f4f8fd] flex font-sans">
@@ -2186,6 +2200,9 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
         <main className="flex-1 w-full px-3 sm:px-8 pt-4 sm:pt-6 safe-area-content-pb md:pb-8">
           <ProjectDashboard
             key={workModule}
+            workModule={workModule}
+            templates={templates}
+            onSaveTemplate={mayManageTemplates ? saveProjectLibraryTemplate : null}
             moduleName={moduleLabels(workModule).name}
             countLabel={moduleLabels(workModule).records}
             onBack={handleAppBack}
@@ -2611,5 +2628,6 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
     </div>
     </Suspense>
     </SubmissionValidation.Provider>
+    </ProjectFormsConfig>
   );
 }
