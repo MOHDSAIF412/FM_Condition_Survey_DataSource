@@ -1507,7 +1507,17 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
       setActiveProjectId(project.id);
     }
     setWorkModule(isQhse(row) ? 'qhse' : isMeter(row) ? 'meter' : 'condition');
-    await handleOpenSurvey(surveyId);
+    return handleOpenSurvey(surveyId);
+  };
+
+  /**
+   * "Edit" on a submitted facility: open it on its snags, ready to add more.
+   * It stays submitted -- only approval locks a facility -- so the edits sync
+   * like any other and reviewers see the updated snags.
+   */
+  const handleEditSurvey = async (surveyId, fromPortal = false) => {
+    const opened = fromPortal ? await openSurveyFromPortal(surveyId) : await handleOpenSurvey(surveyId);
+    if (opened !== undefined) setActiveTab('items');
   };
 
   /** Dashboard "Create New Project": the project list with its form open. */
@@ -2205,6 +2215,7 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
               onClearNarrow={() => setPortalListFilter((f) => ({ ...f, priority: null, evidence: null }))}
               currentId={survey?.id}
               onOpen={openSurveyFromPortal}
+              onEdit={mayEditSurveys ? (id) => handleEditSurvey(id, true) : null}
               onDelete={mayDeleteSnags ? handleDeleteSurvey : null}
               canDownloadReports={mayDownloadReports}
               onRefresh={refreshSurveyList}
@@ -2263,6 +2274,7 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
                 surveys={facilitiesInProject}
                 currentId={survey?.id}
                 onOpen={handleOpenSurvey}
+                onEdit={mayEditSurveys ? handleEditSurvey : null}
                 onDelete={mayDeleteSnags ? handleDeleteSurvey : null}
                 canDownloadReports={mayDownloadReports}
                 onRefresh={refreshSurveyList}
@@ -2497,6 +2509,7 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
               surveys={listRows}
               currentId={survey?.id}
               onOpen={handleOpenSurvey}
+              onEdit={mayEditSurveys ? handleEditSurvey : null}
               onDelete={mayDeleteSnags ? handleDeleteSurvey : null}
               canDownloadReports={mayDownloadReports}
               onRefresh={refreshSurveyList}

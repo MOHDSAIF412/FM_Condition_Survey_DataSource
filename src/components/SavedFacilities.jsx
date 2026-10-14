@@ -4,7 +4,7 @@ import {
   ChevronDown, ClipboardList, MapPin, Camera, DollarSign, Search, Calendar, Clock,
   Building2, Factory, Trees, Wrench, Fan, Zap, Flame, Sparkles,
   Home, GraduationCap, ShoppingBag, Briefcase, Warehouse, Moon, Stethoscope, BedDouble, Trophy,
-  Filter, X, FolderKanban
+  Filter, X, FolderKanban, Pencil
 } from 'lucide-react';
 import { hydratePhotos, mapWithConcurrency } from '../utils/cloudSync';
 import { sortDate } from '../utils/surveySelection';
@@ -14,7 +14,7 @@ import NoReportAccess from './NoReportAccess';
 import { generateSurveyPDF } from '../utils/reportExports';
 import { generateSurveyExcel } from '../utils/reportExports';
 import { formatMoney } from '../utils/currency';
-import { stageOf, STAGE_BY_KEY, isOverdue } from '../utils/workflow';
+import { stageOf, STAGE_BY_KEY, isOverdue, isLocked } from '../utils/workflow';
 import {
   facilityCode, snagLabel, facilityTypeOf, PRIORITY_LEVELS, DEPARTMENTS
 } from '../types/survey';
@@ -46,7 +46,7 @@ const FACILITY_FETCH_CONCURRENCY = 4;
  * what a dashboard number counted, shown as a chip that can be removed.
  */
 export default function SavedFacilities({
-  surveys = [], currentId, onOpen, onDelete, onRefresh, onSyncNow, onSubmit, focus, canDownloadReports = true,
+  surveys = [], currentId, onOpen, onEdit, onDelete, onRefresh, onSyncNow, onSubmit, focus, canDownloadReports = true,
   projects = null, narrow = null, onClearNarrow, title = 'Saved Facilities', scrollOnFocus = true
 }) {
   const [busy, setBusy] = useState(null);
@@ -304,6 +304,15 @@ export default function SavedFacilities({
     }
   };
 
+  const edit = async (s) => {
+    setBusy(`${s.id}:edit`);
+    try {
+      await onEdit(s.id);
+    } finally {
+      setBusy(null);
+    }
+  };
+
   const remove = async (s) => {
     if (!onDelete) return;
     setBusy(`${s.id}:delete`);
@@ -358,6 +367,22 @@ export default function SavedFacilities({
             <CheckCircle2 className="w-3.5 h-3.5" /> {stage.label}
           </span>
           {overdue}
+          {/* Submitted is not locked: more snags can still be added. Approved
+              is, and needs a Manager's Reopen first. */}
+          {onEdit && !isLocked(s) && (
+            <button
+              type="button"
+              disabled={busy !== null}
+              onClick={(e) => { e.stopPropagation(); edit(s); }}
+              title="Open this submitted facility to add or change snags"
+              className="px-2.5 py-1 rounded-full text-[11px] font-bold bg-ocs-600 hover:bg-ocs-500 disabled:opacity-50 text-white inline-flex items-center gap-1.5"
+            >
+              {busy === `${s.id}:edit`
+                ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                : <Pencil className="w-3.5 h-3.5" />}
+              Edit
+            </button>
+          )}
         </span>
       );
     }
