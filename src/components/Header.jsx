@@ -242,6 +242,8 @@ export default function Header({
                     </div>
                   )}
 
+                  {currentUser && onAccountSecurity && <button onClick={() => { setShowMenu(false); onAccountSecurity(); }} className={MENU_ITEM}><KeyRound className="w-4 h-4 text-slate-400"/><span>Account security & backup</span></button>}
+
                   <p className={MENU_HEADING}>This facility</p>
 
                   {canDownloadReports && (
@@ -302,7 +304,6 @@ export default function Header({
                         </button>
                       )}
 
-                      {onAccountSecurity && <button onClick={() => { setShowMenu(false); onAccountSecurity(); }} className={MENU_ITEM}><KeyRound className="w-4 h-4 text-slate-400"/><span>Account security & backup</span></button>}
 
                       {onSignOut && (
                         <button

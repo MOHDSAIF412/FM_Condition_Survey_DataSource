@@ -15,8 +15,8 @@
 
 ## Remaining owner actions and limits
 
-1. Enable Supabase Auth leaked-password protection where supported, set the global password policy, and disable public signup for administrator-issued accounts. Public signup was confirmed enabled and leaked-password protection disabled. The current connector cannot modify Auth configuration. UI/server-admin breach checks do not replace global Auth enforcement against direct API requests.
-2. Enroll MFA by scanning and confirming the authenticator code. Protect the GitHub/Supabase administrator accounts with their own MFA as well.
+1. Public signup is disabled, as confirmed by the owner. Supabase leaked-password protection requires a plan upgrade and remains unavailable on the current Free plan. Review the global password policy separately. The current connector cannot modify Auth configuration. UI/server-admin breach checks do not replace global Auth enforcement against direct API requests.
+2. MFA enrollment is deferred at the owner’s request. When ready, scan and confirm the authenticator code through Account security & backup, directly below the profile details in the account menu. Protect the GitHub/Supabase administrator accounts with their own MFA as well.
 3. Install the updated APK for native backup/debug/recents protections. Web changes ship through OTA. Native protections were compiled and package-checked; physical-device behavior still needs a phone check.
 4. Verify hosted database/off-site backup coverage in Supabase and keep private backup copies. Provider backup availability/retention depends on the plan; storage file bytes require separate backup. No paid plan or new external monitoring account has been purchased/configured.
 

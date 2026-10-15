@@ -29,9 +29,9 @@ const MODULES = [
 
 // Rows on a phone so all three fit on one screen; full cards once there is room.
 export default function ModulePicker({ onSelect }) {
-  return <section className="relative max-w-5xl mx-auto space-y-6 sm:space-y-10">
+  return <section className="relative w-full min-w-0 space-y-6 sm:space-y-10">
     {/* Faint dashed rings and dots behind the heading, as in the design. */}
-    <svg className="absolute -top-10 -right-10 w-72 h-72 text-blue-200/70 pointer-events-none hidden md:block" viewBox="0 0 200 200" fill="none" aria-hidden="true">
+    <svg className="absolute -top-6 right-0 w-72 h-72 text-blue-200/70 pointer-events-none hidden md:block" viewBox="0 0 200 200" fill="none" aria-hidden="true">
       <circle cx="100" cy="100" r="90" stroke="currentColor" strokeWidth="1" strokeDasharray="4 5" />
       <circle cx="170" cy="46" r="12" fill="currentColor" opacity="0.6" />
     </svg>
