@@ -134,7 +134,7 @@ describe('api/describe (the server)', () => {
     process.env.AI_API_KEY = 'secret-key';
     const r = res();
     await handler({ method: 'GET', headers: {} }, r);
-    expect(r.body).toEqual({ configured: true, model: 'gemini-2.5-flash-lite' });
+    expect(r.body).toEqual({ configured: true, model: 'gemini-3.5-flash-lite' });
     expect(JSON.stringify(r.body)).not.toContain('secret-key');
   });
 
