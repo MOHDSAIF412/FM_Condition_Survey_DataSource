@@ -120,9 +120,22 @@ async function defaultTransport(body, signal) {
   }
 }
 
+/** Why descriptions could not be written, in words a surveyor can act on. */
+export function reasonFor(reply) {
+  if (!reply) return 'no answer from the server';
+  const code = reply.data?.error;
+  if (reply.status === 401) return 'sign in again';
+  if (code === 'not_configured') return 'AI key not set on the server';
+  if (reply.status === 429) return 'free daily limit reached, try again tomorrow';
+  if (code === 'model_unreachable' || code === 'model_error') return `AI service error${reply.data?.detail ? `: ${reply.data.detail}` : ''}`;
+  if (reply.status === 404) return 'server not updated yet';
+  if (reply.status === 504) return 'AI service took too long';
+  return `server error ${reply.status}`;
+}
+
 /**
  * Resolves to a Map of snag id -> AI description. Snags without one are
- * absent from the map. Never throws.
+ * absent from the map, and `map.unavailable` says why. Never throws.
  */
 export async function describeSnags(items, { signal, transport = defaultTransport, store = browserStore, online } = {}) {
   const result = new Map();
@@ -134,7 +147,8 @@ export async function describeSnags(items, { signal, transport = defaultTranspor
     else todo.push(item);
   }
   const isOnline = online ?? (typeof navigator === 'undefined' || navigator.onLine !== false);
-  if (!todo.length || !isOnline) return result;
+  if (!todo.length) return result;
+  if (!isOnline) { result.unavailable = 'offline'; return result; }
 
   for (let i = 0; i < todo.length; i += BATCH_SIZE) {
     if (signal?.aborted) break;
@@ -146,15 +160,18 @@ export async function describeSnags(items, { signal, transport = defaultTranspor
       reply = await transport({ snags }, signal);
     } catch (err) {
       console.warn('[ai descriptions] request failed, leaving the rest blank:', err?.message || err);
+      result.unavailable = err?.name === 'AbortError' ? 'AI service took too long' : 'could not reach the server';
       break;
     }
     // Signed out, not configured, or the free limit is used up: further
     // requests would fail the same way, so stop instead of waiting on each.
     if (!reply || reply.status !== 200) {
       console.warn('[ai descriptions] not available:', reply?.status, reply?.data?.error);
+      result.unavailable = reasonFor(reply);
       break;
     }
     const got = reply.data?.descriptions || {};
+    if (!Object.keys(got).length) result.unavailable = 'the AI gave no usable answer';
     for (const item of batch) {
       const text = typeof got[item.id] === 'string' ? got[item.id].trim() : '';
       if (!text) continue;
