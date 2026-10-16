@@ -17,11 +17,35 @@ export function installDiagnostics() {
   window.addEventListener('unhandledrejection', () => recordDiagnostic('unhandled_rejection'));
 }
 
-// The last reason an upload failed, kept in memory for this tab only, so the
-// sync warning can say what failed instead of always blaming the connection.
+// The last reason a sync failed, so the warning can say what failed instead of
+// always blaming the connection. Kept in sessionStorage (this tab only, gone
+// when it closes) because the reason can name a facility; it survives a reload,
+// which used to leave the warning up with no reason at all.
+const problemKey = () => `fm_sync_problem_${deviceStorageScope().accountId || 'device'}`;
 let lastSyncProblem = null;
 export function recordSyncProblem(err) {
-  const message = String(err?.message || err || '').replace(/\s+/g, ' ').trim().slice(0, 160);
-  if (message) lastSyncProblem = { message, at: Date.now() };
+  const message = String(err?.message || err || '').replace(/\s+/g, ' ').trim().slice(0, 240);
+  if (!message) return;
+  lastSyncProblem = { message, at: Date.now() };
+  try { sessionStorage.setItem(problemKey(), JSON.stringify(lastSyncProblem)); } catch { /* storage unavailable */ }
 }
-export function latestSyncProblem() { return lastSyncProblem; }
+export function latestSyncProblem() {
+  if (lastSyncProblem) return lastSyncProblem;
+  try { return JSON.parse(sessionStorage.getItem(problemKey()) || 'null'); } catch { return null; }
+}
+
+/**
+ * A sync that fully succeeded ends the failure streak.
+ *
+ * Failures used to be counted over a 15-minute window and never reset, so
+ * after the server recovered, every later autosave ("Syncing...") brought the
+ * "Sync has failed repeatedly" warning back for up to 15 minutes.
+ */
+export function clearSyncFailures() {
+  lastSyncProblem = null;
+  try { sessionStorage.removeItem(problemKey()); } catch { /* storage unavailable */ }
+  try {
+    const kept = diagnosticEvents().filter((e) => e.kind !== 'sync_failed');
+    localStorage.setItem(key(), JSON.stringify(kept));
+  } catch { /* storage full */ }
+}
