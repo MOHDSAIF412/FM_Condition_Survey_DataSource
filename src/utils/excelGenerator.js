@@ -1,6 +1,7 @@
 import { checkReportCancelled, yieldToScreen } from './reportTask';
 import { recordFormsConfig } from './projectTemplates';
 import { cachedPublishedConfig } from '../config/configStore';
+import { dataUrlToBlob } from './dataUrl';
 /* ExcelJS is loaded on demand inside generateSurveyExcel rather than imported
    at the top. It is one of the largest things the app depends on, and importing
    it here put the whole spreadsheet engine into the bundle every surveyor
@@ -96,7 +97,8 @@ function rowHeightToPx(heightPts) {
  * @returns {Promise<{base64: string, width: number, height: number}|null>}
  */
 async function coverCropToRatio(dataUrl, targetRatio, outWidth) {
-  const blob = await (await fetch(dataUrl)).blob();
+  // Not fetch(): the Content Security Policy refuses data: URLs (dataUrl.js).
+  const blob = dataUrlToBlob(dataUrl);
   const url = URL.createObjectURL(blob);
   try {
     const img = await new Promise((resolve, reject) => {

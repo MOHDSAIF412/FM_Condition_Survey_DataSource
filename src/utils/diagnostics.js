@@ -16,3 +16,12 @@ export function installDiagnostics() {
   window.addEventListener('error', () => recordDiagnostic('unhandled_error'));
   window.addEventListener('unhandledrejection', () => recordDiagnostic('unhandled_rejection'));
 }
+
+// The last reason an upload failed, kept in memory for this tab only, so the
+// sync warning can say what failed instead of always blaming the connection.
+let lastSyncProblem = null;
+export function recordSyncProblem(err) {
+  const message = String(err?.message || err || '').replace(/\s+/g, ' ').trim().slice(0, 160);
+  if (message) lastSyncProblem = { message, at: Date.now() };
+}
+export function latestSyncProblem() { return lastSyncProblem; }

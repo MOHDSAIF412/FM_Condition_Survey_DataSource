@@ -2,6 +2,8 @@ import { checkReportCancelled } from './reportTask';
 import { readDownloadedPhoto, storeDownloadedPhoto } from './downloadedPhotos';
 import { photoCache } from './photoCache';
 import { deviceStorageScope } from './deviceAccount';
+import { dataUrlToBlob } from './dataUrl';
+import { recordSyncProblem } from './diagnostics';
 /**
  * Cloud sync for condition surveys.
  *
@@ -27,15 +29,16 @@ const PHOTO_FETCH_CONCURRENCY = 6;
 /**
  * Turns any data URL into an uploadable image Blob.
  *
- * fetch() is used rather than atob() because data URLs are not always base64:
- * the sample photos are `data:image/svg+xml;utf8,<percent-encoded>`, and atob()
- * throws on those, which previously aborted the whole survey push.
+ * Decoded locally (see dataUrl.js), never with fetch(): the Content Security
+ * Policy refuses fetch() of data: URLs, which failed every photo upload. Data
+ * URLs are not always base64 -- the old sample photos were
+ * `data:image/svg+xml;utf8,<percent-encoded>` -- and the helper handles both.
  *
  * Anything that is not already a JPEG/PNG/WebP (SVG, for instance) is drawn to
  * a canvas and re-encoded, since the storage bucket only accepts those types.
  */
 async function dataUrlToUploadableBlob(dataUrl) {
-  const blob = await (await fetch(dataUrl)).blob();
+  const blob = dataUrlToBlob(dataUrl);
   if (UPLOADABLE_TYPES.includes(blob.type)) return blob;
 
   const bitmapUrl = URL.createObjectURL(blob);
@@ -178,6 +181,7 @@ export async function pushSurvey(survey) {
         // Skip this image rather than losing the whole survey's sync. It stays
         // on the device and is retried on the next push -- never discarded.
         console.warn('Photo upload deferred, will retry:', photo.id, err.message);
+        recordSyncProblem(`Photo upload: ${err.message}`);
         failedPhotoIds.push(photo.id);
         continue;
       }
@@ -233,6 +237,7 @@ export async function pushSurvey(survey) {
     p_deleted_photos: deletedPhotoIds
   });
   if (commitError) {
+    recordSyncProblem(`Saving to the server: ${commitError.message}`);
     if (commitError.code === 'PGRST202' || commitError.code === '42883') {
       throw new Error('Safe sync needs a database update. Your work remains saved on this device.');
     }
