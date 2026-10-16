@@ -15,13 +15,15 @@
  * point at Google Gemini's free tier. Configure in Vercel:
  *   AI_API_KEY   (required)  -- e.g. a Google AI Studio key
  *   AI_BASE_URL  (optional)  -- default Gemini's OpenAI-compatible endpoint
- *   AI_MODEL     (optional)  -- default gemini-2.5-flash
+ *   AI_MODEL     (optional)  -- default gemini-2.5-flash-lite
  * With no key set the endpoint answers 503 and reports simply leave the
  * column blank.
  */
 
 const DEFAULT_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta/openai';
-const DEFAULT_MODEL = 'gemini-2.5-flash';
+// Flash-Lite: vision-capable, no "thinking" step so it answers in a few
+// seconds, and the largest free daily allowance of the Gemini models.
+const DEFAULT_MODEL = 'gemini-2.5-flash-lite';
 
 export const LIMITS = { snags: 6, photosPerSnag: 2, photoChars: 400_000, textChars: 1500 };
 
@@ -114,8 +116,12 @@ async function signedIn(req) {
 }
 
 export default async function handler(req, res) {
+  // Opening the endpoint in a browser shows whether it is set up (never the key).
+  if (req.method === 'GET') {
+    return res.status(200).json({ configured: !!process.env.AI_API_KEY, model: process.env.AI_MODEL || DEFAULT_MODEL });
+  }
   if (req.method !== 'POST') {
-    res.setHeader('Allow', 'POST');
+    res.setHeader('Allow', 'GET, POST');
     return res.status(405).json({ error: 'method_not_allowed' });
   }
   const apiKey = process.env.AI_API_KEY;
@@ -151,8 +157,11 @@ export default async function handler(req, res) {
   }
   if (reply.status === 429) return res.status(429).json({ error: 'free_limit_reached' });
   if (!reply.ok) {
-    console.error('[describe] model error', reply.status);
-    return res.status(502).json({ error: 'model_error' });
+    // The provider's own message (e.g. "API key not valid") tells the user
+    // what to fix; it never contains the key itself.
+    const detail = await reply.json().then((j) => (Array.isArray(j) ? j[0] : j)?.error?.message).catch(() => '');
+    console.error('[describe] model error', reply.status, detail);
+    return res.status(502).json({ error: 'model_error', detail: clip(detail || `status ${reply.status}`, 200) });
   }
   const json = await reply.json().catch(() => null);
   const descriptions = parseDescriptions(json?.choices?.[0]?.message?.content, snags.map((s) => s.id));

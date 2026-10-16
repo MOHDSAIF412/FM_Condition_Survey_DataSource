@@ -44,7 +44,8 @@ describe('Excel follows the layout', () => {
     expect(wb.worksheets.length).toBeGreaterThan(1);
     const text = allText(wb);
     expect(text).toContain('Est. Cost (AED)');
-    expect(text).toContain('Rusted |  | 2 | 12500');   // blank AI Description between notes and quantity
+    // Signed out in tests, so AI Description (between notes and quantity) says why it is empty.
+    expect(text).toMatch(/Rusted \| AI description not available \(sign in again\) \| 2 \| 12500/);
   });
 
   test('the client layout has no money anywhere', async () => {

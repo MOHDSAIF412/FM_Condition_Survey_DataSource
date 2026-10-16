@@ -57,6 +57,12 @@ describe('describeSnags (in the app)', () => {
     const out = await describeSnags(items, { transport, store: memoryStore(), online: true });
     expect(n).toBe(1);
     expect(out.size).toBe(0);
+    expect(out.unavailable).toBe('free daily limit reached, try again tomorrow');
+  });
+
+  test('a missing server key is named, so the report says why the column is empty', async () => {
+    const out = await describeSnags([snag('a')], { transport: async () => ({ status: 503, data: { error: 'not_configured' } }), store: memoryStore(), online: true });
+    expect(out.unavailable).toBe('AI key not set on the server');
   });
 
   test('a network error leaves the column blank instead of failing the report', async () => {
@@ -86,6 +92,15 @@ describe('Excel report', () => {
     expect(row.getCell(at + 2).value).toBe('Corroded roof sheet with active water ingress.');
   });
 
+  test('when AI is unavailable the cell says why', async () => {
+    const ws = await register(async () => Object.assign(new Map(), { unavailable: 'offline' }));
+    const header = ws.getRow(3).values.filter(Boolean);
+    const cell = ws.getRow(5).getCell(header.indexOf('AI Description') + 1);
+    expect(cell.text).toBe('AI description not available (offline)');
+    expect(cell.font.italic).toBe(true);
+    expect(ws.getRow(5).getCell(header.indexOf('Observed Defects & Notes') + 1).value).toBe('rusty roof sheet leaking');
+  });
+
   test('when AI is unavailable the report still builds, with the column blank', async () => {
     const ws = await register(async () => { throw new Error('down'); });
     const header = ws.getRow(3).values.filter(Boolean);
@@ -113,6 +128,29 @@ describe('api/describe (the server)', () => {
     const reply = '```json\n{"descriptions":[{"id":"a","text":" Cracked  wall. "},{"id":"zzz","text":"x"}]}\n```';
     expect(parseDescriptions(reply, ['a'])).toEqual({ a: 'Cracked wall.' });
     expect(parseDescriptions('not json', ['a'])).toEqual({});
+  });
+
+  test('opening it in a browser shows whether the key is set, never the key', async () => {
+    process.env.AI_API_KEY = 'secret-key';
+    const r = res();
+    await handler({ method: 'GET', headers: {} }, r);
+    expect(r.body).toEqual({ configured: true, model: 'gemini-2.5-flash-lite' });
+    expect(JSON.stringify(r.body)).not.toContain('secret-key');
+  });
+
+  test('the provider\'s error message is passed back so the report can show it', async () => {
+    process.env.AI_API_KEY = 'k';
+    process.env.SUPABASE_URL = 'https://x.supabase.co';
+    process.env.SUPABASE_ANON_KEY = 'anon';
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async (url) =>
+      String(url).includes('/auth/v1/user')
+        ? new Response('{}', { status: 200 })
+        : new Response(JSON.stringify([{ error: { message: 'API key not valid. Please pass a valid API key.' } }]), { status: 400 }));
+    const r = res();
+    await handler({ method: 'POST', headers: { authorization: 'Bearer good' }, body: { snags: [{ id: 'a' }] } }, r);
+    expect(r.code).toBe(502);
+    expect(r.body.detail).toBe('API key not valid. Please pass a valid API key.');
+    fetchMock.mockRestore();
   });
 
   test('without a key it says so and calls nothing', async () => {

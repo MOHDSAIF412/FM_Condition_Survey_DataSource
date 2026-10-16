@@ -698,7 +698,10 @@ export async function generateSurveyExcel(input, selectedFacility = 'ALL', optio
         put('department', dept.name, { alignment: { vertical: 'middle' } });
         put('priority', `P${item.priority}`, { alignment: { horizontal: 'center', vertical: 'middle' } });
         put('defect', item.defectDescription || 'No defect observed.', { alignment: { vertical: 'middle', wrapText: true } });
-        put('aiDefect', aiText.get(String(item.id)) || '', { alignment: { vertical: 'middle', wrapText: true } });
+        const ai = aiText.get(String(item.id));
+        put('aiDefect', ai || (aiText.unavailable ? `AI description not available (${aiText.unavailable})` : ''), {
+          alignment: { vertical: 'middle', wrapText: true }
+        });
         customSnagFields.forEach((f, idx) => {
           const c = row.getCell(customCol(idx));
           c.value = reportValue(f, item, 'snag');
@@ -714,6 +717,8 @@ export async function generateSurveyExcel(input, selectedFacility = 'ALL', optio
         }
 
         row.font = { name: 'Arial', size: 9 };
+        // Says why, in grey, when no AI text could be written for this snag.
+        if (COL.aiDefect && !ai) row.getCell(COL.aiDefect).font = { name: 'Arial', size: 8, italic: true, color: { argb: 'FF94A3B8' } };
         // The tall row is the photo box; without photos, rows size to their text.
         if (hasPhotoColumn) row.height = THUMB_ROW_HEIGHT_PTS;
 
