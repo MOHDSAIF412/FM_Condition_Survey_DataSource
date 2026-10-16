@@ -44,7 +44,7 @@ describe('Excel follows the layout', () => {
     expect(wb.worksheets.length).toBeGreaterThan(1);
     const text = allText(wb);
     expect(text).toContain('Est. Cost (AED)');
-    expect(text).toContain('Rusted | 2 | 12500');
+    expect(text).toContain('Rusted |  | 2 | 12500');   // blank AI Description between notes and quantity
   });
 
   test('the client layout has no money anywhere', async () => {

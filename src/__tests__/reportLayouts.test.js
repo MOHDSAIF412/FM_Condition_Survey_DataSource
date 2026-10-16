@@ -17,11 +17,15 @@ describe('the Standard layout is today\'s report', () => {
     expect(cols.reduce((n, c) => n + c.weight, 0)).toBe(170);   // exactly the A4 table width, so nothing is rescaled
   });
 
-  test('Excel register: same columns and labels as before layouts', () => {
+  test('Excel register: the earlier columns, plus AI Description beside the surveyor\'s notes', () => {
     expect(labels(registerColumns(standardLayout(), 'excel'))).toEqual([
       'Snag #', 'Evidence Photo', 'Snag Location / Room', 'Snag / Component Name', 'Department / Trade',
-      'Priority', 'Observed Defects & Notes', 'Quantity', 'Est. Cost (AED)'
+      'Priority', 'Observed Defects & Notes', 'AI Description', 'Quantity', 'Est. Cost (AED)'
     ]);
+  });
+
+  test('AI Description is Excel only', () => {
+    expect(keys(registerColumns(standardLayout(), 'pdf'))).not.toContain('aiDefect');
   });
 
   test('nothing published: the default config resolves to Standard', () => {
@@ -64,7 +68,7 @@ describe('layout options', () => {
 
   test('the editable column list starts from today\'s columns, all shown', () => {
     const cols = editableColumns(standardLayout());
-    expect(keys(cols)).toEqual(['number', 'photo', 'name', 'location', 'department', 'priority', 'defect', 'quantity', 'cost']);
+    expect(keys(cols)).toEqual(['number', 'photo', 'name', 'location', 'department', 'priority', 'defect', 'aiDefect', 'quantity', 'cost']);
     expect(cols.every((c) => c.visible)).toBe(true);
   });
 });

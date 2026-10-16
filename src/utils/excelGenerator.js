@@ -13,6 +13,7 @@ import { OCS_LOGO_BASE64 } from '../assets/logoDataUrl.js';
 import { saveBlob } from './fileSaver.js';
 import { formatMoney, EXCEL_MONEY_FORMAT } from './currency.js';
 import { resolveLayout, registerColumns, photosFor, DEFAULT_TITLE } from '../config/reportLayouts';
+import { describeSnags } from './aiDescriptions';
 
 /**
  * Converts image data (including SVG data URLs) to a clean JPEG base64 string via an offscreen
@@ -581,7 +582,7 @@ export async function generateSurveyExcel(input, selectedFacility = 'ALL', optio
   // Columns come from the layout; the photo column carries its "n of m"
   // column with it. Standard gives exactly the columns listed above.
   const layoutColumns = registerColumns(layout, 'excel');
-  const WIDTH = { number: 8, photo: THUMB_COL_WIDTH, photoOf: 10, location: 32, name: 34, department: 24, priority: 14, defect: 48, quantity: 10, cost: 18 };
+  const WIDTH = { number: 8, photo: THUMB_COL_WIDTH, photoOf: 10, location: 32, name: 34, department: 24, priority: 14, defect: 48, aiDefect: 52, quantity: 10, cost: 18 };
   const sheetColumns = layoutColumns.flatMap((c) => (c.key === 'photo'
     ? [c, { key: 'photoOf', label: 'Photo' }]
     : [c]));
@@ -592,6 +593,14 @@ export async function generateSurveyExcel(input, selectedFacility = 'ALL', optio
   const customSnagFields = [...new Map(surveys.flatMap(s => reportFieldsFor('snag', 'excel', s.items || [], recordFormsConfig(s, cachedPublishedConfig('forms').config))).map(f => [f.key, f])).values()];
   const customCol = (idx) => sheetColumns.length + 1 + idx;
   const lastCol = Math.max(1, sheetColumns.length + customSnagFields.length);
+
+  // AI Description: written from each snag's photos and notes, beside the
+  // surveyor's own text (which stays exactly as typed). Cached per snag on
+  // this device; anything that fails leaves that snag's cell blank.
+  const aiText = COL.aiDefect
+    ? await (options.describeSnags || describeSnags)(groups.flatMap((g) => g.items), { signal: options.signal }).catch(() => new Map())
+    : new Map();
+  checkReportCancelled(options.signal);
 
   wsSnags.columns = [
     ...sheetColumns.map((c) => ({ width: WIDTH[c.key] || 16 })),
@@ -689,6 +698,7 @@ export async function generateSurveyExcel(input, selectedFacility = 'ALL', optio
         put('department', dept.name, { alignment: { vertical: 'middle' } });
         put('priority', `P${item.priority}`, { alignment: { horizontal: 'center', vertical: 'middle' } });
         put('defect', item.defectDescription || 'No defect observed.', { alignment: { vertical: 'middle', wrapText: true } });
+        put('aiDefect', aiText.get(String(item.id)) || '', { alignment: { vertical: 'middle', wrapText: true } });
         customSnagFields.forEach((f, idx) => {
           const c = row.getCell(customCol(idx));
           c.value = reportValue(f, item, 'snag');
