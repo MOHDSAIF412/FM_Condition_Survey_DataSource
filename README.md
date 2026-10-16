@@ -100,3 +100,19 @@ The checked-in migration is not proof that it has been applied to production.
 Web updates activate after all tabs for the app are closed and reopened, keeping
 open inspections on one consistent build. Report engines and administration
 screens load on demand and are also cached for offline use.
+
+### AI descriptions in the Excel report
+
+The Excel Snag Register's **AI Description** column is written by
+`api/describe.js` from each snag's photos and notes. It needs one server-only
+variable in Vercel (Production and Preview); never add it to `.env` files that
+reach the client:
+
+- `AI_API_KEY`: a free Google AI Studio (Gemini) key.
+- Optional: `AI_BASE_URL` and `AI_MODEL` for any other OpenAI-compatible
+  provider (default: Gemini's endpoint, `gemini-2.5-flash`).
+
+Environment variables apply only to new builds, so redeploy after adding it.
+Without the key the column stays blank and reports build as before. Check a
+deployment with `curl -X POST <deployment>/api/describe`: `503 not_configured`
+means the key is missing; `401 sign_in_required` means it is set.
