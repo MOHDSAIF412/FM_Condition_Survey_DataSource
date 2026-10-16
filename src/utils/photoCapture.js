@@ -24,6 +24,7 @@
  */
 import { Capacitor } from '@capacitor/core';
 import { compressImage } from './imageCompressor';
+import { dataUrlToBlob } from './dataUrl';
 
 export const PHOTO_SYNC = {
   LOCAL: 'local',       // saved on the device, not sent yet
@@ -101,8 +102,8 @@ function buildPhoto({ dataUrl, name, width, height }) {
 
 /** Reduces a native base64 payload through the same compression as file input. */
 async function compressBase64(base64, mime = 'image/jpeg') {
-  const res = await fetch(`data:${mime};base64,${base64}`);
-  const blob = await res.blob();
+  // Not fetch(): the Content Security Policy refuses data: URLs (dataUrl.js).
+  const blob = dataUrlToBlob(`data:${mime};base64,${base64}`);
   const file = new File([blob], `capture_${Date.now()}.jpg`, { type: 'image/jpeg' });
   return compressImage(file);
 }
