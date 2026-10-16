@@ -90,6 +90,7 @@ import {
 const LIST_WAIT_MS = 8000;
 const SIGN_OUT_UPLOAD_WAIT_MS = 6000;
 import { isCloudConfigured } from './utils/supabaseClient';
+import { recordSyncProblem, clearSyncFailures } from './utils/diagnostics';
 import { can } from './utils/auth';
 import { isAdminUser } from './utils/roles';
 import { isAuthFailure, isAccessRefused } from './utils/syncErrors';
@@ -324,7 +325,26 @@ export default function App({ currentUser = null, onSignOut } = {}) {
     currentUser && isAccessRefused(err) ? 'refused' : isAuthFailure(err) ? 'unauthorized' : 'offline'
   );
   function reportSyncFailure(err) {
+    // Every failure names itself: a warning with no reason sent the surveyor
+    // to check a connection that was fine.
+    recordSyncProblem(err);
     setSyncState(failureState(err));
+  }
+
+  /**
+   * Whether the open facility holds anything the server has not got.
+   *
+   * The 30-second retry and the reconnect handler used to re-push the open
+   * facility every time, even with nothing new. Each push bumps the server
+   * revision, so while any other facility kept failing, the open one was
+   * re-uploaded twice a minute -- and every other device holding it then saw
+   * "changed on another device" on its next edit.
+   */
+  async function openSurveyHasUnsentWork() {
+    if (!surveyRef.current) return false;
+    if (hasUnpushedEditsRef.current) return true;
+    try { return Boolean((await getSurveyOffline(surveyRef.current.id))?.pendingSync); }
+    catch { return true; }
   }
   const [syncState, setSyncState] = useState(isCloudConfigured ? 'idle' : 'off');
   const [lastSynced, setLastSynced] = useState(null);
@@ -363,6 +383,7 @@ export default function App({ currentUser = null, onSignOut } = {}) {
   const [online, setOnline] = useState(isOnline());
   const surveyRef = useRef(null);
   const pushTimeoutRef = useRef(null);
+  const syncEverythingRef = useRef(async () => ({}));
   surveyRef.current = survey;
 
   // Connectivity monitoring. A returning connection is what kicks off the
@@ -379,21 +400,15 @@ export default function App({ currentUser = null, onSignOut } = {}) {
       // Back online: flush whatever was recorded with no signal -- both the
       // survey on screen and any facility submitted offline, which is no
       // longer the one on screen (see flushPendingSurveys).
+      // syncEverything settles the header in every case. Doing the two halves
+      // here by hand left "Syncing..." showing forever whenever the open
+      // facility had nothing to send, and ignored facilities that failed.
+      // Read through a ref: this listener is registered once, on first render.
       if (isCloudConfigured) {
-        setSyncState('syncing');
-        (async () => {
-          try {
-            if (surveyRef.current) await pushAndSettle();
-          } catch (err) {
-            console.info('Reconnect sync deferred:', err.message);
-            reportSyncFailure(err);
-          }
-          try {
-            await flushPendingSurveys();
-          } catch (err) {
-            console.info('Pending upload deferred:', err.message);
-          }
-        })();
+        syncEverythingRef.current().catch((err) => {
+          console.info('Reconnect sync deferred:', err.message);
+          reportSyncFailure(err);
+        });
       }
     });
   }, []);
@@ -667,7 +682,7 @@ export default function App({ currentUser = null, onSignOut } = {}) {
     // already uploaded".
     let currentError = null;
     try {
-      if (surveyRef.current) {
+      if (await openSurveyHasUnsentWork()) {
         const res = await pushAndSettle();
         pushedCurrent = Boolean(res && res.pushed);
         if (res?.conflict) currentError = new Error("This facility changed on another device. Open it to compare copies; your edits are kept here.");
@@ -687,6 +702,11 @@ export default function App({ currentUser = null, onSignOut } = {}) {
     else if (refusedError) setSyncState('refused');
     else if (currentError || failed) setSyncState('offline');
     else setSyncState('synced');
+    if (currentError || failed) {
+      recordSyncProblem([currentError && `Open facility: ${currentError.message}`, ...problems].filter(Boolean).join('; '));
+    } else if (!signInError && !refusedError) {
+      clearSyncFailures();
+    }
 
     if (signInError) {
       return { message: 'Sign in again to upload. Your work is saved on this device.' };
@@ -729,6 +749,7 @@ export default function App({ currentUser = null, onSignOut } = {}) {
 
   /** The button in Saved Facilities. */
   const handleSyncNow = syncEverything;
+  syncEverythingRef.current = syncEverything;
   useEffect(() => {
     if (!isLoaded || !isCloudConfigured || !online || syncState !== 'offline') return;
     const timer = setTimeout(() => { syncEverything().catch(reportSyncFailure); }, 30000);
@@ -905,8 +926,14 @@ export default function App({ currentUser = null, onSignOut } = {}) {
     pushTimeoutRef.current = setTimeout(async () => {
       try {
         if (!isOnline()) { setSyncState('offline'); return; }
+        // Nothing this account would upload: leave the header alone rather
+        // than show "Syncing..." for a push that is about to be skipped.
+        if (!surveyIsWorthSyncing(surveyRef.current) || !mayEditRef.current) return;
         setSyncState('syncing');
-        await pushAndSettle();
+        const res = await pushAndSettle();
+        // A skipped push (an approved, locked facility with nothing new) never
+        // reached a line that settles the header, so "Syncing..." stayed up.
+        if (res?.skipped) setSyncState((state) => state === 'syncing' ? 'idle' : state);
       } catch (err) {
         // Offline is the normal case on site, not an error worth shouting about.
         console.info('Cloud push deferred:', err.message);
