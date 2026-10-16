@@ -26,6 +26,7 @@ export const REGISTER_COLUMNS = [
   { key: 'department', label: 'Department / Trade', pdf: 'Dept', excel: 'Department / Trade', weight: 18 },
   { key: 'priority', label: 'Priority', pdf: 'Priority', excel: 'Priority', weight: 14 },
   { key: 'defect', label: 'Observations & defects', pdf: 'Observations & Defects', excel: 'Observed Defects & Notes', weight: 44 },
+  { key: 'aiDefect', label: 'AI description', excel: 'AI Description', weight: 0, excelOnly: true, help: 'Excel only; written by AI from the photos and the surveyor\'s notes, grammar corrected' },
   { key: 'quantity', label: 'Quantity', pdf: 'Qty', excel: 'Quantity', weight: 12 },
   { key: 'cost', label: 'Estimated cost', pdf: 'Est. Cost', excel: 'Est. Cost (AED)', weight: 20, cost: true }
 ];
@@ -34,7 +35,7 @@ const COLUMN_BY_KEY = Object.fromEntries(REGISTER_COLUMNS.map((c) => [c.key, c])
 /** Today's column order in each format -- the Standard layout's. */
 const DEFAULT_ORDER = {
   pdf: ['number', 'name', 'location', 'department', 'priority', 'defect', 'cost'],
-  excel: ['number', 'photo', 'location', 'name', 'department', 'priority', 'defect', 'quantity', 'cost']
+  excel: ['number', 'photo', 'location', 'name', 'department', 'priority', 'defect', 'aiDefect', 'quantity', 'cost']
 };
 
 export const SECTIONS = [
@@ -185,8 +186,8 @@ export function registerColumns(layout, format) {
 /** The editable column list for the builder: the layout's own, or today's order to start from. */
 export function editableColumns(layout) {
   if (layout.columns) return layout.columns;
-  const order = ['number', 'photo', 'name', 'location', 'department', 'priority', 'defect', 'quantity', 'cost'];
-  const shown = new Set([...DEFAULT_ORDER.pdf, 'photo', 'quantity']);
+  const order = ['number', 'photo', 'name', 'location', 'department', 'priority', 'defect', 'aiDefect', 'quantity', 'cost'];
+  const shown = new Set([...DEFAULT_ORDER.pdf, 'photo', 'aiDefect', 'quantity']);
   return order.map((key) => ({ key, visible: shown.has(key), label: '' }));
 }
 
