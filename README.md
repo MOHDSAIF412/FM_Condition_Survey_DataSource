@@ -110,7 +110,8 @@ reach the client:
 
 - `AI_API_KEY`: a free Google AI Studio (Gemini) key.
 - Optional: `AI_BASE_URL` and `AI_MODEL` for any other OpenAI-compatible
-  provider (default: Gemini's endpoint, `gemini-2.5-flash`).
+  provider (default: Gemini's endpoint, `gemini-3.5-flash-lite`). If Google retires a
+  model, the report's AI cell says so; set `AI_MODEL` to the name it suggests.
 
 Environment variables apply only to new builds, so redeploy after adding it.
 Without the key the column stays blank and reports build as before. Check a

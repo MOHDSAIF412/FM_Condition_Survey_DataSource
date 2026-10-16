@@ -15,15 +15,16 @@
  * point at Google Gemini's free tier. Configure in Vercel:
  *   AI_API_KEY   (required)  -- e.g. a Google AI Studio key
  *   AI_BASE_URL  (optional)  -- default Gemini's OpenAI-compatible endpoint
- *   AI_MODEL     (optional)  -- default gemini-2.5-flash-lite
+ *   AI_MODEL     (optional)  -- default gemini-3.5-flash-lite
  * With no key set the endpoint answers 503 and reports simply leave the
  * column blank.
  */
 
 const DEFAULT_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta/openai';
-// Flash-Lite: vision-capable, no "thinking" step so it answers in a few
-// seconds, and the largest free daily allowance of the Gemini models.
-const DEFAULT_MODEL = 'gemini-2.5-flash-lite';
+// Flash-Lite: vision-capable, quick, and the largest free daily allowance of
+// the Gemini models. Google retires model names for new keys (2.5 was refused
+// on 2026-10-16 with a pointer to 3.5); AI_MODEL overrides this without a deploy of code.
+const DEFAULT_MODEL = 'gemini-3.5-flash-lite';
 
 export const LIMITS = { snags: 6, photosPerSnag: 2, photoChars: 400_000, textChars: 1500 };
 
