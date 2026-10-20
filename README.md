@@ -81,7 +81,7 @@ on **Meters**, then choose **Upload Excel**. Review the preview and click
 **Confirm: add … meters**. Invalid rows and duplicate meter/mapping numbers block
 the entire import; existing meters and photos are retained.
 
-Use one branch per workbook, up to 1,000 meters / 10 MB in `.xlsx` format. Keep
+Use one property per workbook, up to 1,000 meters / 10 MB in `.xlsx` format. Keep
 meter numbers as text to preserve leading zeros. Costs are calculated in the app;
 photos and signatures are added separately. Templates include the mapping's
 active custom fields. When appending to an existing mapping, retain its Mapping

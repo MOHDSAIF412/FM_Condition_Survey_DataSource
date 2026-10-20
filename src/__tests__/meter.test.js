@@ -41,9 +41,9 @@ test('mapping numbers continue from the highest used, including the spreadsheet\
   expect(nextMappingNo(fixture().items)).toBe(2);
 });
 
-test('submission requires branch, region, a meter, tenant and meter number; delete and restore keep the data', () => {
+test('submission requires property name, region, a meter, tenant and meter number; delete and restore keep the data', () => {
   const blank = createMeterMapping('p');
-  expect(() => changeMeterState(blank, 'submit')).toThrow('Enter branch.');
+  expect(() => changeMeterState(blank, 'submit')).toThrow('Enter property name.');
   const s = fixture();
   expect(reviewChecks(s).filter(c => c.blocking)).toEqual([]);
   expect(reviewChecks(s).map(c => c.message)).toContain('Meter 1: add a meter reference photo.');
@@ -82,7 +82,7 @@ test('PDF and Excel exports carry every meter in the spreadsheet column order wi
     const wb = new ExcelJS.Workbook(); await wb.xlsx.load(await xlsx.arrayBuffer());
     const sheet = wb.getWorksheet('Meters 1');
     const head = sheet.getRow(1).values.slice(1);
-    expect(head.slice(0, 4)).toEqual(['Branch', 'Region', 'Mapping No.', 'Tenant']);
+    expect(head.slice(0, 4)).toEqual(['Property name', 'Region', 'Mapping No.', 'Tenant']);
     expect(head.indexOf('kWh Reading')).toBe(head.indexOf('Meter Reference Photo') - 1);
     expect(head.at(-1)).toBe('Other Remarks');
     const row = sheet.getRow(2).values.slice(1);

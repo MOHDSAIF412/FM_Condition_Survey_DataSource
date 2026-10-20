@@ -86,7 +86,7 @@ export async function generateMeterPDF(input, options = {}) {
 
 // Column order matches the meter mapping spreadsheet the surveyors already use.
 const SHEET_COLUMNS = [
-  ['Branch', 14], ['Region', 14], ...METER_FIELDS.slice(0, 23).map(f => [f.label, f.type === 'textarea' ? 32 : 16]),
+  ['Property name', 26], ['Region', 14], ...METER_FIELDS.slice(0, 23).map(f => [f.label, f.type === 'textarea' ? 32 : 16]),
   ['kWh Reading', 14], ['Meter Reference Photo', 30], ['Remarks', 30], ['Other Remarks', 30]
 ];
 const PHOTO_COL = SHEET_COLUMNS.findIndex(([label]) => label === 'Meter Reference Photo');

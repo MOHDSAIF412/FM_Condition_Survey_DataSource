@@ -20,7 +20,7 @@ const MODULES = [
   },
   {
     id: 'meter', title: 'Meter Mapping', Icon: Gauge, Badge: BarChart3,
-    description: 'Map tenant electricity meters by branch, estimate running costs and collect meter photos.',
+    description: 'Map tenant electricity meters by property, estimate running costs and collect meter photos.',
     points: ['Meter data mapping', 'Running cost estimation', 'Photo evidence'],
     bar: 'bg-flame-500', tile: 'bg-orange-50 text-flame-600', tick: 'bg-flame-500', glow: 'bg-orange-50', badge: 'text-flame-600',
     button: 'bg-orange-50 text-flame-600 group-hover:bg-orange-100'

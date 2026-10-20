@@ -12,9 +12,9 @@ export async function createMeterImportTemplate(survey) {
   const book = new ExcelJS.Workbook();
   const instructions = book.addWorksheet('Instructions');
   [
-    'Meter Mapping bulk import — one branch per workbook',
+    'Meter Mapping bulk import — one property per workbook',
     '1. Fill Mapping Details, then enter one meter per row on Meters. Keep the column headings unchanged.',
-    '2. Branch, Region, Tenant and kWh meter number are required. Any required project fields also apply.',
+    '2. Property name, Region, Tenant and kWh meter number are required. Any required project fields also apply.',
     '3. Meter numbers must be text: preserve leading zeros. Do not enter formulas.',
     '4. Blank daily hours, diversity and tariff use the Mapping Details defaults.',
     '5. Monthly and annual costs are calculated in the app. Add photos and signatures in the app.',
@@ -85,7 +85,9 @@ export async function readMeterImport(buffer, survey) {
   const seenDetails = new Set();
   details.eachRow((row, index) => {
     if (index === 1 || !row.getCell(1).text.trim()) return;
-    const field = headerFields.find(f => f.label === row.getCell(1).text.trim());
+    const label = row.getCell(1).text.trim();
+    // Accept templates downloaded before Branch was renamed to Property name.
+    const field = headerFields.find(f => f.label === label || (f.id === 'branch' && label === 'Branch'));
     if (!field) { errors.push(`Mapping Details row ${index}: unknown field. Download a fresh template.`); return; }
     if (seenDetails.has(field.id)) { errors.push(`Mapping Details: ${field.label} appears twice.`); return; }
     seenDetails.add(field.id);

@@ -2,7 +2,7 @@ import { createNewSurvey, createDefaultAsset } from '../types/survey';
 import { isLocked } from '../utils/workflow';
 
 // Meter Mapping shares storage with the other modules: one condition_surveys
-// row per branch mapping (facility.module = 'meter'), one survey_items row per
+// row per property mapping (facility.module = 'meter'), one survey_items row per
 // meter with its fields in custom_values. No database change is needed.
 export const isMeter = (survey) => survey?.facility?.module === 'meter';
 export const isDeletedMapping = (survey) => isMeter(survey) && !!survey.facility?.meter?.deletedAt;
@@ -16,7 +16,7 @@ export const AC_SYSTEMS = ['Building AC', 'Independent'];
 export const DEFAULTS = { tariff: '0.2', operatingHours: '16', diversityFactor: '0.8' };
 
 export const HEADER_FIELDS = [
-  { id: 'branch', label: 'Branch', required: true },
+  { id: 'branch', label: 'Property name', required: true },
   { id: 'region', label: 'Region', required: true },
   { id: 'readingDate', label: 'kWh reading date', type: 'date' },
   { id: 'tariff', label: 'Default tariff rate (AED/kWh)', type: 'number' },

@@ -25,12 +25,23 @@ const parse = async (book, record) => readMeterImport(await book.xlsx.writeBuffe
 test('template has matching fields, text meter numbers and dropdowns; blank template adds nothing', async () => {
   const record = mapping(), book = await workbook(record);
   expect(book.worksheets.map(s => s.name)).toEqual(['Instructions', 'Mapping Details', 'Meters']);
+  expect(book.getWorksheet('Mapping Details').getCell('A2').value).toBe('Property name');
+  expect(book.getWorksheet('Mapping Details').getCell('B2').value).toBe('MBZ12');
   const sheet = book.getWorksheet('Meters');
   const columns = sheet.getRow(1).values.slice(1);
   expect(columns).not.toContain('Est. monthly cost (AED)');
   expect(sheet.getColumn(columns.indexOf('kWh meter number') + 1).numFmt).toBe('@');
   expect(sheet.getCell(2, columns.indexOf('Meter status') + 1).dataValidation.formulae).toEqual(['"Active,Inactive,Faulty,Not found"']);
   expect((await parse(book, record)).errors).toContain('Enter at least one meter on the Meters sheet.');
+});
+
+test('previous Branch templates still import into the same property data field', async () => {
+  const record = mapping(), book = await workbook(record);
+  book.getWorksheet('Mapping Details').getCell('A2').value = 'Branch';
+  add(book);
+  const input = await parse(book, record);
+  expect(input.errors).toEqual([]);
+  expect(applyMeterImport(record, input).facility.meter.branch).toBe('MBZ12');
 });
 
 test('round trip appends visible meters, retains photos, preserves text IDs and calculates costs', async () => {
