@@ -75,22 +75,24 @@ Export QHSE and FM inspections separately. JSON backup remains available.
 
 ## Meter Mapping bulk import
 
-Open an editable meter mapping and choose **Download Excel template** in the
-Meters section. Fill the **Mapping Details** sheet and enter one meter per row
-on **Meters**, then choose **Upload Excel**. Review the preview and click
-**Confirm: add … meters**. Invalid rows and duplicate meter/mapping numbers block
-the entire import; existing meters and photos are retained.
+Open a Meter Mapping project and use **Bulk import properties and meters** above
+the property list. Download the project template or upload a mall meter workbook.
+Repeat Property name and Region on each meter row. The preview groups names
+without case or spacing differences, creates each property once and reuses
+existing properties in this project. Repeated meters are skipped; missing
+imported photos can be added to an existing meter without replacing its details.
 
-Use one property per workbook, up to 1,000 meters / 10 MB in `.xlsx` format. Keep
-meter numbers as text to preserve leading zeros. Costs are calculated in the app;
-photos and signatures are added separately. Templates include the mapping's
-active custom fields. When appending to an existing mapping, retain its Mapping
-Details so existing meters' shared defaults are not changed.
+The importer supports up to 1,000 populated rows / 50 MB, including embedded
+JPEG, PNG and WebP photos (floating and Excel Place in Cell images). Photo rows
+without a property need explicit assignment or exclusion before confirmation.
+Empty placeholders are skipped. Incomplete meter data remains in draft, and
+nonstandard source values are retained for review. Mapping numbers may contain
+text such as Kiosk-1. Costs are calculated by the app.
 
-Progress distinguishes file reading, checking, preview, and saving. A completion
-message shows the number added and the new total, with **View added meters**.
-Cloud upload status is shown separately; local save success does not mean the
-cloud upload has completed.
+Progress separates reading, validation, saving on this device and cloud upload.
+All properties are saved together locally before cloud uploads start. Pending
+uploads retain their device copies for retry. Existing records and photos are
+never deleted by import.
 
 ## Tests and builds
 

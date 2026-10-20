@@ -39,7 +39,8 @@ import { App as NativeApp } from '@capacitor/app';
 import { isLegacyQhse, moveLegacyQhse } from './qhse/legacy';
 import { createQhse, isQhse } from './qhse/model';
 import { createMeterMapping, isMeter, changeMeterState } from './meter/model';
-import { saveMeterImport } from './meter/bulkImport';
+import { planProjectMeterImport, propertyKey } from './meter/projectImport';
+import { loadSurveyForReading } from './utils/surveyLoader';
 import { isConditionSurvey, isDeletedRecord, moduleLabels } from './utils/modules';
 import { changeInspectionState } from './qhse/lifecycle';
 const QhseHub = lazy(() => import('./qhse/QhseInspection').then(m => ({ default: m.QhseHub })));
@@ -63,6 +64,7 @@ import { submissionIssues } from './config/rulesEngine';
 import { createNewSurvey, calculateSurveyStats, facilityCode } from './types/survey';
 import {
   saveSurveyOffline,
+  saveSurveyBatchOffline,
   saveSurveyRecovery,
   loadCurrentSurveyOffline,
   subscribeToSurveyChanges,
@@ -1538,6 +1540,65 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
     setView('survey'); await refreshSurveyList();
   }
 
+  async function prepareProjectMeterImport(input) {
+    const project = activeProjectRef.current;
+    if (!mayEditSurveys || !project || input.projectId !== project.id) throw new Error('Select an editable Meter Mapping project first.');
+    const local = await listAllSurveysOffline();
+    const remote = isCloudConfigured && isOnline() ? await listSurveys() : surveyList;
+    const byId = new Map([...remote, ...local].filter(s => isMeter(s) && s.projectId === project.id).map(s => [s.id, s]));
+    const names = new Set(input.groups.map(g => g.key));
+    const existing = [];
+    for (const row of byId.values()) {
+      if (!names.has(propertyKey(row.facility?.meter?.branch))) continue;
+      const full = await loadSurveyForReading(row.id);
+      if (!full) throw new Error('An existing property could not be loaded. Reconnect and refresh the preview.');
+      existing.push(full);
+    }
+    return planProjectMeterImport(input, project, existing, await nextFacilityNumber(), currentUser?.full_name || currentUser?.name || '');
+  }
+
+  async function importProjectMeters(input, progress) {
+    const projectId = activeProjectRef.current?.id;
+    if (!mayEditSurveys || input.projectId !== projectId) throw new Error('Reopen the original Meter Mapping project.');
+    if (pendingSaveRef.current && surveyRef.current) {
+      clearTimeout(saveTimeoutRef.current);
+      const kept = await saveSurveyOffline(surveyRef.current);
+      if (kept?.conflict) throw new Error('Resolve the current record conflict first.');
+      pendingSaveRef.current = null;
+    }
+    const plan = await prepareProjectMeterImport(input);
+    if (activeProjectRef.current?.id !== projectId) throw new Error('The selected project changed. Reopen its import preview.');
+    progress({ progress: 82, message: `Saving ${plan.records.length} properties, ${plan.added} meters and ${plan.photosAdded} photos on this device…` });
+    localSavesInFlight.current++;
+    let saved;
+    try { saved = await saveSurveyBatchOffline(plan.records); }
+    finally { localSavesInFlight.current--; }
+    const current = saved.find(record => record.id === surveyRef.current?.id);
+    if (current) {
+      clearTimeout(saveTimeoutRef.current); clearTimeout(pushTimeoutRef.current);
+      pendingSaveRef.current = null; skipLocalSaveRef.current = true; skipCloudPushRef.current = true;
+      surveyRef.current = current; setSurvey(current);
+    }
+    await refreshSurveyList();
+    const failures = []; let uploaded = 0;
+    if (isCloudConfigured && isOnline()) {
+      setSyncState('syncing');
+      for (const [index, record] of saved.entries()) {
+        progress({ progress: 85 + Math.round(index / Math.max(saved.length, 1) * 14), message: `Uploading property ${index + 1} of ${saved.length}: ${record.facility.meter.branch}, including its photos…` });
+        try {
+          const result = await uploadSurveyRecord(record);
+          if (result?.pushed && !result.failedPhotoIds?.length && !result.pendingLocal) uploaded++;
+          else failures.push(`${record.facility.meter.branch}: upload pending or needs conflict review`);
+        } catch (error) { failures.push(`${record.facility.meter.branch}: ${error.message}`); }
+      }
+    }
+    await refreshSurveyList();
+    const cloudComplete = isCloudConfigured && uploaded === saved.length && !failures.length && isOnline();
+    setSyncState(cloudComplete ? 'synced' : 'offline');
+    return { ...plan, ids: plan.summary.map(row => row.id), cloudComplete,
+      pending: failures.length ? `Saved locally. ${failures.join('; ')}. Use Sync status to retry.` : 'Saved locally. Cloud upload will resume when connected.' };
+  }
+
   async function startMeter(projectId) {
     if (!mayEditSurveys) return;
     if (surveyRef.current) {
@@ -2227,37 +2288,13 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
       </main>}
       {view === 'meter' && <main className="flex-1 min-w-0 w-full px-3 sm:px-8 py-6 safe-area-content-pb">
         <MeterHub surveys={surveyList.filter(s => isMeter(s) && s.projectId === activeProject?.id)} project={activeProject} canEdit={mayEditSurveys} canDelete={!isCloudConfigured || mayDeleteSnags} canExport={!isCloudConfigured || mayDownloadReports} onAction={handleQhseAction}
+          cloudConfigured={isCloudConfigured} syncState={syncState} onPreviewImport={prepareProjectMeterImport} onProjectImport={importProjectMeters}
           onReports={() => navigatePortal({ view: 'reports', reportModule: 'meter' })}
           onBack={handleAppBack} onCreate={startMeter} onOpen={openSurveyFromPortal} />
       </main>}
       {view === 'survey' && isMeter(survey) && <main className="flex-1 min-w-0 w-full px-3 sm:px-8 py-6 safe-area-content-pb">
         <MeterMapping project={activeProject} survey={survey} canEdit={mayEditOpen} canDelete={!isCloudConfigured || mayDeleteSnags} canExport={!isCloudConfigured || mayDownloadReports}
           cloudConfigured={isCloudConfigured} syncState={syncState}
-          onImport={async input => {
-            if (!mayEditOpen || surveyRef.current?.id !== survey.id) throw new Error('Reopen an editable mapping to import meters.');
-            const current = surveyRef.current;
-            localSavesInFlight.current += 1;
-            let result;
-            try { result = await saveMeterImport(current, input, async (next, options) => {
-              clearTimeout(saveTimeoutRef.current);
-              clearTimeout(pushTimeoutRef.current);
-              // Keep unsaved edits available to the existing leave-page recovery
-              // until the complete batch has been persisted successfully.
-              pendingSaveRef.current = current;
-              const saved = await saveSurveyOffline(next, options);
-              if (saved && !saved.conflict) pendingSaveRef.current = null;
-              return saved;
-            }); }
-            finally { localSavesInFlight.current -= 1; }
-            if (surveyRef.current !== current) throw new Error('The mapping changed while saving. The import was saved on this device; reopen the mapping before continuing.');
-            hasUnpushedEditsRef.current = true;
-            setSyncState('idle');
-            skipCloudPushRef.current = false;
-            skipLocalSaveRef.current = true;
-            surveyRef.current = result.record;
-            setSurvey(result.record);
-            return result;
-          }}
           onFacility={handleUpdateFacility} onItem={(item, options) => { if (surveyRef.current?.id !== survey.id) throw new Error('Reopen the original mapping to attach these photos.'); handleUpdateItem(item, options); }} onDelete={handleDeleteItem}
           onAdd={async item => { if (!mayEditOpen) return; if (surveyRef.current?.id !== survey.id) throw new Error('Reopen the original mapping to add meters.'); const next = { ...surveyRef.current, items: [...surveyRef.current.items, item] }; surveyRef.current = next; setSurvey(next); await saveSurveyOffline(next); }}
           onSignatures={signatures => { if (mayEditOpen) setSurvey(prev => ({ ...prev, signatures })); }}

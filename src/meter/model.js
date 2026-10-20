@@ -28,7 +28,7 @@ export const HEADER_FIELDS = [
 
 // Same order as the source spreadsheet, so the Excel export lines up with it.
 export const METER_FIELDS = [
-  { id: 'mappingNo', label: 'Mapping No.', type: 'number' },
+  { id: 'mappingNo', label: 'Mapping No.' },
   { id: 'tenant', label: 'Tenant', required: true },
   { id: 'shopLocation', label: 'Shop location' },
   { id: 'subLocation', label: 'Sub location' },

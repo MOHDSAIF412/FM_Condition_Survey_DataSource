@@ -244,6 +244,39 @@ export async function saveSurveyOffline(survey, options = {}) {
  * facility or building a report for many of them must not load every stored
  * facility's photos each time.
  */
+// Project imports must either persist every property or none of them. Unlike
+// ordinary single-record saves, never fall back to a partial localStorage copy.
+export async function saveSurveyBatchOffline(records) {
+  if (!records.length) return [];
+  if (new Set(records.map(record => record.id)).size !== records.length) throw new Error('Duplicate property IDs in import.');
+  const scope = deviceStorageScope(), db = await openDB(scope);
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_SURVEYS, 'readwrite'), store = tx.objectStore(STORE_SURVEYS);
+    const staged = []; let conflict = null, pending = records.length;
+    for (const record of records) {
+      const request = store.get(record.id);
+      request.onsuccess = () => {
+        const existing = request.result;
+        // The plan is based on a full read, including its local revision.
+        if (existing && (existing.revision || 0) !== (record.revision || 0)) {
+          conflict = record.facility?.meter?.branch || record.id; tx.abort(); return;
+        }
+        staged.push({ ...record, revision: (existing?.revision || 0) + 1, writerId: TAB_ID, pendingSync: true, updatedAt: new Date().toISOString() });
+        if (--pending === 0) for (const saved of staged) store.put(saved);
+      };
+    }
+    tx.oncomplete = () => {
+      for (const saved of staged) {
+        lastKnownRevisions.set(`${scope.database}:${saved.id}`, saved.revision);
+        broadcastChange(saved, scope);
+      }
+      resolve(staged);
+    };
+    tx.onabort = () => reject(new Error(conflict ? `${conflict} changed in another tab. Refresh the import preview.` : 'The import could not be saved. No properties were added.'));
+    tx.onerror = () => {}; // onabort reports the final outcome.
+  });
+}
+
 export async function getSurveyOffline(id) {
   if (!id) return null;
   try {

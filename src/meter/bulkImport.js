@@ -138,14 +138,15 @@ export function applyMeterImport(survey, input) {
   // An upload must not silently change shared details for existing meters.
   if (survey.items.length && Object.keys(input.header).some(key => String(input.header[key]) !== currentHeader[key])) throw new Error('Mapping Details differ from this mapping. Keep its current details or import into a new mapping.');
   const numbers = new Set(survey.items.map(item => normalize(item.customValues?.meterNumber)).filter(Boolean));
-  const mappings = new Set(survey.items.map(item => item.customValues?.mappingNo).filter(v => v !== '' && v != null).map(Number));
+  const mappingKey = value => Number.isFinite(Number(value)) ? String(Number(value)) : normalize(value);
+  const mappings = new Set(survey.items.map(item => item.customValues?.mappingNo).filter(v => v !== '' && v != null).map(mappingKey));
   // Reserve explicit numbers before generating the blank ones.
   for (const { row, values } of input.meters) {
     const number = normalize(values.meterNumber);
     if (numbers.has(number)) throw new Error(`Meters row ${row}: duplicate meter number ${values.meterNumber}.`);
     numbers.add(number);
     if (values.mappingNo !== '') {
-      const mapping = Number(values.mappingNo);
+      const mapping = mappingKey(values.mappingNo);
       if (mappings.has(mapping)) throw new Error(`Meters row ${row}: duplicate Mapping No. ${values.mappingNo}.`);
       mappings.add(mapping);
     }
@@ -153,7 +154,7 @@ export function applyMeterImport(survey, input) {
   let nextNumber = nextMappingNo(survey.items);
   const additions = input.meters.map(({ values }) => {
     let mappingNo = values.mappingNo;
-    if (mappingNo === '') { while (mappings.has(nextNumber)) nextNumber++; mappingNo = String(nextNumber++); mappings.add(Number(mappingNo)); }
+    if (mappingNo === '') { while (mappings.has(String(nextNumber))) nextNumber++; mappingNo = String(nextNumber++); mappings.add(mappingNo); }
     return { ...createMeter(mappingNo), assetName: values.tenant, location: values.shopLocation, customValues: { ...values, meter: true, mappingNo } };
   });
   const { surveyorName, ...meterHeader } = input.header;
