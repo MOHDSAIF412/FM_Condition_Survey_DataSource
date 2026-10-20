@@ -73,6 +73,25 @@ project membership permissions apply. QHSE reports use the supplied OCS palette;
 critical, moderate and no-impact findings use red, orange and green respectively.
 Export QHSE and FM inspections separately. JSON backup remains available.
 
+## Meter Mapping bulk import
+
+Open an editable meter mapping and choose **Download Excel template** in the
+Meters section. Fill the **Mapping Details** sheet and enter one meter per row
+on **Meters**, then choose **Upload Excel**. Review the preview and click
+**Confirm: add … meters**. Invalid rows and duplicate meter/mapping numbers block
+the entire import; existing meters and photos are retained.
+
+Use one branch per workbook, up to 1,000 meters / 10 MB in `.xlsx` format. Keep
+meter numbers as text to preserve leading zeros. Costs are calculated in the app;
+photos and signatures are added separately. Templates include the mapping's
+active custom fields. When appending to an existing mapping, retain its Mapping
+Details so existing meters' shared defaults are not changed.
+
+Progress distinguishes file reading, checking, preview, and saving. A completion
+message shows the number added and the new total, with **View added meters**.
+Cloud upload status is shown separately; local save success does not mean the
+cloud upload has completed.
+
 ## Tests and builds
 
 ```sh

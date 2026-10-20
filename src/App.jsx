@@ -39,6 +39,7 @@ import { App as NativeApp } from '@capacitor/app';
 import { isLegacyQhse, moveLegacyQhse } from './qhse/legacy';
 import { createQhse, isQhse } from './qhse/model';
 import { createMeterMapping, isMeter, changeMeterState } from './meter/model';
+import { saveMeterImport } from './meter/bulkImport';
 import { isConditionSurvey, isDeletedRecord, moduleLabels } from './utils/modules';
 import { changeInspectionState } from './qhse/lifecycle';
 const QhseHub = lazy(() => import('./qhse/QhseInspection').then(m => ({ default: m.QhseHub })));
@@ -2231,6 +2232,32 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
       </main>}
       {view === 'survey' && isMeter(survey) && <main className="flex-1 min-w-0 w-full px-3 sm:px-8 py-6 safe-area-content-pb">
         <MeterMapping project={activeProject} survey={survey} canEdit={mayEditOpen} canDelete={!isCloudConfigured || mayDeleteSnags} canExport={!isCloudConfigured || mayDownloadReports}
+          cloudConfigured={isCloudConfigured} syncState={syncState}
+          onImport={async input => {
+            if (!mayEditOpen || surveyRef.current?.id !== survey.id) throw new Error('Reopen an editable mapping to import meters.');
+            const current = surveyRef.current;
+            localSavesInFlight.current += 1;
+            let result;
+            try { result = await saveMeterImport(current, input, async (next, options) => {
+              clearTimeout(saveTimeoutRef.current);
+              clearTimeout(pushTimeoutRef.current);
+              // Keep unsaved edits available to the existing leave-page recovery
+              // until the complete batch has been persisted successfully.
+              pendingSaveRef.current = current;
+              const saved = await saveSurveyOffline(next, options);
+              if (saved && !saved.conflict) pendingSaveRef.current = null;
+              return saved;
+            }); }
+            finally { localSavesInFlight.current -= 1; }
+            if (surveyRef.current !== current) throw new Error('The mapping changed while saving. The import was saved on this device; reopen the mapping before continuing.');
+            hasUnpushedEditsRef.current = true;
+            setSyncState('idle');
+            skipCloudPushRef.current = false;
+            skipLocalSaveRef.current = true;
+            surveyRef.current = result.record;
+            setSurvey(result.record);
+            return result;
+          }}
           onFacility={handleUpdateFacility} onItem={(item, options) => { if (surveyRef.current?.id !== survey.id) throw new Error('Reopen the original mapping to attach these photos.'); handleUpdateItem(item, options); }} onDelete={handleDeleteItem}
           onAdd={async item => { if (!mayEditOpen) return; if (surveyRef.current?.id !== survey.id) throw new Error('Reopen the original mapping to add meters.'); const next = { ...surveyRef.current, items: [...surveyRef.current.items, item] }; surveyRef.current = next; setSurvey(next); await saveSurveyOffline(next); }}
           onSignatures={signatures => { if (mayEditOpen) setSurvey(prev => ({ ...prev, signatures })); }}
