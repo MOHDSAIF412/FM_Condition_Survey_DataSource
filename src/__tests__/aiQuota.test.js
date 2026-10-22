@@ -21,7 +21,7 @@ test('database quotas enforce permission, session, account and global ceilings w
       set test.uid='${uid}'; set test.jwt='{"session_id":"${session}"}'; set test.allowed='yes';
       grant usage on schema public,auth to authenticated,anon;
     `);
-    await db.exec(readFileSync('supabase/migrations/20261022091550_ai_request_quotas.sql', 'utf8'));
+    await db.exec(readFileSync('supabase/migrations/20261022091837_ai_request_quotas.sql', 'utf8'));
     const reserve = async () => (await db.query('select public.fm_reserve_ai_request() as quota')).rows[0].quota;
     await db.exec("set test.allowed='no'; set role authenticated;");
     expect(await reserve()).toEqual({ allowed: false, reason: 'forbidden' });
@@ -46,3 +46,4 @@ test('database quotas enforce permission, session, account and global ceilings w
     await expect(reserve()).rejects.toThrow('permission denied');
   } finally { await db.close(); }
 }, 30000);
+
