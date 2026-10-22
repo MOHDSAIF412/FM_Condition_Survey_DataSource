@@ -109,7 +109,7 @@ async function signedIn(req) {
   const auth = String(req.headers?.authorization || '');
   if (!url || !key || !/^Bearer [\w.-]+$/.test(auth)) return false;
   try {
-    const r = await fetch(`${url}/auth/v1/user`, { headers: { apikey: key, Authorization: auth } });
+    const r = await fetch(`${url}/auth/v1/user`, { headers: { apikey: key, Authorization: auth }, signal: AbortSignal.timeout(5000) });
     return r.ok;
   } catch {
     return false;
@@ -117,6 +117,7 @@ async function signedIn(req) {
 }
 
 export default async function handler(req, res) {
+  res.setHeader('Cache-Control', 'no-store');
   // Opening the endpoint in a browser shows whether it is set up (never the key).
   if (req.method === 'GET') {
     return res.status(200).json({ configured: !!process.env.AI_API_KEY, model: process.env.AI_MODEL || DEFAULT_MODEL });
@@ -136,12 +137,37 @@ export default async function handler(req, res) {
   const snags = cleanSnags(body);
   if (!snags) return res.status(400).json({ error: 'bad_request' });
 
+  // Caller JWT determines identity and permissions inside the database. Never
+  // use a caller-supplied user id or a service-role key for this reservation.
+  try {
+    const url = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
+    const key = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY;
+    const reservation = await fetch(`${url}/rest/v1/rpc/fm_reserve_ai_request`, {
+      method: 'POST', headers: { apikey: key, Authorization: req.headers.authorization, 'Content-Type': 'application/json' },
+      body: '{}', signal: AbortSignal.timeout(5000)
+    });
+    if (!reservation.ok) throw new Error('quota unavailable');
+    const quota = await reservation.json();
+    if (quota?.allowed !== true) {
+      if (quota?.reason === 'forbidden') return res.status(403).json({ error: 'report_permission_required' });
+      if (quota?.reason !== 'rate_limited') throw new Error('invalid quota response');
+      const retryAfter = Math.min(86400, Math.max(1, Number(quota.retry_after) || 60));
+      res.setHeader('Retry-After', String(retryAfter));
+      console.warn('[describe] ai_rate_limited');
+      return res.status(429).json({ error: 'rate_limited', retry_after: retryAfter });
+    }
+  } catch {
+    console.error('[describe] quota_check_failed');
+    return res.status(503).json({ error: 'security_check_unavailable' });
+  }
+
   const base = (process.env.AI_BASE_URL || DEFAULT_BASE_URL).replace(/\/+$/, '');
   const model = process.env.AI_MODEL || DEFAULT_MODEL;
   let reply;
   try {
     reply = await fetch(`${base}/chat/completions`, {
       method: 'POST',
+      signal: AbortSignal.timeout(35000),
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
       body: JSON.stringify({
         model,

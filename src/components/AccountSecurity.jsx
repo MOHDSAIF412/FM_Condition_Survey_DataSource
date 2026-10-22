@@ -3,6 +3,7 @@ import { saveText } from '../utils/fileSaver';
 import React, { useEffect, useState, useRef } from 'react';
 import { mfaFactors, enrollMfa, verifyMfa } from '../utils/mfa';
 import { isCloudConfigured, supabase } from '../utils/supabaseClient';
+import SecurityStatus from './SecurityStatus';
 
 export default function AccountSecurity({ challenge = false, session, onClose, onSignOut, onBackup, onRestore, onBusyChange }) {
   const box = useRef(null), pendingEnrollment = useRef(null);
@@ -49,6 +50,7 @@ export default function AccountSecurity({ challenge = false, session, onClose, o
       {!challenge && !factor && !enrollment && <button type="button" disabled={busy || !isCloudConfigured} onClick={start} className="min-h-11 rounded-xl bg-ocs-600 text-white px-4 text-sm font-semibold">Set up two-factor authentication</button>}
       {enrollment && <div className="space-y-3"><p className="text-sm">Scan this code with your authenticator app, then enter its six-digit code.</p><img src={enrollment.totp.qr_code} alt="Authenticator setup QR code" className="w-48 h-48 mx-auto"/><details><summary className="text-sm text-ocs-600 cursor-pointer">Enter setup key manually</summary><code className="block p-3 text-xs break-all select-all">{enrollment.totp.secret}</code></details></div>}
       {(challenge || enrollment) && <form onSubmit={e => { e.preventDefault(); verify(); }} className="space-y-3"><label className="block text-sm font-semibold">Authenticator code<input autoFocus autoComplete="one-time-code" inputMode="numeric" maxLength={6} value={code} onChange={e => setCode(e.target.value.replace(/\D/g,''))} className="block w-full min-h-12 border rounded-xl px-4 mt-2 text-lg tracking-widest"/></label><button type="submit" disabled={busy || code.length !== 6} className="min-h-11 rounded-xl bg-ocs-600 text-white px-4 font-semibold disabled:opacity-50">{busy ? 'Verifying…' : 'Verify code'}</button></form>}
+      {!challenge && !enrollment && <SecurityStatus />}
       {message && <p role="status" className="text-sm text-emerald-700">{message}</p>}
       {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
       {!challenge && onBackup && <div className="border-t pt-4"><h3 className="font-semibold text-sm">Device backup</h3><p className="text-xs text-slate-500 mt-1">Download a backup of this account’s saved device records, including unsent drafts and photos. Store it privately.</p><button type="button" disabled={busy} onClick={() => act(async () => { await onBackup(); setMessage('Device backup prepared. Keep the downloaded file privately.'); })} className="min-h-11 text-sm font-semibold text-ocs-600">Download device backup</button></div>}

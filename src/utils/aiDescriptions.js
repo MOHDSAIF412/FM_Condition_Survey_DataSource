@@ -126,6 +126,9 @@ export function reasonFor(reply) {
   const code = reply.data?.error;
   if (reply.status === 401) return 'sign in again';
   if (code === 'not_configured') return 'AI key not set on the server';
+  if (reply.status === 403) return 'report access required; check your account permissions or MFA';
+  if (code === 'security_check_unavailable') return 'security check unavailable; try again shortly';
+  if (code === 'rate_limited') return `request limit reached; retry in ${Math.max(1, Math.ceil((Number(reply.data?.retry_after) || 60) / 60))} minute(s)`;
   if (reply.status === 429) return 'free daily limit reached, try again tomorrow';
   if (code === 'model_unreachable' || code === 'model_error') return `AI service error${reply.data?.detail ? `: ${reply.data.detail}` : ''}`;
   if (reply.status === 404) return 'server not updated yet';

@@ -145,6 +145,7 @@ describe('api/describe (the server)', () => {
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async (url) =>
       String(url).includes('/auth/v1/user')
         ? new Response('{}', { status: 200 })
+        : String(url).includes('/rest/v1/rpc/') ? new Response('{"allowed":true}', { status: 200 })
         : new Response(JSON.stringify([{ error: { message: 'API key not valid. Please pass a valid API key.' } }]), { status: 400 }));
     const r = res();
     await handler({ method: 'POST', headers: { authorization: 'Bearer good' }, body: { snags: [{ id: 'a' }] } }, r);
@@ -178,14 +179,15 @@ describe('api/describe (the server)', () => {
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async (url, init) => {
       sent.push({ url, init });
       if (String(url).includes('/auth/v1/user')) return new Response('{}', { status: 200 });
+      if (String(url).includes('/rest/v1/rpc/')) return new Response('{"allowed":true}', { status: 200 });
       return new Response(JSON.stringify({ choices: [{ message: { content: '{"descriptions":[{"id":"a","text":"Crack in the wall near the door."}]}' } }] }), { status: 200 });
     });
     const r = res();
     await handler({ method: 'POST', headers: { authorization: 'Bearer good' }, body: { snags: [{ id: 'a', notes: 'crack in wal', photos: ['data:image/jpeg;base64,AAAA'] }] } }, r);
     expect(r.code).toBe(200);
     expect(r.body.descriptions).toEqual({ a: 'Crack in the wall near the door.' });
-    const model = JSON.parse(sent[1].init.body);
-    expect(sent[1].init.headers.Authorization).toBe('Bearer k');
+    const model = JSON.parse(sent[2].init.body);
+    expect(sent[2].init.headers.Authorization).toBe('Bearer k');
     expect(JSON.stringify(model.messages[1].content)).toContain('crack in wal');
     expect(model.messages[1].content.some((p) => p.type === 'image_url')).toBe(true);
     fetchMock.mockRestore();
@@ -194,10 +196,33 @@ describe('api/describe (the server)', () => {
   test('the model\'s free limit comes back as 429 so the app stops asking', async () => {
     process.env.AI_API_KEY = 'k';
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async (url) =>
-      new Response('{}', { status: String(url).includes('/auth/v1/user') ? 200 : 429 }));
+      String(url).includes('/rest/v1/rpc/') ? new Response('{"allowed":true}', { status: 200 }) : new Response('{}', { status: String(url).includes('/auth/v1/user') ? 200 : 429 }));
     const r = res();
     await handler({ method: 'POST', headers: { authorization: 'Bearer good' }, body: { snags: [{ id: 'a' }] } }, r);
     expect(r.code).toBe(429);
     fetchMock.mockRestore();
+  });
+
+  test.each([
+    [{ allowed: false, reason: 'forbidden' }, 200, 403],
+    [{ allowed: false, reason: 'rate_limited', retry_after: 42 }, 200, 429],
+    [{ allowed: true }, 503, 503],
+    [{}, 200, 503]
+  ])('quota and permission refusals never contact the provider (%j)', async (quota, status, expected) => {
+    process.env.AI_API_KEY = 'k';
+    process.env.SUPABASE_URL = 'https://x.supabase.co';
+    process.env.SUPABASE_ANON_KEY = 'anon';
+    const mock = vi.spyOn(globalThis, 'fetch').mockImplementation(async url =>
+      new Response(JSON.stringify(String(url).includes('/auth/v1/user') ? {} : quota),
+        { status: String(url).includes('/auth/v1/user') ? 200 : status }));
+    try {
+      const r = res();
+      await handler({ method: 'POST', headers: { authorization: 'Bearer good' }, body: { snags: [{ id: 'a' }] } }, r);
+      expect(r.code).toBe(expected);
+      expect(mock).toHaveBeenCalledTimes(2);
+      expect(mock.mock.calls[1][1].headers.Authorization).toBe('Bearer good');
+      expect(r.headers['Cache-Control']).toBe('no-store');
+      if (expected === 429) expect(r.headers['Retry-After']).toBe('42');
+    } finally { mock.mockRestore(); }
   });
 });
