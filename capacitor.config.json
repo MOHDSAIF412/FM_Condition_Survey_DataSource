@@ -1,6 +1,6 @@
 {
   "appId": "com.fmconditionsurvey.app",
-  "appName": "FM Condition Survey",
+  "appName": "OCS Nexus",
   "webDir": "dist",
   "android": {
     "allowMixedContent": false

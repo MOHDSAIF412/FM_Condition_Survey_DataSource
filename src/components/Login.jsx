@@ -53,7 +53,7 @@ export default function Login({ onSignedIn, online }) {
               onError={(e) => { e.target.style.display = 'none'; }}
             />
             <h1 className="text-white text-3xl font-bold leading-tight">
-              FM Condition<br />Survey
+              OCS Nexus
             </h1>
             <p className="text-sky-200/70 text-sm mt-3 max-w-xs">
               Record snags, capture GPS and photos, and generate audit-ready
@@ -86,7 +86,7 @@ export default function Login({ onSignedIn, online }) {
               className="h-9 mx-auto mb-4"
               onError={(e) => { e.target.style.display = 'none'; }}
             />
-            <h1 className="text-slate-900 text-xl font-bold">FM Condition Survey</h1>
+            <h1 className="text-slate-900 text-xl font-bold">OCS Nexus</h1>
           </div>
 
           <h2 className="hidden lg:block text-2xl font-bold text-slate-900">Welcome back</h2>

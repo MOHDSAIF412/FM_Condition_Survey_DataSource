@@ -101,7 +101,7 @@ export default function PortalHome({
             <div>
               <p className="text-slate-700 font-semibold">{greeting(now)},</p>
               <h1 className="text-3xl font-extrabold text-ocs-800 tracking-tight">{name || 'Welcome'} <span aria-hidden="true">👋</span></h1>
-              <p className="text-slate-500 text-sm mt-1">Here&rsquo;s an overview of your FM Condition Survey system.</p>
+              <p className="text-slate-500 text-sm mt-1">Here&rsquo;s an overview of your OCS Nexus workspace.</p>
             </div>
           </div>
           <div className="flex items-stretch gap-3 flex-wrap">
