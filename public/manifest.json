@@ -1,12 +1,12 @@
 {
-  "name": "FM Condition Survey & Report Generator",
-  "short_name": "FM Survey",
+  "name": "OCS Nexus",
+  "short_name": "OCS Nexus",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#0f172a",
   "theme_color": "#0369a1",
   "orientation": "portrait-primary",
-  "description": "Mobile-first Facilities Management Condition Survey app with offline photo storage and PDF report generation.",
+  "description": "OCS Nexus: mobile-first Facilities Management Condition Survey app with offline photo storage and PDF report generation.",
   "icons": [
     {
       "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192' fill='%230284c7'><rect width='192' height='192' rx='36' fill='%230c4a6e'/><rect width='120' height='140' x='36' y='26' rx='12' fill='none' stroke='white' stroke-width='14'/><path d='M66 66h60' stroke='white' stroke-width='14' stroke-linecap='round'/><path d='M66 96h60' stroke='white' stroke-width='14' stroke-linecap='round'/><path d='M66 126h40' stroke='white' stroke-width='14' stroke-linecap='round'/></svg>",

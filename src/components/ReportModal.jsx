@@ -587,7 +587,7 @@ export default function ReportModal({ survey = {}, onClose, canDownloadReports =
           </div>
 
           <div className="text-center text-[12px] text-slate-400 pt-4 border-t border-slate-100">
-            Report generated electronically via FM Condition Survey Engine • Confidential
+            Report generated electronically via OCS Nexus • Confidential
           </div>
         </div>
 

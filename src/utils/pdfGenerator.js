@@ -691,6 +691,6 @@ export async function generateSurveyPDF(input, selectedFacility = 'ALL', options
     .toLowerCase() || 'fm_condition_survey';
   const pdfName = `${safeFilename}${facilitySuffix}_audit_report.pdf`;
   checkReportCancelled(options.signal);
-  await saveBlob(doc.output('blob'), pdfName, 'FM Condition Survey Report');
+  await saveBlob(doc.output('blob'), pdfName, 'OCS Nexus Report');
   return pdfName;
 }

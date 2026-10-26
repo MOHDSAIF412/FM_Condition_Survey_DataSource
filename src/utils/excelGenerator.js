@@ -246,7 +246,7 @@ export async function generateSurveyExcel(input, selectedFacility = 'ALL', optio
 
   const ExcelJS = (await import('exceljs')).default;
   const workbook = new ExcelJS.Workbook();
-  workbook.creator = 'FM Condition Survey Engine';
+  workbook.creator = 'OCS Nexus';
   workbook.lastModifiedBy = facility.surveyorName || 'Surveyor';
   workbook.created = new Date();
   workbook.modified = new Date();
@@ -828,7 +828,7 @@ export async function generateSurveyExcel(input, selectedFacility = 'ALL', optio
   
   if (typeof window !== 'undefined') {
     const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-    await saveBlob(blob, `${safeTitle}${facilitySuffix}_audit_report.xlsx`, 'FM Condition Survey Report');
+    await saveBlob(blob, `${safeTitle}${facilitySuffix}_audit_report.xlsx`, 'OCS Nexus Report');
   }
 
   return buffer;
