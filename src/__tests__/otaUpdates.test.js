@@ -1,5 +1,5 @@
 import { beforeEach, afterEach, expect, test, vi } from 'vitest';
-const updater = vi.hoisted(() => ({ addListener: vi.fn(), current: vi.fn(), getLatest: vi.fn(), getNextBundle: vi.fn(), download: vi.fn(), next: vi.fn(), set: vi.fn(), notifyAppReady: vi.fn() }));
+const updater = vi.hoisted(() => ({ addListener: vi.fn(), current: vi.fn(), getLatest: vi.fn(), getNextBundle: vi.fn(), download: vi.fn(), next: vi.fn(), set: vi.fn(), notifyAppReady: vi.fn(), setMultiDelay: vi.fn() }));
 const http = vi.hoisted(() => ({ get: vi.fn() }));
 vi.mock('@capacitor/core', () => ({ Capacitor: { isNativePlatform: () => true }, CapacitorHttp: http }));
 vi.mock('@capgo/capacitor-updater', () => ({ CapacitorUpdater: updater }));
@@ -12,6 +12,7 @@ beforeEach(() => {
   updater.getLatest.mockResolvedValue({ version: '1.0.123' });
   updater.getNextBundle.mockResolvedValue(null);
   updater.addListener.mockResolvedValue({ remove: vi.fn() });
+  updater.setMultiDelay.mockResolvedValue();
   http.get.mockRejectedValue(new Error('Connection timed out'));
 });
 
@@ -115,4 +116,19 @@ test('older OTA bundles are refused but a fresh native shell can enter the OTA v
   updater.download.mockResolvedValue({id:'first-ota',version:'1.0.124',status:'pending'});
   await ota.checkOtaUpdate(); expect(updater.download).toHaveBeenCalledWith(expect.objectContaining({version:'1.0.124',checksum:'a'.repeat(64)}));
   expect(ota.otaStatus().phase).toBe('ready');
+});
+
+test('native is held back from installing on background, so a phone call cannot reload the form', async () => {
+  const ota = await import('../utils/otaUpdates');
+  await ota.initOtaUpdates();
+  expect(updater.setMultiDelay).toHaveBeenCalledWith({ delayConditions: [{ kind: 'kill' }] });
+  expect(updater.setMultiDelay.mock.invocationCallOrder[0]).toBeLessThan(updater.notifyAppReady.mock.invocationCallOrder[0]);
+});
+
+test('a shell without delay support still starts updates', async () => {
+  updater.setMultiDelay.mockImplementation(() => { throw new Error('not implemented'); });
+  const ota = await import('../utils/otaUpdates');
+  await ota.initOtaUpdates();
+  expect(updater.notifyAppReady).toHaveBeenCalledOnce();
+  expect(ota.otaStatus().phase).not.toBe('error');
 });
