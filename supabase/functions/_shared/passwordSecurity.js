@@ -1,6 +1,6 @@
 // k-anonymity lookup: only five hash characters leave the app, never the password.
 export async function assertSafePassword(password, fetcher = fetch) {
-  if (password.length < 12) throw new Error('Use a password with at least 12 characters.');
+  if (password.length < 6) throw new Error('Use a password with at least 6 characters.');
   const digest = await crypto.subtle.digest('SHA-1', new TextEncoder().encode(password));
   const hash = [...new Uint8Array(digest)].map(b => b.toString(16).padStart(2,'0')).join('').toUpperCase();
   let response;
