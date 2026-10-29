@@ -102,6 +102,14 @@ export async function initOtaUpdates() {
       if (!checking && !['ready', 'installing'].includes(state.phase)) publish({ phase: 'error', message: 'The update check or download failed. Tap Get update to retry.', percent: null });
     });
     await updater.addListener('updateFailed', () => publish({ phase: 'error', message: 'The previous working version was restored. Tap Get update to retry.' }));
+    // Native autoUpdate installs a waiting bundle the moment the app goes to the
+    // background, which reloads the WebView: a phone call or the camera wiped
+    // the form on screen. A 'kill' delay holds native back while the app runs
+    // (it lapses on a real restart), so updates install only through the
+    // safe-screen controller below. A bundle that never gets here keeps
+    // native's own recovery, since the delay is never set.
+    await Promise.resolve().then(() => updater.setMultiDelay({ delayConditions: [{ kind: 'kill' }] }))
+      .catch(error => console.warn('[ota] could not hold background installs:', error?.message || error));
     await updater.notifyAppReady();
     const current = (await updater.current()).bundle;
     publish({ version: current.version });

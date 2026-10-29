@@ -102,6 +102,8 @@ import { uploadSurveyRecord as uploadRecord } from './utils/uploadRecord';
 import { confirmReportReady } from './utils/reportCompleteness';
 import { initNetworkMonitor, onNetworkChange, isOnline } from './utils/network';
 import { PHOTO_SYNC, consumeCaptureReturn } from './utils/photoCapture';
+import { markRecordInterrupted, clearRecordInterrupted, consumeRecordInterrupted } from './utils/interruption';
+import { useStableEvent } from './hooks/useStableEvent';
 import {
   listProjects,
   listVisibleProjectIds,
@@ -765,8 +767,10 @@ export default function App({ currentUser = null, onSignOut } = {}) {
       try {
         const saved = await loadCurrentSurveyOffline();
 
-        const localHasUnpushedWork =
-          saved && saved.pendingSync && Array.isArray(saved.items) && (saved.items.length > 0 || !isConditionSurvey(saved));
+        // Any unsent edit counts, as when opening a facility. Requiring snags
+        // here let the server copy replace Facility Info typed since the last
+        // upload whenever the app restarted mid-survey (a call, the camera).
+        const localHasUnpushedWork = saved && saved.pendingSync === true;
 
         // Work done with no signal has not reached the server yet. Pulling here
         // would overwrite it with the older server copy and lose the survey.
@@ -888,33 +892,68 @@ export default function App({ currentUser = null, onSignOut } = {}) {
       clearTimeout(saveTimeoutRef.current);
     }
 
-    saveTimeoutRef.current = setTimeout(async () => {
-      if (pendingSaveRef.current === survey) pendingSaveRef.current = null;
-      localSavesInFlight.current += 1;
-      try {
-        const result = await saveSurveyOffline(survey);
-
-        // Refused because another tab had newer data. Take theirs rather than
-        // silently destroying it.
-        if (result && result.conflict) {
-          await saveSurveyRecovery({ ...survey, recoveryUserId: currentUser?.id });
-          setShowRecoveries(true);
-          markAsExternalChange();
-          setSurvey(result.stored);
-        }
-        setLastSavedTime(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
-      } catch (err) {
-        localSaveFailed.current = true;
-        console.error('Auto-save error:', err);
-      } finally {
-        localSavesInFlight.current -= 1;
-      }
-    }, 600);
+    saveTimeoutRef.current = setTimeout(() => writeAutosave(survey), 600);
 
     return () => {
       if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
     };
   }, [survey, isLoaded]);
+
+  const writeAutosave = useStableEvent(async (record) => {
+    if (pendingSaveRef.current === record) pendingSaveRef.current = null;
+    localSavesInFlight.current += 1;
+    try {
+      const result = await saveSurveyOffline(record);
+
+      // Refused because another tab had newer data. Take theirs rather than
+      // silently destroying it.
+      if (result && result.conflict) {
+        await saveSurveyRecovery({ ...record, recoveryUserId: currentUser?.id });
+        setShowRecoveries(true);
+        markAsExternalChange();
+        setSurvey(result.stored);
+      }
+      setLastSavedTime(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
+    } catch (err) {
+      localSaveFailed.current = true;
+      console.error('Auto-save error:', err);
+    } finally {
+      localSavesInFlight.current -= 1;
+    }
+  });
+
+  // A phone call or the camera puts the app in the background, where Android
+  // may end it at any moment. Write the waiting autosave now instead of after
+  // its timer, and note the open record so a relaunch returns to it.
+  const viewRef = useRef(view);
+  viewRef.current = view;
+  const activeTabRef = useRef(activeTab);
+  activeTabRef.current = activeTab;
+  useEffect(() => {
+    if (!isLoaded) return;
+    const leave = () => {
+      if (viewRef.current === 'survey' && surveyRef.current?.id) {
+        markRecordInterrupted(surveyRef.current.id, activeTabRef.current);
+      }
+      const pending = pendingSaveRef.current;
+      if (!pending) return;
+      clearTimeout(saveTimeoutRef.current);
+      writeAutosave(pending);
+    };
+    const onVisibility = () => {
+      if (document.visibilityState === 'hidden') leave();
+      else clearRecordInterrupted();
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+    // Capacitor's pause can arrive before the WebView reports hidden.
+    const pause = Capacitor.isNativePlatform() ? NativeApp.addListener('pause', leave) : null;
+    const resume = Capacitor.isNativePlatform() ? NativeApp.addListener('resume', clearRecordInterrupted) : null;
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibility);
+      pause?.then(h => h.remove()).catch(() => {});
+      resume?.then(h => h.remove()).catch(() => {});
+    };
+  }, [isLoaded, writeAutosave]);
 
   // Push local changes to the server so other devices see them.
   useEffect(() => {
@@ -1321,6 +1360,24 @@ It is now in Saved Facilities, where you can download its PDF or Excel. A new bl
     }
     return chosen;
   };
+
+  // Android ended the app behind a phone call or the camera: reopen the record
+  // that was on screen instead of the module picker (utils/interruption.js).
+  const interruptionCheckedRef = useRef(false);
+  useEffect(() => {
+    if (!isLoaded || interruptionCheckedRef.current) return;
+    interruptionCheckedRef.current = true;
+    const note = consumeRecordInterrupted();
+    if (!note) return;
+    handleOpenSurvey(note.surveyId).then((opened) => {
+      if (!opened || opened.id !== note.surveyId) return;
+      setWorkModule(isQhse(opened) ? 'qhse' : isMeter(opened) ? 'meter' : 'condition');
+      const project = opened.projectId ? projectsRef.current.find((p) => p.id === opened.projectId) : null;
+      if (project) { activeProjectRef.current = project; setActiveProject(project); }
+      if (['facility', 'items', 'analytics', 'signatures'].includes(note.tab)) setActiveTab(note.tab);
+    }).catch((err) => console.warn('Could not reopen the interrupted record:', err));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isLoaded]);
 
   /**
    * Permanently deletes a saved facility (all its snags and photos) from the
