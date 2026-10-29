@@ -12,7 +12,7 @@ test('password screening sends only a five-character hash prefix and rejects com
 });
 test('password screening accepts clean passwords and fails closed when unavailable', async () => {
   await assertSafePassword('A strong test passphrase',async()=>({ok:true,text:async()=>`${'0'.repeat(35)}:0`}));
-  await expect(assertSafePassword('short',vi.fn())).rejects.toThrow('12 characters');
+  await expect(assertSafePassword('short',vi.fn())).rejects.toThrow('6 characters');
   await expect(assertSafePassword('A strong test passphrase',async()=>{throw Error('Network');})).rejects.toThrow('unavailable');
 });
 test('administrator function never bootstraps anonymously and checks permissions using the caller token', () => {

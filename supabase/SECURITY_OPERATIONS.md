@@ -5,7 +5,7 @@ Updated 2026-10-22. Production: fm-condition-survey-data-source.vercel.app.
 ## Applied controls
 
 - Supabase login/sign-up: 30 requests per five minutes per IP; token verification: 30 per five minutes; refresh: 150 per five minutes. These are existing settings verified in the dashboard.
-- Supabase minimum password length increased to 12. Existing passwords are not reset. Public sign-up and anonymous sign-in remain disabled; email confirmation and secure email changes are enabled.
+- Supabase minimum password length: the app enforces 6 (lowered from 12 on 2026-10-29). The dashboard setting (Authentication → Providers → Email → Minimum password length) must be 6 or lower to match. Existing passwords are not reset. Public sign-up and anonymous sign-in remain disabled; email confirmation and secure email changes are enabled.
 - Vercel firewall rule **Protect AI API**: Request Path equals `/api/describe`, fixed window of 60 seconds, 100 requests per IP, respond HTTP 429. Published separately in Vercel, not managed by vercel.json. Do not enable browser challenges globally without testing Capacitor clients.
 - AI calls require a verified login, active app account, report permission, enrolled MFA assurance and a nonexpired, nonrevoked auth session. The reservation RPC uses the caller JWT, never a supplied account ID or a service key.
 - Database counters enforce 20 AI calls/minute and 500/day per account, 2,000/day globally. Day boundaries are UTC. Reservations count even when the provider fails. Cached descriptions do not spend quota. Each call carries at most six snags. Direct RPC calls consume the caller's allowance but cannot bypass a limit or invoke the provider.
